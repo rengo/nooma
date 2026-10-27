@@ -320,6 +320,7 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("  A correction still answers every required field above, like any other type.\n\n")
 
 	writeReminders(&b, rc)
+	writeTimers(&b, rc.Timers)
 	// **Only beside a chat** (ADR-0036). A follow-up and a which-item answer
 	// exist only when one is shown; without one the prompt is the one the
 	// reminder set was read with before, which the follow-up text cost two

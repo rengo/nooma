@@ -1,0 +1,24 @@
+{
+  "id": "classify-timers-cancel-by-its-time",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "cancelá el de las 11:07",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Cancelar el temporizador para llamar a mamá, programado para 2026-10-26 11:07.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"timer_request\":\"cancel\",\"timer_target\":2}",
+  "now": "2026-10-26T10:10:00-03:00",
+  "timers_list": [
+    {
+      "text": "Sacar la pizza del horno",
+      "at": "2026-10-26T10:28:00-03:00"
+    },
+    {
+      "text": "Llamar a mamá",
+      "at": "2026-10-26T11:07:00-03:00"
+    }
+  ],
+  "expect": {
+    "timer_request": "cancel",
+    "timer_target": "2"
+  },
+  "prompt_sha256": "61963322117ffa38c379281c2086dd9e1eed682685e56f031b7b2204defa5a3d"
+}

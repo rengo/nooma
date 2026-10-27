@@ -1,0 +1,23 @@
+{
+  "id": "classify-timers-list-que-temporizadores-tengo",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿qué temporizadores tengo?",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"¿Qué temporizadores tengo?\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"timer_request\":\"list\",\"question_answer\":\"none\"}",
+  "now": "2026-10-26T10:10:00-03:00",
+  "timers_list": [
+    {
+      "text": "Sacar la pizza del horno",
+      "at": "2026-10-26T10:28:00-03:00"
+    },
+    {
+      "text": "Llamar a mamá",
+      "at": "2026-10-26T11:07:00-03:00"
+    }
+  ],
+  "expect": {
+    "timer_request": "list"
+  },
+  "prompt_sha256": "f1a30dd329c6541e92c1f84afb61f8a2e4624ee7b97c714506d8c73bc553803b"
+}

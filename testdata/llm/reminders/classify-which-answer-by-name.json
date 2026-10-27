@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "el de Ana",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"El recordatorio de llamar a Ana.\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Me refiero a llamar a Ana.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"question_answer\":\"choice\",\"choice_number\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "open_question": {
     "kind": "which_reminder",
@@ -33,5 +33,5 @@
     "question_answer": "choice",
     "choice_number": 2
   },
-  "prompt_sha256": "4bdddd1a8f7c2e1faeee8717b86fccf32f9d6bede9e93a869c8bbb31cd777243"
+  "prompt_sha256": "259360120b76a8c587c6a00f6b71f4eacf0039e1d68a4fb3bf1b37418566a029"
 }

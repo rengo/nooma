@@ -1,0 +1,23 @@
+{
+  "id": "classify-timers-list-english",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "what timers do I have?",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"The user asks which timers are currently set.\",\"weight\":0.5,\"decay_rate\":0.3,\"language\":\"en\",\"timer_request\":\"list\",\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"remind_request\":false}",
+  "now": "2026-10-26T10:10:00-03:00",
+  "timers_list": [
+    {
+      "text": "Sacar la pizza del horno",
+      "at": "2026-10-26T10:28:00-03:00"
+    },
+    {
+      "text": "Llamar a mamá",
+      "at": "2026-10-26T11:07:00-03:00"
+    }
+  ],
+  "expect": {
+    "timer_request": "list"
+  },
+  "prompt_sha256": "4ed34202dae74acd33e1ed70a450c9b7795c4afec0005b34b5582d9d91e95963"
+}

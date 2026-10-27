@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya lo hice",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo hice.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya lo hice.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"done\",\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -23,5 +23,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "done"
   },
-  "prompt_sha256": "30186a50b08f6456c11ce7efdf050d5d63fbd31930a082a5ffe60e25f9edc607"
+  "prompt_sha256": "7342c73e8970be6d744742d8a6a2075fb4848db4b5cbd4fd0cf16b2b77eb72b1"
 }

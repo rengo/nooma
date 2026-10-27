@@ -209,6 +209,8 @@ func TestAllCaptureOutcomesHaveAStatusMapping(t *testing.T) {
 			result.ArmRefused = &brain.ArmRefused{Why: prospection.RefusalNoDate, Message: "placeholder"}
 		case brain.OutcomeCorrected, brain.OutcomeAsked:
 			result.Correction = &brain.Correction{}
+		case brain.OutcomeTimers:
+			result.Timers = &brain.TimersAnswer{}
 		}
 
 		status, body := renderCaptureResult(result)
@@ -250,5 +252,29 @@ func TestCaptureHandler_UnknownUnitIDIs404(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "no unit has that id") {
 		t.Errorf("body = %s, want the plain message", rec.Body.String())
+	}
+}
+
+// TestRenderCaptureResult_TimersNameWhatWasListedAndCancelled: the API answers
+// a chat's list or cancel with the timers themselves, in the order a cancel's
+// position counts them, each instant in UTC (ADR-0051).
+func TestRenderCaptureResult_TimersNameWhatWasListedAndCancelled(t *testing.T) {
+	t.Parallel()
+	zone := time.FixedZone("ART", -3*3600)
+	text := "Sacar la pizza del horno"
+	pizza := brain.ListedTimer{ID: "tmr-pizza", FireAt: time.Date(2026, 10, 26, 10, 28, 0, 0, zone), Text: &text}
+
+	status, body := renderCaptureResult(brain.CaptureResult{Outcome: brain.OutcomeTimers, Timers: &brain.TimersAnswer{Listed: []brain.ListedTimer{pizza}, More: 2}})
+	got, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"outcome":"timers","timers":{"listed":[{"id":"tmr-pizza","fire_at":"2026-10-26T13:28:00Z","text":"Sacar la pizza del horno"}],"more":2}}`; status != http.StatusOK || string(got) != want {
+		t.Errorf("list = %d %s, want 200 %s", status, got, want)
+	}
+
+	_, body = renderCaptureResult(brain.CaptureResult{Outcome: brain.OutcomeTimers, Timers: &brain.TimersAnswer{Cancelled: &pizza}})
+	if got, _ := json.Marshal(body); !strings.Contains(string(got), `"listed":[],"cancelled":{"id":"tmr-pizza"`) {
+		t.Errorf("cancel = %s, want the cancelled timer named and nothing listed", got)
 	}
 }

@@ -70,9 +70,11 @@ type Case struct {
 	// Conversation is the recent conversation a follow-up is read in,
 	// newest first (ADR-0036).
 	Conversation *Conversation `json:"conversation,omitempty"`
-	Expect       *Expect       `json:"expect,omitempty"`
-	KnownMisread string        `json:"known_misread,omitempty"`
-	PromptSHA256 string        `json:"prompt_sha256,omitempty"`
+	// TimersList is the live timers the prompt shows (ADR-0051).
+	TimersList   []TimerEntry `json:"timers_list,omitempty"`
+	Expect       *Expect      `json:"expect,omitempty"`
+	KnownMisread string       `json:"known_misread,omitempty"`
+	PromptSHA256 string       `json:"prompt_sha256,omitempty"`
 }
 
 // Candidate is one relation_evaluation candidate a Case carries — the same

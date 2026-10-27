@@ -303,6 +303,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCaptureArmedTrigger:             true,
 			ports.ActionCaptureArmedRecurring:           true,
 			ports.ActionCaptureArmRefused:               true,
+			ports.ActionCaptureTimerCancelled:           true,
 			ports.ActionCheckTriggerExpired:             true,
 			ports.ActionCheckTriggerLapsed:              true,
 			ports.ActionCheckReminderArmed:              true,

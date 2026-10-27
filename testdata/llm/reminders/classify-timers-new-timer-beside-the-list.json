@@ -1,0 +1,25 @@
+{
+  "id": "classify-timers-new-timer-beside-the-list",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "avisame en 10 minutos que apague el horno",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Recuérdame apagar el horno el 2026-10-26 a las 10:20.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-26T10:20:00-03:00\",\"title\":\"Apagar el horno\",\"interrupt_level\":0.8,\"remind_request\":true,\"reminder_intent\":\"none\",\"timer_request\":\"none\"}",
+  "now": "2026-10-26T10:10:00-03:00",
+  "timers_list": [
+    {
+      "text": "Sacar la pizza del horno",
+      "at": "2026-10-26T10:28:00-03:00"
+    },
+    {
+      "text": "Llamar a mamá",
+      "at": "2026-10-26T11:07:00-03:00"
+    }
+  ],
+  "expect": {
+    "type": "timer",
+    "remind_request": true,
+    "due_at": "2026-10-26T10:20:00-03:00"
+  },
+  "prompt_sha256": "d2ceca61067fc9cc6e52e9d12064f952e02450db536cc12b9dd8df723bdc8432"
+}

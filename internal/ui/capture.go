@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/rengo/nooma/internal/brain"
 )
@@ -156,4 +157,20 @@ func renderCaptureResponse(w http.ResponseWriter, r *http.Request, result brain.
 		w.Header().Set("HX-Replace-Url", "/ui/capture")
 	}
 	_ = CapturePage(&result).Render(r.Context(), w)
+}
+
+// timersSummary says what a list or a cancel of the live timers answered
+// (ADR-0051); the chat names each timer, this page counts them.
+func timersSummary(a brain.TimersAnswer) string {
+	switch {
+	case a.Cancelled != nil:
+		return "Cancelled the timer " + a.Cancelled.ID + "."
+	case a.Gone:
+		return "That timer is no longer set."
+	case len(a.Listed) == 0:
+		return "No timers are set."
+	case a.Which:
+		return "Nothing was cancelled: it was not clear which timer. Name it by its time or what it says."
+	}
+	return strconv.Itoa(len(a.Listed)+a.More) + " timer(s) set."
 }

@@ -112,6 +112,20 @@ type Expect struct {
 	// the reading names none, since what it names narrows the answer.
 	RecallTerms  []string `json:"recall_terms,omitempty"`
 	RecallWindow *Window  `json:"recall_window,omitempty"`
+
+	// TimerRequest is what the message asks of the live timers, and
+	// TimerTarget, "1" to "5" or "unclear", which listed one a cancel names
+	// (ADR-0051). Both strict: unset means none, since a list answers and a
+	// cancel cancels.
+	TimerRequest string `json:"timer_request,omitempty"`
+	TimerTarget  string `json:"timer_target,omitempty"`
+}
+
+// TimerEntry is one live timer a case's prompt lists, soonest first: what it
+// says, empty for a generic nudge, and when it rings, RFC 3339.
+type TimerEntry struct {
+	Text string `json:"text,omitempty"`
+	At   string `json:"at"`
 }
 
 // Window is a recall window as a case expects it: on is told or when, and from
@@ -128,5 +142,5 @@ type Window struct {
 // for byte; a key outside this list makes it refuse the file.
 var FileFields = []string{
 	"id", "provider", "model", "task", "message", "candidates", "response", "error",
-	"record", "now", "open_question", "candidates_list", "conversation", "expect", "known_misread", "prompt_sha256",
+	"record", "now", "open_question", "candidates_list", "conversation", "timers_list", "expect", "known_misread", "prompt_sha256",
 }

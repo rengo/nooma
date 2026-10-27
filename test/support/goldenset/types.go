@@ -336,6 +336,7 @@ type LLMExample struct {
 	OpenQuestion   *llm.Question     `json:"open_question,omitempty"`
 	CandidatesList []llm.Entry       `json:"candidates_list,omitempty"`
 	Conversation   *llm.Conversation `json:"conversation,omitempty"`
+	TimersList     []llm.TimerEntry  `json:"timers_list,omitempty"`
 	Expect         *llm.Expect       `json:"expect,omitempty"`
 	KnownMisread   string            `json:"known_misread,omitempty"`
 	PromptSHA256   string            `json:"prompt_sha256,omitempty"`
@@ -354,7 +355,7 @@ func (e *LLMExample) Case() llm.Case {
 	return llm.Case{
 		ID: e.ID, Task: e.Task, Message: e.Message, Candidates: candidates,
 		Record: e.Record, Now: e.Now, OpenQuestion: e.OpenQuestion,
-		CandidatesList: e.CandidatesList, Conversation: e.Conversation, Expect: e.Expect,
+		CandidatesList: e.CandidatesList, Conversation: e.Conversation, TimersList: e.TimersList, Expect: e.Expect,
 		KnownMisread: e.KnownMisread, PromptSHA256: e.PromptSHA256,
 	}
 }

@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿a qué hora era la reunión?",
-  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan del 2026-10-14?\",\"weight\":0.3,\"decay_rate\":0.1,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"reunión\",\"reuniones\",\"encuentro\",\"encuentros\"]}}",
+  "response": "{\"type\":\"recall\",\"normalized_content\":\"¿A qué hora era la reunión con Juan?\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"recall_scope\":{\"terms\":[\"reunión\",\"reuniones\",\"encuentro\",\"encuentros\",\"junta\",\"juntas\"],\"window\":{\"on\":\"when\",\"from\":\"2026-10-14\",\"to\":\"2026-10-15\"}}}",
   "now": "2026-10-13T21:10:00-03:00",
   "conversation": {
     "turns": [
@@ -39,5 +39,6 @@
       "reunión"
     ]
   },
-  "prompt_sha256": "cc57c542e439382ac550632932263df6e550bae86ffa789f89d8aa9e576a743f"
+  "known_misread": "recall_window is when, 2026-10-14 to 2026-10-15, where none is expected: the model reads \"¿a qué hora era la reunión?\" as asking about the day the meeting it follows happens. Harmless as read: the meeting is at 22:30 that day, so the window and the terms narrow together onto it (ADR-0048, TestI45_TermsAndAWindowNarrowTogether) and the answer names it",
+  "prompt_sha256": "3e20d023c043801985422b10cd0afdcd5b882bfd2c6c4e156de4749c2676e665"
 }

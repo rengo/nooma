@@ -240,7 +240,14 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// beliefs is always nil in M1 — design D4: nothing reads self_beliefs
 	// yet (derive is M2, seeding is M4), so there is nothing to project.
 	conv, shown := r.conversationFor(ctx, in, now)
-	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{Conversation: conv})
+	// **The live timers, in every prompt** (ADR-0051): a list answers with
+	// them and a cancel names one of them by its position, so the code reads
+	// them before the model does and binds only a position it showed.
+	live, err := r.liveTimers(ctx, now)
+	if err != nil {
+		return CaptureResult{}, err
+	}
+	prompt := classify.BuildPrompt(in.Text, nil, now, r.archiveThreshold, classify.ReminderContext{Conversation: conv, Timers: timerEntries(live)})
 
 	// **A correction that names its unit is classified against it** (doc 02
 	// §5 step 4, I30). Read alone, "Es a las 8am" names no date, so the
@@ -308,6 +315,13 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	// shown. Unsure which, it asked, and the question is the reply.
 	// **A done closes the task it names** (ADR-0040): "ya lo hice" after the
 	// digest named it. An item a done does not close takes the path below.
+	// **A timer request is answered first, whatever its type** (ADR-0051):
+	// read as a recall, "¿qué temporizadores tengo?" searched the notes.
+	if in.ReferentID == "" {
+		if res, ok, err := r.answerTimers(ctx, c, live, now); err != nil || ok {
+			return res, err
+		}
+	}
 	if f, ok := classify.ReadFollowUp(c, len(shown)); ok {
 		if f.Question != "" {
 			return r.askWhich(ctx, f.Question, shown, now)
@@ -988,20 +1002,21 @@ func (r captureRunner) arm(ctx context.Context, c classify.Classification, plan 
 
 	switch plan.What {
 	case prospection.ArmTimer:
-		// action_text is the request VERBATIM — doc 02 §8: "the request is
-		// stored verbatim and only worded at delivery time". Wording it
-		// here would spend an LLM call at capture on text that may never
-		// be shown, and would lose the user's own words for good.
-		//
-		// c.NormalizedContent is a *string because classify degrades a
-		// missing field to nil, and that nil is passed through rather than
-		// flattened to "": timers.action_text's own NULL already means
-		// "generic nudge" (migration 0001:65), which is exactly what a
-		// timer with no salvaged text is.
+		// action_text is the reading's title, as a trigger rings with its
+		// unit's (doc 02 §8, ADR-0051): the normalized content carries ISO
+		// dates, and a chat listed "Recordatorio para sacar la pizza del
+		// horno a las 12:20 del 2026-10-26.". It is worded at delivery,
+		// never here. With no title it is the content, and with neither
+		// it stays nil rather than "": timers.action_text's own NULL
+		// already means "generic nudge" (migration 0001:65).
+		text := c.Title
+		if text == nil {
+			text = c.NormalizedContent
+		}
 		if err := r.timers.Create(ctx, ports.Timer{
 			ID:         id,
 			FireAt:     plan.FireAt,
-			ActionText: c.NormalizedContent,
+			ActionText: text,
 			CreatedAt:  now,
 		}); err != nil {
 			return CaptureResult{}, fmt.Errorf("capture: arm timer: %w", err)

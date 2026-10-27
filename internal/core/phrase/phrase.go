@@ -86,6 +86,11 @@ type Set struct {
 	// rings at, which for a timer is also what it is about: TimerToday its
 	// hour, on the day it was set; TimerOn its day, then its hour.
 	TimerToday, TimerOn string
+	// The answers to a chat's list or cancel of the live timers (ADR-0051).
+	// TimersMany takes the count of every live timer, TimersMore the count
+	// past the listed ones, and TimerCancelled the cancelled timer's line.
+	TimersNone, TimersOne, TimersMany, TimersMore string
+	TimerWhich, TimerCancelled, TimerGone         string
 	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
 	// reminder rings, every time it does (ADR-0031 point 7), rather than its
 	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
@@ -219,11 +224,19 @@ var sets = map[classify.Language]Set{
 
 		TimerToday: "at %s",
 		TimerOn:    "on %s at %s",
-		EveryDay:   "I will remind you every day at %s.",
-		EveryWeek:  "I will remind you every %s at %s.",
-		EveryMonth: "I will remind you on day %s of every month at %s.",
-		EveryYear:  "I will remind you every year on %s %s at %s.",
-		NotedFor:   "Noted for %s. I will remind you %s.",
+
+		TimersNone:     "No timers are set.",
+		TimersOne:      "There is 1 timer set:",
+		TimersMany:     "There are %d timers set:",
+		TimersMore:     "and %d more.",
+		TimerWhich:     "Which one should I cancel?",
+		TimerCancelled: "Cancelled: %s.",
+		TimerGone:      "That timer is no longer set.",
+		EveryDay:       "I will remind you every day at %s.",
+		EveryWeek:      "I will remind you every %s at %s.",
+		EveryMonth:     "I will remind you on day %s of every month at %s.",
+		EveryYear:      "I will remind you every year on %s %s at %s.",
+		NotedFor:       "Noted for %s. I will remind you %s.",
 
 		NotedForDigest: "Noted for %s. I will mention it in that morning's digest.",
 		NotedOn:        "Noted for %s.",
@@ -298,11 +311,19 @@ var sets = map[classify.Language]Set{
 
 		TimerToday: "a las %s",
 		TimerOn:    "el %s a las %s",
-		EveryDay:   "Te aviso todos los días a las %s.",
-		EveryWeek:  "Te aviso todos los %s a las %s.",
-		EveryMonth: "Te aviso el día %s de cada mes a las %s.",
-		EveryYear:  "Te aviso todos los años el %s de %s a las %s.",
-		NotedFor:   "Anotado para el %s. Te aviso %s.",
+
+		TimersNone:     "No hay temporizadores puestos.",
+		TimersOne:      "Hay 1 temporizador puesto:",
+		TimersMany:     "Hay %d temporizadores puestos:",
+		TimersMore:     "y %d más.",
+		TimerWhich:     "¿Cuál cancelo?",
+		TimerCancelled: "Cancelado: %s.",
+		TimerGone:      "Ese temporizador ya no está puesto.",
+		EveryDay:       "Te aviso todos los días a las %s.",
+		EveryWeek:      "Te aviso todos los %s a las %s.",
+		EveryMonth:     "Te aviso el día %s de cada mes a las %s.",
+		EveryYear:      "Te aviso todos los años el %s de %s a las %s.",
+		NotedFor:       "Anotado para el %s. Te aviso %s.",
 
 		NotedForDigest: "Anotado para el %s. Te lo recuerdo en el resumen de esa mañana.",
 		NotedOn:        "Anotado para el %s.",
@@ -380,11 +401,36 @@ func (s Set) Time(t time.Time) string {
 // was set, else its day and hour, the day read in fire's own zone.
 func (s Set) TimerAt(fire, now time.Time) string {
 	clock := fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute())
-	now = now.In(fire.Location())
-	if fire.Year() == now.Year() && fire.YearDay() == now.YearDay() {
+	if sameDay(fire, now) {
 		return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerToday, clock))
 	}
 	return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerOn, s.Date(fire), clock))
+}
+
+// TimerLine names a live timer in a chat's list (ADR-0051): when it rings,
+// by its hour alone on now's day as TimerAt says it, then what it says.
+func (s Set) TimerLine(fire, now time.Time, text *string) string {
+	when := fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute())
+	if !sameDay(fire, now) {
+		when = s.Time(fire)
+	}
+	if text == nil || *text == "" {
+		return when
+	}
+	return s.Line(when, *text)
+}
+
+// TimerCancelledLine says which timer a cancel cancelled, as TimerLine names it,
+// in a sentence of its own: a text that already ends in a period is not
+// given a second one.
+func (s Set) TimerCancelledLine(fire, now time.Time, text *string) string {
+	return fmt.Sprintf(s.TimerCancelled, strings.TrimRight(s.TimerLine(fire, now, text), "."))
+}
+
+// sameDay says whether fire falls on now's day, read in fire's own zone.
+func sameDay(fire, now time.Time) bool {
+	now = now.In(fire.Location())
+	return fire.Year() == now.Year() && fire.YearDay() == now.YearDay()
 }
 
 // ThatDayAt names the hour on its own day a day alone is reminded at.

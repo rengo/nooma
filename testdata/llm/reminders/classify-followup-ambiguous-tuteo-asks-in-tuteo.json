@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "¿Me lo puedes pasar a las 08:00?",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"¿Me lo puedes pasar a las 08:00?\",\"weight\":0.7,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista o a la reunión con Juan?\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"¿Me puedes pasar uno de los eventos de hoy a las 08:00?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"referent\":\"unclear\",\"clarifying_question\":\"¿Te refieres al dentista?\"}",
   "now": "2026-10-14T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -36,5 +36,5 @@
     "referent": "unclear",
     "voice": "tuteo"
   },
-  "prompt_sha256": "8b50c3fe632745a8e5236f2f329cda7815521cbb08eceb320b1926ecaa6f6eed"
+  "prompt_sha256": "8c32d51b6ca8abd7f1c7f9772c53e25d8769da0e5b89367c58bb2fbdf3e52987"
 }

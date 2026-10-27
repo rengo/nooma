@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "ya no me avises del gimnasio",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"No quiero que me avises más del gimnasio.\",\"weight\":0.8,\"decay_rate\":0.02,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"stop\",\"reminder_target\":2,\"question_answer\":\"none\"}",
+  "response": "{\"type\":\"correction\",\"normalized_content\":\"Ya no quiero que me avises del gimnasio.\",\"weight\":0.8,\"decay_rate\":0.01,\"language\":\"es\",\"reminder_intent\":\"stop\",\"reminder_target\":2}",
   "now": "2026-10-14T20:00:00-03:00",
   "candidates_list": [
     {
@@ -22,5 +22,5 @@
     "reminder_intent": "stop",
     "reminder_target": "2"
   },
-  "prompt_sha256": "808e61b191c178c1598677703fa90a8ff186ac8825d5310a47a172f52a58fdfc"
+  "prompt_sha256": "95f0ff53c759c6b96af0d8239a99c59fcfe7a60aa14a809c0edcd5da80f589de"
 }

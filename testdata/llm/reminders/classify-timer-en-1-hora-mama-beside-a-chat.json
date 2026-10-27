@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame en 1 hora que llame a mamá",
-  "response": "{\"type\":\"timer\",\"normalized_content\":\"Recordarme llamar a mamá el 2026-10-26 a las 11:07.\",\"weight\":0.8,\"decay_rate\":0.3,\"language\":\"es\",\"due_at\":\"2026-10-26T11:07:00-03:00\",\"title\":\"Llamar a mamá\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"Avisarme que llame a mamá el 2026-10-26 a las 11:07.\",\"weight\":0.9,\"decay_rate\":0.1,\"language\":\"es\",\"due_at\":\"2026-10-26T11:07:00-03:00\",\"title\":\"Llamar a mamá\",\"remind_request\":true,\"reminder_intent\":\"none\",\"timer_request\":\"none\"}",
   "now": "2026-10-26T10:07:00-03:00",
   "conversation": {
     "turns": [
@@ -38,5 +38,5 @@
     "remind_request": true,
     "due_at": "2026-10-26T11:07:00-03:00"
   },
-  "prompt_sha256": "d5deeae734f9864c2289663b3fd4124d56e536407606407a5b3fab60d5156596"
+  "prompt_sha256": "36ed9cb463bae9cf508cb9266a7036361662633a91c1965fb2a12c0c9246edb2"
 }

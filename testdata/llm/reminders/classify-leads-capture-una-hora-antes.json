@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "dentista mañana a las 10, avisame 1 hora antes",
-  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cita con el dentista el 2026-10-21 a las 10:00; avisame 1 hora antes.\",\"weight\":0.85,\"decay_rate\":0.03,\"language\":\"es\",\"event_at\":\"2026-10-21T10:00:00-03:00\",\"title\":\"Dentista\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[60]}",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Tengo una cita con el dentista el 2026-10-21 a las 10:00; avisame 1 hora antes.\",\"weight\":0.8,\"decay_rate\":0.08,\"language\":\"es\",\"event_at\":\"2026-10-21T10:00:00-03:00\",\"title\":\"Cita con el dentista\",\"interrupt_level\":0.6,\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[60]}",
   "now": "2026-10-20T18:00:00-03:00",
   "conversation": {
     "turns": [
@@ -40,5 +40,5 @@
       60
     ]
   },
-  "prompt_sha256": "6bbb6606ac1df47d7be7d5628541e28521dba6c68f5a7fabced53a4267a38758"
+  "prompt_sha256": "11984ac8e41271888214e19964e37e4f6ad602d81f344b5a11f4d3a85f93cfc9"
 }

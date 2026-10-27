@@ -47,11 +47,14 @@ const (
 	FieldReminderLeadsAdd   = "reminder_leads_add"
 	FieldRecallTerms        = "recall_terms"
 	FieldRecallWindow       = "recall_window"
+	FieldTimerRequest       = "timer_request"
+	FieldTimerTarget        = "timer_target"
 )
 
 // ReminderFields are the fields the reminder reading rate counts.
 var ReminderFields = []string{
 	FieldRemindRequest, FieldReminderIntent, FieldQuestionAnswer, FieldChoiceNumber, FieldReminderTarget,
+	FieldTimerRequest, FieldTimerTarget,
 }
 
 // ReminderMissed says whether misses (from Check) include a reminder field, or
@@ -98,6 +101,16 @@ func PromptAt(c llm.Case, now time.Time) string {
 				Content: e.Content, Title: e.Title, EventAt: instantOf(e.EventAt, now), DueAt: instantOf(e.DueAt, now),
 			})
 		}
+	}
+	for _, e := range c.TimersList {
+		entry := classify.TimerEntry{}
+		if at := instantOf(e.At, now); at != nil {
+			entry.At = *at
+		}
+		if e.Text != "" {
+			entry.Text = &e.Text
+		}
+		rc.Timers = append(rc.Timers, entry)
 	}
 	return classify.BuildPrompt(c.Message, nil, now, consolidation.DefaultWeightThreshold, rc)
 }
@@ -230,6 +243,8 @@ func Check(c llm.Case, cls classify.Classification) []string {
 	miss(FieldQuestionAnswer, orNone(cls.QuestionAnswer) != orDefault(e.QuestionAnswer, "none"))
 	miss(FieldChoiceNumber, !equalInt(cls.ChoiceNumber, e.ChoiceNumber))
 	miss(FieldReminderTarget, targetOf(cls.ReminderTarget) != e.ReminderTarget)
+	miss(FieldTimerRequest, orNone(cls.TimerRequest) != orDefault(e.TimerRequest, "none"))
+	miss(FieldTimerTarget, targetOf(cls.TimerTarget) != e.TimerTarget)
 	if e.DayOnly != nil {
 		miss(FieldDayOnly, (cls.DueAtDayOnly || cls.EventAtDayOnly) != *e.DayOnly)
 	}
@@ -416,11 +431,15 @@ func ValidateCase(c llm.Case) error {
 	if n := e.ChoiceNumber; n != nil && (*n < 1 || *n > classify.MaxReminderChoices) {
 		errs = append(errs, fmt.Errorf("choice_number %d is outside 1-%d", *n, classify.MaxReminderChoices))
 	}
-	if t := e.ReminderTarget; t != "" && t != classify.ReminderTargetUnclear {
-		if n, err := strconv.Atoi(t); err != nil || n < 1 || n > classify.MaxReminderChoices {
-			errs = append(errs, fmt.Errorf("reminder_target %q is not 1-%d or %q", t, classify.MaxReminderChoices, classify.ReminderTargetUnclear))
+	for field, t := range map[string]string{FieldReminderTarget: e.ReminderTarget, FieldTimerTarget: e.TimerTarget} {
+		if t != "" && t != classify.ReminderTargetUnclear {
+			if n, err := strconv.Atoi(t); err != nil || n < 1 || n > classify.MaxReminderChoices {
+				errs = append(errs, fmt.Errorf("%s %q is not 1-%d or %q", field, t, classify.MaxReminderChoices, classify.ReminderTargetUnclear))
+			}
 		}
 	}
+	oneOf(FieldTimerRequest, e.TimerRequest, strs(classify.AllTimerRequests()))
+	errs = append(errs, validateTimers(c.TimersList)...)
 	if q := c.OpenQuestion; q != nil {
 		oneOf("open_question.kind", q.Kind, []string{
 			string(classify.QuestionRemindWhen), string(classify.QuestionWhichReminder), string(classify.QuestionUndo)})
@@ -559,4 +578,26 @@ func speaksOther(question, voice string) bool {
 		}
 	}
 	return false
+}
+
+// validateTimers checks a case's timers_list as production builds one: at
+// most MaxReminderChoices, each instant RFC 3339, soonest first.
+func validateTimers(timers []llm.TimerEntry) []error {
+	var errs []error
+	if len(timers) > classify.MaxReminderChoices {
+		errs = append(errs, fmt.Errorf("timers_list holds %d entries, at most %d", len(timers), classify.MaxReminderChoices))
+	}
+	var last time.Time
+	for i, e := range timers {
+		at, err := time.Parse(time.RFC3339, e.At)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("timers_list[%d].at %q is not RFC 3339", i, e.At))
+			continue
+		}
+		if at.Before(last) {
+			errs = append(errs, fmt.Errorf("timers_list[%d] rings before the one listed above it", i))
+		}
+		last = at
+	}
+	return errs
 }

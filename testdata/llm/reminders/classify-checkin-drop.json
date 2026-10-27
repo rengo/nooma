@@ -4,11 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "dejalo, ya no hace falta",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya no hace falta hacer eso; déjalo.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"drop\",\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Ya no hace falta hacerlo.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\",\"question_answer\":\"none\",\"task_checkin_outcome\":\"drop\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "task_checkin_outcome": "drop"
   },
-  "prompt_sha256": "47d3a9a681145b3673a079b48b512aeb28c214123dfe8e2ecedcacf3c21ff1b7"
+  "prompt_sha256": "8a42b3121b94a89e5ce2b5c534634db92240ab10a2c592901f1e59471514aa8e"
 }

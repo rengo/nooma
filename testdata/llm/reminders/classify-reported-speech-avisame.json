@@ -4,8 +4,8 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "Ana me dijo 'avisame cuando llegues'",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisar a Ana cuando llegue.\",\"weight\":0.7,\"decay_rate\":0.05,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisar a Ana cuando llegue.\",\"weight\":0.6,\"decay_rate\":0.05,\"language\":\"es\",\"remind_request\":false,\"reminder_intent\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {},
-  "prompt_sha256": "ff4c9fc15b96b16c6c8bc0421254069290fee5e8be0597ae4983c578aeebce63"
+  "prompt_sha256": "6e718a9c03a246b1c4df96bcdd4ee15117a915abfe4ac7396beb37857c8618a2"
 }

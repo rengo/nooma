@@ -204,6 +204,28 @@ func TestReminderPhrasingSetCoversWhatTheDesignListsAndSpecR1(t *testing.T) {
 		return e.RemindRequest != nil && *e.RemindRequest && e.DueAt != "" && (e.Type == "task" || e.Type == "event")
 	}))
 
+	// ADR-0051: a list with timers set and with none, a cancel by what the
+	// timer says and by when it rings, one that cannot tell, the answer to
+	// Nooma's which, and a new timer and a note beside the list that are no
+	// request about the timers.
+	listed := func(c llm.Case) bool { return len(c.TimersList) > 0 }
+	has("a list with timers set", func(c llm.Case) bool { return listed(c) && c.Expect != nil && c.Expect.TimerRequest == "list" })
+	has("a list with none set", func(c llm.Case) bool { return !listed(c) && c.Expect != nil && c.Expect.TimerRequest == "list" })
+	if n := has("a cancel naming a listed timer", expect(func(e *llm.Expect) bool {
+		return e.TimerRequest == "cancel" && e.TimerTarget != "" && e.TimerTarget != classify.ReminderTargetUnclear
+	})); n < 3 {
+		t.Errorf("the set has %d cancels naming a listed timer, want 3 or more (by text, by time, after a which)", n)
+	}
+	has("a cancel that cannot tell which", expect(func(e *llm.Expect) bool {
+		return e.TimerRequest == "cancel" && e.TimerTarget == classify.ReminderTargetUnclear
+	}))
+	has("a cancel answering Nooma's which", func(c llm.Case) bool {
+		return c.Conversation != nil && c.Expect != nil && c.Expect.TimerRequest == "cancel"
+	})
+	has("a message beside the list that asks nothing of the timers", func(c llm.Case) bool {
+		return listed(c) && c.Expect != nil && c.Expect.TimerRequest == "" && c.Expect.Type != ""
+	})
+
 	// Links 2 and 7 replay these two.
 	for _, id := range []string{"classify-task-remind-me-coffee", "classify-task-remind-me-daily-pills"} {
 		has(id, func(c llm.Case) bool { return c.ID == id })

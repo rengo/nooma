@@ -117,6 +117,7 @@ func TestCaptureView_RendersEveryOutcome(t *testing.T) {
 		{"recalled", brain.CaptureResult{Outcome: brain.OutcomeRecalled, Recalled: []unit.Unit{{ID: "unit-2", Content: "Renew the passport"}}}},
 		{"corrected", brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "unit-3", Fields: []correction.Field{correction.FieldContent}}}},
 		{"asked", brain.CaptureResult{Outcome: brain.OutcomeAsked, Correction: &brain.Correction{UnitID: "unit-4", Ambiguous: true}}},
+		{"timers", brain.CaptureResult{Outcome: brain.OutcomeTimers, Timers: &brain.TimersAnswer{Listed: []brain.ListedTimer{{ID: "timer-2", FireAt: fireAt}}}}},
 	}
 
 	if len(cases) != len(brain.AllCaptureOutcomes()) {

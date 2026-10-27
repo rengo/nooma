@@ -100,6 +100,10 @@ type Classification struct {
 	// choice, and the code binds only on a position inside that list.
 	ChoiceNumber   *int
 	ReminderTarget *ReminderTarget
+	// TimerRequest and TimerTarget are what the message asks of the live
+	// timers and, for a cancel, which listed one (ADR-0051).
+	TimerRequest *TimerRequest
+	TimerTarget  *ReminderTarget
 
 	// Referent is which item of the recent conversation a correction patches
 	// (ADR-0036): a letter of the list the prompt carried, or unclear. The

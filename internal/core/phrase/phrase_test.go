@@ -52,7 +52,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
+		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "FoundOne": 1, "FoundMany": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1,
 	}
@@ -169,13 +169,53 @@ func TestSet_TimerAt(t *testing.T) {
 		{classify.LanguageES, late, tomorrow, "Te aviso el mar 27 oct a las 00:20."},
 		{classify.LanguageEN, set, today, "I will remind you at 10:28."},
 		{classify.LanguageEN, late, tomorrow, "I will remind you on Tue 27 Oct at 00:20."},
-		// The day is the fire's own: the same instant read in UTC is
-		// already the 27th, and must not be called tomorrow.
-		{classify.LanguageES, set.UTC(), today, "Te aviso a las 10:28."},
+		// The day is the fire's own: 23:50 at -03:00 is already the 27th in
+		// UTC, and read there a ring at 00:20 on the 27th would be "today".
+		{classify.LanguageES, late.UTC(), tomorrow, "Te aviso el mar 27 oct a las 00:20."},
 	} {
 		if got := For(tc.l).TimerAt(tc.fire, tc.now); got != tc.want {
 			t.Errorf("%s: TimerAt(%v, %v) = %q, want %q", tc.l, tc.fire, tc.now, got, tc.want)
 		}
+	}
+}
+
+// TestSet_TimerLine names a live timer as a chat lists it (ADR-0051): its
+// hour alone on now's day, its day and hour on another, then its text, and
+// the instant alone for a generic nudge.
+func TestSet_TimerLine(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	now := time.Date(2026, 10, 26, 23, 50, 0, 0, art)
+	pizza := "Sacar la pizza del horno"
+	empty := ""
+	for _, tc := range []struct {
+		fire time.Time
+		text *string
+		want string
+	}{
+		{time.Date(2026, 10, 26, 23, 55, 0, 0, art), &pizza, "23:55 \u2014 Sacar la pizza del horno"},
+		{time.Date(2026, 10, 27, 0, 20, 0, 0, art), &pizza, "mar 27 oct, 00:20 \u2014 Sacar la pizza del horno"},
+		{time.Date(2026, 10, 26, 23, 55, 0, 0, art), nil, "23:55"},
+		{time.Date(2026, 10, 26, 23, 55, 0, 0, art), &empty, "23:55"},
+	} {
+		if got := For(classify.LanguageES).TimerLine(tc.fire, now, tc.text); got != tc.want {
+			t.Errorf("TimerLine(%v) = %q, want %q", tc.fire, got, tc.want)
+		}
+	}
+}
+
+// TestSet_TimerCancelledLine closes the sentence once: a timer's text that
+// already ends in a period does not read "..".
+func TestSet_TimerCancelledLine(t *testing.T) {
+	art := time.FixedZone("ART", -3*60*60)
+	now := time.Date(2026, 10, 26, 10, 10, 0, 0, art)
+	fire := time.Date(2026, 10, 26, 10, 28, 0, 0, art)
+	for _, text := range []string{"Sacar la pizza del horno", "Sacar la pizza del horno."} {
+		if got, want := For(classify.LanguageES).TimerCancelledLine(fire, now, &text), "Cancelado: 10:28 \u2014 Sacar la pizza del horno."; got != want {
+			t.Errorf("TimerCancelledLine(%q) = %q, want %q", text, got, want)
+		}
+	}
+	if got, want := For(classify.LanguageEN).TimerCancelledLine(fire, now, nil), "Cancelled: 10:28."; got != want {
+		t.Errorf("a generic nudge = %q, want %q", got, want)
 	}
 }
 

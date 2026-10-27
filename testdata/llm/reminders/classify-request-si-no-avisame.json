@@ -4,10 +4,10 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "si no, avisame",
-  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisame si no.\",\"weight\":0.6,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Avisarme si no\",\"remind_request\":true,\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"task\",\"normalized_content\":\"Avisarme si no.\",\"weight\":0.55,\"decay_rate\":0.1,\"language\":\"es\",\"title\":\"Avisarme si no\",\"remind_request\":true,\"reminder_intent\":\"none\",\"question_answer\":\"none\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "remind_request": true
   },
-  "prompt_sha256": "a05db5738a692492c50a85de70096cbf65fb53bffe6cc5a1faa9c996b6d7d185"
+  "prompt_sha256": "22a60c93b3cc1164ad730240c42e61d3bc23c677b0f7b3d99c16dcbff96c72c2"
 }

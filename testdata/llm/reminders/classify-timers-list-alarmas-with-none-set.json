@@ -1,0 +1,13 @@
+{
+  "id": "classify-timers-list-alarmas-with-none-set",
+  "provider": "openai",
+  "model": "gpt-6-luna",
+  "task": "classify",
+  "message": "¿qué alarmas tengo puestas?",
+  "response": "{\"type\":\"timer\",\"normalized_content\":\"¿Qué alarmas tengo puestas?\",\"weight\":0.5,\"decay_rate\":0.1,\"language\":\"es\",\"timer_request\":\"list\"}",
+  "now": "2026-10-26T10:10:00-03:00",
+  "expect": {
+    "timer_request": "list"
+  },
+  "prompt_sha256": "c154ff962ecef34efc8973275ac0b53864c6ff248f0c2e80879f181336ea8c49"
+}

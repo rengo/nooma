@@ -185,9 +185,11 @@ arriving in the morning digest, and a timer worded at delivery that says it was 
 Two items on this list were **deliberately not closed**, and were named rather than left to be
 noticed. **One of them is now closed.**
 
-A timer's **list and cancel** from chat is still open, and is M4's surface rather than M3's: doc 02
-§8 promises both, and `ports.TimerRepo` declares neither, because a method with no caller is what
-this repository refuses to ship.
+A timer's **list and cancel** from chat was M4's surface rather than M3's: doc 02 §8 promised
+both, and `ports.TimerRepo` declared neither, because a method with no caller is what this
+repository refuses to ship. **It closed on 2026-10-26** with `m4f`'s chat half (ADR-0051):
+`TimerRepo.Pending` lists the live timers into every prompt, and a cancel moves the one it names
+through that list to `cancelled`. The UI's list and cancel remain `m4f`'s.
 
 The other — a **relation confirmation** that knew how to reject a relation but not yet *which*
 relation an inbound answer was about (`m3d` finding J24) — **closed on 2026-09-16 with

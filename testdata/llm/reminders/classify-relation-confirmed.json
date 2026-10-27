@@ -4,11 +4,11 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "yes, they're related",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Yes, they’re related.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"en\",\"relation_outcome\":\"confirmed\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Yes, they're related.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"en\",\"relation_outcome\":\"confirmed\"}",
   "now": "2026-10-16T10:42:25-03:00",
   "expect": {
     "type": "chitchat",
     "relation_outcome": "confirmed"
   },
-  "prompt_sha256": "f39a4cb1ea575c9a869b3597fde5f9c91ccb467853ff0f6e499204225a0cd651"
+  "prompt_sha256": "ba6e90c2e43142b71c9227ef97ec46a32b90213c5af502fceee74969fccb9d47"
 }

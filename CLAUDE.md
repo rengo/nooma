@@ -29,12 +29,10 @@ Nooma runs unattended on a server in Docker; `nooma backup` writes a verified sn
 rclone crypt, outside the binary, uploads it encrypted (ADR-0049,
 [`docs/08-deploy.md`](docs/08-deploy.md)).
 
-**One** M3 list item is still deliberately open rather than left to be noticed — a timer's list
-and cancel from chat, named in [`docs/05-build-plan.md`](docs/05-build-plan.md) and owned by
-`m4f`: `ports.TimerRepo` has `Cancel` (its only caller is the check scan expiring a stale timer)
-but no list read, and a method with no caller is not shipped here. Its sibling — which relation
-an inbound confirmation answers — closed with `m3e`. `internal/core/` holds the brain's decision
-logic.
+Both M3 list items left deliberately open are closed: which relation an inbound confirmation
+answers (`m3e`), and a timer's list and cancel from chat (ADR-0051: `TimerRepo.Pending` lists the
+live timers into every prompt, and a cancel binds one through that list). The UI's list and
+cancel stay `m4f`'s. `internal/core/` holds the brain's decision logic.
 
 ## Documentation
 

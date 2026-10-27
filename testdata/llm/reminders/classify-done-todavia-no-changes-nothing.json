@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "no, todavía no",
-  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no.\",\"weight\":0.1,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\",\"reminder_intent\":\"none\"}",
+  "response": "{\"type\":\"chitchat\",\"normalized_content\":\"Todavía no.\",\"weight\":0.2,\"decay_rate\":0.3,\"language\":\"es\",\"task_checkin_outcome\":\"snooze\"}",
   "now": "2026-10-20T07:20:00-03:00",
   "conversation": {
     "turns": [
@@ -29,5 +29,5 @@
     "type": "chitchat",
     "task_checkin_outcome": "snooze"
   },
-  "prompt_sha256": "8f79e46c1d60bf5642a1078a9ad7f696ad0fce9da784db394f30d2156932d0d7"
+  "prompt_sha256": "997f32e4f27faa261ae3fbc08722dc751413a86a375ba5d74ee8e238c035b88c"
 }

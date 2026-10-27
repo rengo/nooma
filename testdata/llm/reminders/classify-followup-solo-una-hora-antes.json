@@ -4,7 +4,7 @@
   "model": "gpt-6-luna",
   "task": "classify",
   "message": "avisame solo 1 hora antes",
-  "response": "{\"type\":\"correction\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.05,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"referent\":\"A\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":false}",
+  "response": "{\"type\":\"event\",\"normalized_content\":\"Dentista el 2026-10-20 a las 11:00.\",\"weight\":0.8,\"decay_rate\":0.03,\"language\":\"es\",\"remind_request\":true,\"reminder_intent\":\"none\",\"reminder_leads_minutes\":[60],\"reminder_leads_add\":false,\"referent\":\"A\"}",
   "now": "2026-10-19T09:10:00-03:00",
   "conversation": {
     "turns": [
@@ -57,5 +57,6 @@
     ],
     "reminder_leads_add": false
   },
-  "prompt_sha256": "eb84875e154472710aaa215e5a421195899720380c82237174557c69b0683bf6"
+  "known_misread": "type is event where correction is expected: the model types \"avisame solo 1 hora antes\" as the event it follows. Harmless as read: leads beside a shown referent bind whatever the type (ADR-0046, TestI40_LeadsBindWhateverTheType), so no unit is stored and the dentist is reminded 1 hour before, and only then",
+  "prompt_sha256": "8d1d2bae083578d579d83aa436802e0e5736314f31f3fb978379b898fc860e8b"
 }

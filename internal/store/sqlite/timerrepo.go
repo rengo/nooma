@@ -65,6 +65,27 @@ func (r *TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, er
 	if err != nil {
 		return nil, fmt.Errorf("select due timers: %w", err)
 	}
+	return scanTimers(rows)
+}
+
+// Pending implements ports.TimerRepo: Due's read without its instant, the
+// same full scan for the same reason.
+func (r *TimerRepo) Pending(ctx context.Context) ([]ports.DueTimer, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, fire_at, action_text
+		 FROM timers
+		 WHERE status = ?
+		 ORDER BY fire_at, id`,
+		string(ports.TimerStatusPending),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select pending timers: %w", err)
+	}
+	return scanTimers(rows)
+}
+
+// scanTimers reads Due's and Pending's rows.
+func scanTimers(rows *sql.Rows) ([]ports.DueTimer, error) {
 	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
 
 	due := make([]ports.DueTimer, 0)
@@ -75,8 +96,9 @@ func (r *TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, er
 			actionText sql.NullString
 		)
 		if err := rows.Scan(&d.ID, &fireAt, &actionText); err != nil {
-			return nil, fmt.Errorf("scan due timer: %w", err)
+			return nil, fmt.Errorf("scan timer: %w", err)
 		}
+		var err error
 		if d.FireAt, err = time.Parse(unitTimeLayout, fireAt); err != nil {
 			return nil, fmt.Errorf("timer %q: fire_at: %w", d.ID, err)
 		}
@@ -84,7 +106,7 @@ func (r *TimerRepo) Due(ctx context.Context, at time.Time) ([]ports.DueTimer, er
 		due = append(due, d)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("select due timers: %w", err)
+		return nil, fmt.Errorf("read timers: %w", err)
 	}
 	return due, nil
 }
