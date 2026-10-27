@@ -173,7 +173,10 @@ Prior decisions: **[ADR-0006](adr/0006-v1-channel-telegram.md)** (channel),
   `current_state` gates, interruptive push ≥ 0.7 + quiet hours.
 - Ephemeral timers end to end (arm, list, cancel, fire with rephrasing).
 - Conversational check-ins: goal nudge, uncertain relation confirmation, state ("feeling
-  loaded?"), task check-in — the orthogonal classify fields from §5.
+  loaded?"), task check-in — the orthogonal classify fields from §5. **Correction (M5):** the
+  goal nudge was never delivered in M3. `pattern_eval` only logged a stagnant goal every night,
+  and a goal answer could not bind in a chat. It is delivered and answered since M5 link 4
+  (ADR-0054).
 - **Demo**: "remind me in 15 min about X" over Telegram, and a real morning digest.
 
 **M3 closed 2026-08-24**, across four chained changes: `m3a-prospection` (when to speak),
@@ -231,7 +234,8 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 | 2b | The relation rule, pure (`learning.StepRelation`, [ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md)) | Shipped |
 | 2c | The `learn` slot runs the rule: the type's origin and last change stored (migration 0014), one `decision_log` row per change with its evidence, I48 and the demo | Shipped |
 | 3 | A relation below its type's persist bar is dormant at read time: hidden from the graph, the unit page, focus adjacency, curation and the question queue, never deleted (I49) | Shipped |
-| 4 | Goal check-ins delivered (doc 02 §7's stagnation check-in, never armed until now) | Planned |
+| 4a | A goal check-in is answered by naming it (ADR-0054, I50) | Shipped |
+| 4b | Goal check-ins delivered: `pattern_eval` arms one per stagnant goal at most once per `goal_stagnation_days`, twice that after a decline, and the morning digest asks it (I51) | Shipped |
 | 5 | Goal cadence learned, pinned by an Admin edit | Planned |
 | 6 | The correctable summary of what was learned (UI and API) | Planned |
 

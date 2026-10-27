@@ -73,7 +73,7 @@ func TestPatternEval_LoadFiringWritesCurrentStateRowAgainstRealSQLite(t *testing
 		}
 	}
 
-	consolidateSvc := brain.NewConsolidateService(fixedClock{now: now}, cfg, units, relations, ids, decisions, recallSvc, fakeprovider.New(t, ""), selfModel, state, sqlite.NewPendingQuestionRepo(v), nil)
+	consolidateSvc := brain.NewConsolidateService(fixedClock{now: now}, cfg, units, relations, ids, decisions, recallSvc, fakeprovider.New(t, ""), selfModel, state, sqlite.NewPendingQuestionRepo(v), nil, nil)
 	phase := consolidation.PhasePatternEval
 	if _, err := consolidateSvc.Consolidate(ctx, brain.ConsolidateRequest{Phase: &phase}); err != nil {
 		t.Fatalf("Consolidate(PhasePatternEval): %v", err)

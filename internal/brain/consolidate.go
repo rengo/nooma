@@ -61,11 +61,12 @@ type ConsolidateService struct {
 //
 // signals is last for the same reason questions is: an addition to a
 // signature every caller spells out (M5 link 2c). It is the learn slot's
-// evidence; nil learns nothing.
-func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo, signals ports.SignalRepo) *ConsolidateService {
+// evidence; nil learns nothing. triggers, after it, is where pattern_eval
+// arms a goal check-in (doc 02 §7); nil arms none.
+func NewConsolidateService(clock ports.Clock, cfg ports.ConfigRepo, units ports.UnitRepo, rels ports.RelationRepo, ids ports.IDGen, log ports.DecisionLog, recallSvc *RecallService, judge ports.LLMProvider, selfModel ports.SelfModelRepo, state ports.StateRepo, questions ports.PendingQuestionRepo, signals ports.SignalRepo, triggers ports.TriggerRepo) *ConsolidateService {
 	return &ConsolidateService{
 		clock: clock,
-		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions, signals: signals},
+		run:   consolidateRunner{cfg: cfg, units: units, rels: rels, ids: ids, log: log, recall: recallSvc, judge: judge, selfModel: selfModel, state: state, questions: questions, signals: signals, triggers: triggers},
 	}
 }
 
@@ -203,6 +204,9 @@ type consolidateRunner struct {
 	// signals is the learn slot's evidence (M5 link 2c); nil learns
 	// nothing.
 	signals ports.SignalRepo
+	// triggers is where pattern_eval arms a goal check-in (doc 02 §7); nil
+	// arms none.
+	triggers ports.TriggerRepo
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -1254,20 +1258,6 @@ func (r consolidateRunner) persistBoosts(ctx context.Context, boosts []weight.Bo
 	return nil
 }
 
-// persistStagnationFindings records one decision_log row per finding
-// (design §3.3(e), spec R5.10's first MUST) — doc 02 §7's stagnation
-// check-in has no M2 delivery mechanism of its own, so decision_log is its
-// only recorded trace this milestone (spec R5.10's own framing).
-func (r consolidateRunner) persistStagnationFindings(ctx context.Context, fs []consolidation.StagnationFinding, now time.Time) error {
-	for _, f := range fs {
-		rationale := fmt.Sprintf("pattern_eval: goal belief %q stagnant for %.1f days", f.TopicKey, f.StagnantDays)
-		if err := r.record(ctx, now, ports.ActionPatternEvalStagnationFound, rationale, f); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // loadHypothesisMapping is the fixed sentence spec R5.10's second MUST
 // requires the decision_log row's own Context to carry, verbatim: m2b
 // design §9 Q6 left lastHypothesisAt's anchor an open question, and Q6's
@@ -1455,8 +1445,9 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 		if err != nil {
 			return fmt.Errorf("consolidate: pattern_eval: read active beliefs: %w", err)
 		}
-		findings := consolidation.EvaluateStagnation(beliefsToConsolidation(active), consolidation.ResolveGoalStagnationDays(pass.cfg.GoalStagnationDays), pass.now)
-		if err := r.persistStagnationFindings(ctx, findings, pass.now); err != nil {
+		days := consolidation.ResolveGoalStagnationDays(pass.cfg.GoalStagnationDays)
+		findings := consolidation.EvaluateStagnation(beliefsToConsolidation(active), days, pass.now)
+		if err := r.armGoalCheckIns(ctx, findings, active, days, pass.now); err != nil {
 			return err
 		}
 

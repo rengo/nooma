@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -829,6 +830,60 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		}
 		return id
 	}
+
+	// doc 02 §7: the cadence reads each goal's latest check-in.
+	t.Run("GoalCheckIns is each goal's latest check-in: when armed, open, declined", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		arm := func(id, belief string, at time.Time) {
+			t.Helper()
+			if err := repo.Create(ctx, ports.Trigger{ID: id, Kind: ports.TriggerKindPatternBased, FireAt: &at, CreatedAt: at,
+				Payload: ports.TriggerPayload{ActionText: "¿Seguís?", BeliefID: belief}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		deliver := func(id string, at time.Time) {
+			t.Helper()
+			if err := repo.Fire(ctx, id, at); err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.Surface(ctx, id, at); err != nil {
+				t.Fatal(err)
+			}
+		}
+		day := 24 * time.Hour
+		arm("run-1", "b-run", contractNow)
+		deliver("run-1", contractNow)
+		if err := repo.Resolve(ctx, "run-1", ports.ResolutionEngaged, contractNow); err != nil {
+			t.Fatal(err)
+		}
+		arm("run-2", "b-run", contractNow.Add(21*day))
+		deliver("run-2", contractNow.Add(21*day))
+		if err := repo.Resolve(ctx, "run-2", ports.ResolutionDeclined, contractNow.Add(21*day)); err != nil {
+			t.Fatal(err)
+		}
+		arm("german-1", "b-german", contractNow.Add(day))
+		at := contractNow
+		createTrigger(t, repo, fixtureTrigger("a-reminder", &at))
+
+		got, err := repo.GoalCheckIns(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		byBelief := map[string]consolidation.GoalCheckIn{}
+		for _, g := range got {
+			byBelief[g.BeliefID] = g
+		}
+		if len(got) != 2 {
+			t.Fatalf("GoalCheckIns = %+v, want one per goal, two", got)
+		}
+		if run := byBelief["b-run"]; !run.ArmedAt.Equal(contractNow.Add(21*day)) || run.Open || !run.Declined {
+			t.Errorf("b-run = %+v, want its latest, armed day 21, closed, declined", run)
+		}
+		if german := byBelief["b-german"]; !german.ArmedAt.Equal(contractNow.Add(day)) || !german.Open || german.Declined {
+			t.Errorf("b-german = %+v, want armed day 1 and still open", german)
+		}
+	})
 
 	// ADR-0054: a goal check-in hangs off no unit and carries its goal.
 	t.Run("a goal check-in comes back delivered with its belief and no unit", func(t *testing.T) {

@@ -56,7 +56,7 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 			fmt.Sprintf("check-in %q was put off; the morning digest asks it again", open[0].ID), open[0].ID, "", len(open)); err != nil {
 			return false, err
 		}
-		return false, recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeAck, open[0].ID, open[0].UnitID, now)
+		return false, recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeAck, open[0].ID, open[0].UnitID, open[0].Payload.BeliefID, now)
 	}
 	if len(shown) > 0 {
 		open = checkInsOf(open, namedItem(c, shown))
@@ -101,7 +101,7 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 	if resolution == ports.ResolutionDeclined {
 		verdict = ports.SignalNudgeDeclined
 	}
-	return true, recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, target.UnitID, now)
+	return true, recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, target.UnitID, target.Payload.BeliefID, now)
 }
 
 // namedItem is the unit c's referent names among shown, or "" when it names

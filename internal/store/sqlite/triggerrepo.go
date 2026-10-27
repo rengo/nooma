@@ -10,6 +10,7 @@ import (
 
 	"github.com/ncruces/go-sqlite3"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -652,4 +653,48 @@ func rulePtrToNull(r *prospection.Rule) any {
 		return nil
 	}
 	return string(*r)
+}
+
+// GoalCheckIns implements ports.TriggerRepo: every goal check-in, oldest
+// armed first, folded to each goal's latest. Open is still armed, or fired
+// and not answered; a check-in closed unanswered (expired) or answered is not.
+func (r *TriggerRepo) GoalCheckIns(ctx context.Context) ([]consolidation.GoalCheckIn, error) {
+	const q = `
+SELECT json_extract(payload, '$.belief_id'), created_at, status, resolution
+FROM triggers
+WHERE kind = 'pattern_based' AND json_extract(payload, '$.belief_id') IS NOT NULL
+ORDER BY created_at, id`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("reading goal check-ins: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	latest := map[string]consolidation.GoalCheckIn{}
+	var order []string
+	for rows.Next() {
+		var belief, created, status string
+		var resolution sql.NullString
+		if err := rows.Scan(&belief, &created, &status, &resolution); err != nil {
+			return nil, fmt.Errorf("scanning a goal check-in: %w", err)
+		}
+		at, err := time.Parse(unitTimeLayout, created)
+		if err != nil {
+			return nil, fmt.Errorf("goal check-in of %q: created_at: %w", belief, err)
+		}
+		if _, seen := latest[belief]; !seen {
+			order = append(order, belief)
+		}
+		open := !resolution.Valid && (status == string(ports.TriggerStatusArmed) || status == string(ports.TriggerStatusFired))
+		latest[belief] = consolidation.GoalCheckIn{BeliefID: belief, ArmedAt: at, Open: open,
+			Declined: resolution.String == string(ports.ResolutionDeclined)}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading goal check-ins: %w", err)
+	}
+	out := make([]consolidation.GoalCheckIn, 0, len(order))
+	for _, b := range order {
+		out = append(out, latest[b])
+	}
+	return out, nil
 }

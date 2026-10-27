@@ -388,7 +388,7 @@ func buildDemoPass(t *testing.T, dv demoVault, ex goldenset.ConsolidationExample
 	judgeDir := connectJudgeCase(t, dv, ex)
 	passJudge := fakeprovider.New(t, judgeDir, connectJudgeCaseID, "derive-team-meeting-preference")
 	clock := &steppingClock{now: now}
-	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state, dv.questions, nil)
+	consolidateSvc := brain.NewConsolidateService(clock, dv.config, dv.units, dv.relations, dv.ids, dv.decisions, recallSvc, passJudge, dv.selfModel, dv.state, dv.questions, nil, nil)
 
 	return consolidateSvc, passJudge
 }

@@ -56,7 +56,7 @@ func (r captureRunner) resolveGoalCheckIn(ctx context.Context, c classify.Classi
 			fmt.Sprintf("goal check-in %q was put off", target.ID), target.ID, "", len(goals)); err != nil {
 			return false, err
 		}
-		return true, recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeAck, target.ID, nil, now)
+		return true, recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeAck, target.ID, nil, target.Payload.BeliefID, now)
 	}
 	resolution, verdict := ports.ResolutionEngaged, ports.SignalNudgeEngaged
 	if outcome == classify.GoalOutcomeDeclined {
@@ -74,7 +74,7 @@ func (r captureRunner) resolveGoalCheckIn(ctx context.Context, c classify.Classi
 		fmt.Sprintf("goal check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(goals)); err != nil {
 		return false, err
 	}
-	return true, recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, nil, now)
+	return true, recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, nil, target.Payload.BeliefID, now)
 }
 
 // withoutGoalCheckIns is the generic check-in answer's pool (ADR-0054).

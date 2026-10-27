@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/prospection"
 )
 
@@ -383,6 +384,11 @@ type TriggerRepo interface {
 	// payload and, when m.RecurrenceAnchor is non-nil, recurrence_anchor.
 	// It returns the same two errors as Fire.
 	Reschedule(ctx context.Context, id string, m TriggerMove) error
+
+	// GoalCheckIns returns each goal's latest check-in, a pattern_based
+	// trigger carrying a belief_id, by when it was armed (doc 02 §7): the
+	// goal cadence's one read. A goal never asked is absent.
+	GoalCheckIns(ctx context.Context) ([]consolidation.GoalCheckIn, error)
 }
 
 // Sentinel errors ports.TriggerRepo implementations return.

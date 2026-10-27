@@ -145,8 +145,10 @@ type Set struct {
 	AndMore string
 	// AskAgain heads the digest's block of check-ins asked again (doc 02 §7),
 	// and AskDone is one of them: one %s, the unit's title or content.
-	AskAgain     string
-	AskDone      string
+	AskAgain string
+	AskDone  string
+	// AskGoal is a goal check-in (doc 02 §7, ADR-0054): one %s, the goal.
+	AskGoal      string
 	TimerNudge   string
 	TimerLate    string
 	LanguageName string
@@ -262,6 +264,7 @@ var sets = map[classify.Language]Set{
 		AndMore:           "\u2026and %d more.",
 		AskAgain:          "Asking again:",
 		AskDone:           "Is \"%s\" done?",
+		AskGoal:           "Still on \"%s\"?",
 		TimerNudge:        "You asked me to remind you about something now.",
 		TimerLate:         "(This is later than you asked for.)",
 		LanguageName:      "English",
@@ -352,6 +355,7 @@ var sets = map[classify.Language]Set{
 		AndMore:           "\u2026y %d más.",
 		AskAgain:          "Te pregunto de nuevo:",
 		AskDone:           "¿Ya está «%s»?",
+		AskGoal:           "¿Seguís con «%s»?",
 		TimerNudge:        "Me pediste que te recordara algo ahora.",
 		TimerLate:         "(Esto llega más tarde de lo que pediste.)",
 		LanguageName:      "Spanish",
@@ -506,6 +510,9 @@ func (s Set) Question(from, to string) string { return fmt.Sprintf(s.RelationQue
 
 // Done asks whether the thing words name is done (AskDone).
 func (s Set) Done(words string) string { return fmt.Sprintf(s.AskDone, words) }
+
+// Goal is the goal check-in about goal.
+func (s Set) Goal(goal string) string { return fmt.Sprintf(s.AskGoal, goal) }
 
 // More says how many digest lines were left for tomorrow.
 func (s Set) More(n int) string { return fmt.Sprintf(s.AndMore, n) }

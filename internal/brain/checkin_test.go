@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/ports"
 )
@@ -793,4 +794,8 @@ func TestRelationCheckIn_AFailedRejectLeavesItsQuestionOpen(t *testing.T) {
 	if n := log.count(ports.ActionCaptureRelationCheckInResolved); n != 0 {
 		t.Errorf("%d resolved row(s) for a rejection that did not happen, want 0", n)
 	}
+}
+
+func (*openCheckIns) GoalCheckIns(context.Context) ([]consolidation.GoalCheckIn, error) {
+	return nil, nil
 }
