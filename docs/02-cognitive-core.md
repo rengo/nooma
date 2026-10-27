@@ -421,7 +421,12 @@ that rule belongs with the consolidation pass that can see the whole graph.
 **A judgment that decided nothing writes nothing.** If the judge's answer is `new`, or if it
 degrades so far that the outcome, its confidence or its target is missing, no relation is stored
 and no decision is recorded. There is no effect to record — the same reason a read writes no row
-(§11).
+(§11). A `related` answer with no type decides nothing either, since there is nothing to store it
+under. A missing strength is not among these: it reads as 0. A duplicate is stored typed
+`duplicate`, whatever type the judge added. **Both judge call sites read a judgment by this one
+rule** (`internal/core/relation.Propose`): capture, the nightly `connect` and the recorded judge
+set (`internal/reading`). Before they shared it, `connect` also required a type and a strength,
+so it dropped every duplicate it found, because the judge is told to omit the type for one.
 
 **A shared day is not a relation.** Two units are related by what they are about: the same
 person, place, thing, plan or subject. Falling on the same date or day, or both being on the
@@ -1471,8 +1476,9 @@ boot catch-up — the two are one body of work behind two triggers.
    or its type — the exclusion key is the **unordered** pair, a stated and reversible choice
    that spends a possible second relation type between the same two units to save a judge call
    against this per-night budget (`CanonicalPair`, used for this lookup only — a stored or
-   proposed relation still runs `source → candidate`, per §4's own direction rule). New
-   relations get `created_by='consolidation'`
+   proposed relation still runs `source → candidate`, per §4's own direction rule). A
+   judgment is read by `relation.Propose`, the rule capture applies (§4), so a duplicate found
+   at night is stored typed `duplicate` too. New relations get `created_by='consolidation'`
    (`internal/core/consolidation.ProposeRelation`).
 5. **derive**: derives/updates self-beliefs from units (§10), rendering each one's key as
    `derived/{facet}/{key}` (`internal/core/consolidation.DeriveTopicKey`). The units a pass

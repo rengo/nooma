@@ -14,6 +14,7 @@ import (
 
 	"github.com/rengo/nooma/internal/core/consolidation"
 	"github.com/rengo/nooma/internal/core/recall"
+	"github.com/rengo/nooma/internal/core/relation"
 	"github.com/rengo/nooma/internal/core/selfmodel"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/core/weight"
@@ -2293,4 +2294,57 @@ func TestConsolidateRunner_PatternEval_LoadFiringOpensHypothesisAndLogs(t *testi
 			}
 		}
 	})
+}
+
+// TestConsolidateRunner_Connect_StoresADuplicateAsCaptureDoes: connect reads a
+// judgment through relation.Propose, the rule capture applies, so a duplicate
+// the judge finds at night is recorded as a relation typed "duplicate" (doc
+// 02 §4: a duplicate is recorded, not merged). Before the two shared a rule,
+// connect required a type the judge is told to omit for a duplicate, and
+// dropped every one it found.
+func TestConsolidateRunner_Connect_StoresADuplicateAsCaptureDoes(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	since := now.Add(-time.Hour)
+	const candidateID = "d7f4da5a-d2e4-4595-afdc-ecdad45b8579" // relation-duplicate-high-confidence's target
+
+	units := memrepo.NewUnits()
+	for _, seed := range []struct {
+		id, content string
+		touched     time.Time
+	}{
+		{"u-source", "Pick up the dry cleaning on Friday", now},
+		{candidateID, "Pick up the dry cleaning this Friday", since.Add(-time.Hour)},
+	} {
+		if err := units.Create(ctx, unit.Unit{ID: seed.id, Type: unit.TypeTask, Status: unit.StatusPool, Content: seed.content,
+			Source: "chat", Weight: 1.0, LastTouchedAt: seed.touched, CreatedAt: now, UpdatedAt: now}); err != nil {
+			t.Fatalf("seed %s: %v", seed.id, err)
+		}
+	}
+	lex := memrepo.NewLexical()
+	lex.SeedLexical(t, "u-source", "dry cleaning Friday")
+	lex.SeedLexical(t, candidateID, "dry cleaning Friday")
+	rels := memrepo.NewRelations()
+	rels.EnsureUnit(t, "u-source")
+	rels.EnsureUnit(t, candidateID)
+	cfg := memrepo.NewConfig()
+	if err := cfg.RecordConsolidationRun(ctx, since); err != nil {
+		t.Fatal(err)
+	}
+	rec := NewRecallService(NewIndex(recall.VectorIndex{Model: "test-model"}), lex, units, fakeprovider.NewEmbeddingFake("test-model"))
+	judge := fakeprovider.New(t, testdataLLMCasesDir(t), "relation-duplicate-high-confidence")
+	phase := consolidation.PhaseConnect
+	svc := NewConsolidateService(fixedClock{now}, cfg, units, rels, &fakeIDs{}, memrepo.NewDecisionLog(), rec, judge,
+		memrepo.NewSelfModel(), memrepo.NewState(), memrepo.NewPendingQuestions())
+	if _, err := svc.Consolidate(ctx, ConsolidateRequest{Phase: &phase}); err != nil {
+		t.Fatalf("Consolidate(PhaseConnect): %v", err)
+	}
+
+	got, err := rels.ByUnit(ctx, "u-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ToUnitID != candidateID || got[0].Type != relation.TypeDuplicate || got[0].CreatedBy != "consolidation" {
+		t.Fatalf("relations = %+v, want one consolidation relation to %s typed %q", got, candidateID, relation.TypeDuplicate)
+	}
 }
