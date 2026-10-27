@@ -74,6 +74,10 @@ func (r captureRunner) closeDone(ctx context.Context, id string, now time.Time) 
 			return CaptureResult{}, false, fmt.Errorf("capture: done: answer check-in %q: %w", o.ID, err)
 		} else if err == nil {
 			change.CheckInsAnswered = append(change.CheckInsAnswered, o.ID)
+			// Answering it done is engaging with it, whichever way it was said.
+			if err := recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeEngaged, o.ID, o.UnitID, now); err != nil {
+				return CaptureResult{}, false, fmt.Errorf("capture: done: %w", err)
+			}
 		}
 	}
 

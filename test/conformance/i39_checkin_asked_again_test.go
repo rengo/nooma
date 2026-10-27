@@ -41,11 +41,12 @@ type i39Vault struct {
 	log      *memrepo.DecisionLog
 	ids      *counterIDs
 	channel  *fakechannel.Fake
+	signals  *memrepo.Signals
 }
 
 func newI39Vault() *i39Vault {
 	return &i39Vault{triggers: memrepo.NewTriggers(), units: memrepo.NewUnits(), log: memrepo.NewDecisionLog(),
-		ids: &counterIDs{}, channel: fakechannel.New()}
+		ids: &counterIDs{}, channel: fakechannel.New(), signals: memrepo.NewSignals()}
 }
 
 // deliver stores a one-shot check-in about a task with content (a nudge with
@@ -106,7 +107,7 @@ func (v *i39Vault) answer(t *testing.T, text, response string, at time.Time) {
 	llm := fakeprovider.New(t, dir, "classify-answer", "chat-answer")
 	svc := brain.NewCaptureService(fixedClock{now: at}, v.ids, v.units, embeddings, memrepo.NewLexical(), memrepo.NewRelations(),
 		v.log, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx),
-		memrepo.NewSignals(), v.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions())
+		v.signals, v.triggers, memrepo.NewTimers(), 0.5, memrepo.NewPendingQuestions())
 	if _, err := svc.Capture(ctx, brain.CaptureInput{Text: text, Channel: "chat"}); err != nil {
 		t.Fatalf("Capture(%q): %v", text, err)
 	}
@@ -115,9 +116,20 @@ func (v *i39Vault) answer(t *testing.T, text, response string, at time.Time) {
 // check runs one check pass at at and returns what it sent.
 func (v *i39Vault) check(t *testing.T, at time.Time) []string {
 	t.Helper()
+	return v.checkWith(t, at, brain.CheckRequest{})
+}
+
+// checkDry is check as a dry run, which writes nothing.
+func (v *i39Vault) checkDry(t *testing.T, at time.Time) []string {
+	t.Helper()
+	return v.checkWith(t, at, brain.CheckRequest{DryRun: true})
+}
+
+func (v *i39Vault) checkWith(t *testing.T, at time.Time, req brain.CheckRequest) []string {
+	t.Helper()
 	before := len(v.channel.Sent(t))
 	if _, err := brain.NewCheckService(fixedClock{now: at}, v.triggers, memrepo.NewTimers(), v.ids, v.log, v.channel,
-		v.units, memrepo.NewState(), nil, "12449194", nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
+		v.units, memrepo.NewState(), nil, "12449194", nil, nil, v.signals).Check(context.Background(), req); err != nil {
 		t.Fatalf("Check at %s: %v", at, err)
 	}
 	var texts []string

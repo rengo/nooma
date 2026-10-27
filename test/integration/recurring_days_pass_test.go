@@ -88,7 +88,7 @@ func TestRecurringReminder_DaysPassOverSQLite(t *testing.T) {
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(consolidateITEmbedModel), brain.NewIndex(idx), sqlite.NewSignalRepo(v),
 		triggers, sqlite.NewTimerRepo(v), 0.5, nil)
 	check := brain.NewCheckService(clock, triggers, sqlite.NewTimerRepo(v), ids, decisions, ch, units, sqlite.NewStateRepo(v),
-		nil, "12449194", nil, nil)
+		nil, "12449194", nil, nil, nil)
 
 	result, err := capture.Capture(ctx, brain.CaptureInput{Text: "Take the pills", Channel: "chat"})
 	if err != nil {

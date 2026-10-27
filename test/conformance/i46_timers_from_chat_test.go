@@ -35,6 +35,7 @@ type i46Fixture struct {
 	units     *memrepo.Units
 	timers    *memrepo.Timers
 	decisions *memrepo.DecisionLog
+	signals   *memrepo.Signals
 }
 
 // i46Timer is one pending timer to seed.
@@ -49,7 +50,7 @@ type i46Timer struct {
 func newI46(t *testing.T, response string, seed []i46Timer, wrap func(ports.TimerRepo) ports.TimerRepo) i46Fixture {
 	t.Helper()
 	ctx := context.Background()
-	f := i46Fixture{llm: &scriptedLLM{response: response}, units: memrepo.NewUnits(), timers: memrepo.NewTimers(), decisions: memrepo.NewDecisionLog()}
+	f := i46Fixture{llm: &scriptedLLM{response: response}, units: memrepo.NewUnits(), timers: memrepo.NewTimers(), decisions: memrepo.NewDecisionLog(), signals: memrepo.NewSignals()}
 	for _, s := range seed {
 		text := s.text
 		if err := f.timers.Create(ctx, ports.Timer{ID: s.id, FireAt: s.at, ActionText: &text, CreatedAt: i46Now.Add(-time.Minute)}); err != nil {
@@ -67,7 +68,7 @@ func newI46(t *testing.T, response string, seed []i46Timer, wrap func(ports.Time
 	}
 	f.svc = brain.NewCaptureService(fixedClock{now: i46Now}, &counterIDs{}, f.units, embeddings, memrepo.NewLexical(),
 		memrepo.NewRelations(), f.decisions, f.llm, f.llm, f.llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), memrepo.NewTriggers(), timers, 0.5, memrepo.NewPendingQuestions())
+		brain.NewIndex(idx), f.signals, memrepo.NewTriggers(), timers, 0.5, memrepo.NewPendingQuestions())
 	return f
 }
 

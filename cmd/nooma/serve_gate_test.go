@@ -163,7 +163,7 @@ func serveGateViolations(t *testing.T, srcs map[string]string) []string {
 					if fn.Name.Name == "wireCheck" {
 						want = "nil"
 					}
-					if !lastArgIs(call, want) {
+					if !argIs(call, checkServiceKeeperArg, want) {
 						add("%s: %s hands NewCheckService something other than %q as its keeper (its *brain.FocusKeeper parameter named keeper, or nil in wireCheck)", name, fn.Name.Name, want)
 					}
 				case "NewTodayService":
@@ -236,10 +236,19 @@ func calleeName(call *ast.CallExpr) string {
 
 // lastArgIs reports whether call's last argument is the bare identifier name.
 func lastArgIs(call *ast.CallExpr, name string) bool {
-	if name == "" || len(call.Args) == 0 {
+	return argIs(call, len(call.Args)-1, name)
+}
+
+// checkServiceKeeperArg is the keeper's position among NewCheckService's
+// parameters: the twelfth, with the signal store after it (M5).
+const checkServiceKeeperArg = 11
+
+// argIs reports whether call's argument at i is the bare identifier name.
+func argIs(call *ast.CallExpr, i int, name string) bool {
+	if name == "" || i < 0 || i >= len(call.Args) {
 		return false
 	}
-	id, ok := call.Args[len(call.Args)-1].(*ast.Ident)
+	id, ok := call.Args[i].(*ast.Ident)
 	return ok && id.Name == name
 }
 
@@ -267,11 +276,11 @@ func wireToday(db *sqlite.Vault, keeper *brain.FocusKeeper) *brain.TodayService 
 }
 
 func wireCheck(db *sqlite.Vault) *brain.CheckService {
-	return brain.NewCheckService(clock, triggers, timers, ids, log, nil, units, state, nil, "", questions, nil)
+	return brain.NewCheckService(clock, triggers, timers, ids, log, nil, units, state, nil, "", questions, nil, signals)
 }
 
 func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
-	return brain.NewCheckService(clock, triggers, timers, ids, log, channel, units, state, llm, conversation, questions, keeper), nil
+	return brain.NewCheckService(clock, triggers, timers, ids, log, channel, units, state, llm, conversation, questions, keeper, signals), nil
 }
 
 func wireScheduler(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), log io.Writer, channel ports.Channel, keeper *brain.FocusKeeper) (*scheduler.Scheduler, error) {
@@ -337,13 +346,13 @@ func TestServe_OneFocusKeeperSharedByTodayAndDigest(t *testing.T) {
 			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel, keeper)\n	_ = check", "channel, newKeeper())\n	_ = check", 1)
 		},
 		"wireProactive hands NewCheckService nil": func(m map[string]string) {
-			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper), nil", "conversation, questions, nil), nil", 1)
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper, signals), nil", "conversation, questions, nil, signals), nil", 1)
 		},
 		"wireProactive hands NewCheckService a call": func(m map[string]string) {
-			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper), nil", "conversation, questions, brainKeeper()), nil", 1)
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "conversation, questions, keeper, signals), nil", "conversation, questions, brainKeeper(), signals), nil", 1)
 		},
 		"wireCheck hands NewCheckService a keeper": func(m map[string]string) {
-			m["wiring.go"] = strings.Replace(m["wiring.go"], `"", questions, nil)`, `"", questions, wireFocusKeeper)`, 1)
+			m["wiring.go"] = strings.Replace(m["wiring.go"], `"", questions, nil, signals)`, `"", questions, wireFocusKeeper, signals)`, 1)
 		},
 		"wireToday hands NewTodayService nil": func(m map[string]string) {
 			m["wiring.go"] = strings.Replace(m["wiring.go"], "log, keeper)\n}\n\nfunc wireCheck", "log, nil)\n}\n\nfunc wireCheck", 1)
@@ -362,7 +371,7 @@ func TestServe_OneFocusKeeperSharedByTodayAndDigest(t *testing.T) {
 		},
 		"NewCheckService handed the last parameter that is not the keeper": func(m map[string]string) {
 			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService", "keeper *brain.FocusKeeper, channel ports.Channel) (*brain.CheckService", 1)
-			m["wiring.go"] = strings.Replace(m["wiring.go"], "questions, keeper), nil", "questions, channel), nil", 1)
+			m["wiring.go"] = strings.Replace(m["wiring.go"], "questions, keeper, signals), nil", "questions, channel, signals), nil", 1)
 		},
 		"NewCheckService parameter named keeper of the wrong type": func(m map[string]string) {
 			m["wiring.go"] = strings.Replace(m["wiring.go"], "channel ports.Channel, keeper *brain.FocusKeeper) (*brain.CheckService", "channel ports.Channel, keeper *brain.Other) (*brain.CheckService", 1)

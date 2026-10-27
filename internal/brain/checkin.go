@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -49,8 +50,11 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 		}
 		// Nothing closes: the row is what lets the morning digest ask the
 		// newest open check-in again (doc 02 §7).
-		return false, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInSnoozed,
-			fmt.Sprintf("check-in %q was put off; the morning digest asks it again", open[0].ID), open[0].ID, "", len(open))
+		if err := r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInSnoozed,
+			fmt.Sprintf("check-in %q was put off; the morning digest asks it again", open[0].ID), open[0].ID, "", len(open)); err != nil {
+			return false, err
+		}
+		return false, recordNudgeSignal(ctx, r.signals, r.ids, ports.SignalNudgeAck, open[0].ID, open[0].UnitID, now)
 	}
 	if len(shown) > 0 {
 		open = checkInsOf(open, namedItem(c, shown))
@@ -85,6 +89,13 @@ func (r captureRunner) resolveCheckIn(ctx context.Context, c classify.Classifica
 			fmt.Sprintf("an answer resolving to %q arrived as check-in %q closed unanswered", resolution, target.ID), target.ID, resolution, len(open))
 	}
 
+	verdict := ports.SignalNudgeEngaged
+	if resolution == ports.ResolutionDeclined {
+		verdict = ports.SignalNudgeDeclined
+	}
+	if err := recordNudgeSignal(ctx, r.signals, r.ids, verdict, target.ID, target.UnitID, now); err != nil {
+		return false, err
+	}
 	return true, r.recordCheckIn(ctx, now, ports.ActionCaptureCheckInResolved,
 		fmt.Sprintf("check-in %q resolved as %q", target.ID, resolution), target.ID, resolution, len(open))
 }
@@ -253,19 +264,23 @@ func (r captureRunner) curator() relationCurator {
 // have to get it wrong HERE, in one reviewable place, rather than at each
 // surface that rejects a relation.
 //
-// It takes the id and not the whole ports.Relation: it read only rel.ID
-// before it had a caller, and a parameter with no reader is what
-// UpdateEventAt's own doc comment refuses (unitrepo.go:57-65).
+// It takes the id and reads the row itself: the chat path holds only the
+// id its question names, and the signal needs the row's type, maker and
+// confidence (I47). A relation already gone fails the read, before any
+// signal: there is no rejection to record.
 func (r relationCurator) RejectRelation(ctx context.Context, relationID string, now time.Time) error {
-	targetKind := ports.TargetKindRelation
-	if err := r.signals.Record(ctx, ports.Signal{
-		ID:         r.ids.New(),
-		Type:       ports.SignalRelationReject,
-		Valence:    ports.ValenceNegative,
-		TargetKind: &targetKind,
-		TargetID:   &relationID,
-		OccurredAt: now,
-	}); err != nil {
+	// Read first: once deleted, nothing else remembers the relation's type,
+	// and a rejection the learner cannot count against its type teaches it
+	// nothing (I47).
+	rel, err := r.rels.ByID(ctx, relationID)
+	if err != nil {
+		return fmt.Errorf("capture: reading relation %q to reject: %w", relationID, err)
+	}
+	sig, err := relationSignal(r.ids.New(), ports.SignalRelationReject, ports.ValenceNegative, rel, rel.Confidence, now)
+	if err != nil {
+		return err
+	}
+	if err := r.signals.Record(ctx, sig); err != nil {
 		return fmt.Errorf("capture: recording the relation rejection: %w", err)
 	}
 
@@ -313,6 +328,7 @@ func (r relationCurator) ConfirmRelation(ctx context.Context, relationID string,
 	// travel back on the row ByID returned — belt and braces beside
 	// Upsert's own contract, which already refuses to rewrite them, and
 	// I07's "revised in place" rather than re-created.
+	judged := rel.Confidence
 	rel.Confidence = relation.ConfirmedConfidence(rel.Confidence, relation.Resolve(row))
 	if err := r.rels.Upsert(ctx, rel); err != nil {
 		return ports.Relation{}, fmt.Errorf("capture: raising confirmed relation %q: %w", rel.ID, err)
@@ -321,18 +337,39 @@ func (r relationCurator) ConfirmRelation(ctx context.Context, relationID string,
 	// Only now. See this function's own doc comment — and note the signal
 	// is emitted even when the raise was a no-op, because it records the
 	// CONFIRMATION and not the delta.
-	targetKind := ports.TargetKindRelation
-	if err := r.signals.Record(ctx, ports.Signal{
-		ID:         r.ids.New(),
-		Type:       ports.SignalRelationConfirm,
-		Valence:    ports.ValencePositive,
-		TargetKind: &targetKind,
-		TargetID:   &rel.ID,
-		OccurredAt: now,
-	}); err != nil {
+	sig, err := relationSignal(r.ids.New(), ports.SignalRelationConfirm, ports.ValencePositive, rel, judged, now)
+	if err != nil {
+		return ports.Relation{}, err
+	}
+	if err := r.signals.Record(ctx, sig); err != nil {
 		return ports.Relation{}, fmt.Errorf("capture: recording the relation confirmation: %w", err)
 	}
 	return rel, nil
+}
+
+// relationSignalContext is a relation verdict's context beside its type (doc
+// 02 §9): who made the relation, how sure the judge was when the user judged
+// it, and when it was made. The learner counts only Nooma's own relations, and
+// a deleted relation leaves nothing else to read these from.
+type relationSignalContext struct {
+	CreatedBy  string    `json:"created_by"`
+	Confidence float64   `json:"confidence"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// relationSignal is the signal a verdict on rel emits, typed by rel's type;
+// judged is the confidence the user saw, before a confirm raised it.
+func relationSignal(id string, typ ports.SignalType, valence ports.Valence, rel ports.Relation, judged float64, now time.Time) (ports.Signal, error) {
+	contextJSON, err := json.Marshal(relationSignalContext{CreatedBy: rel.CreatedBy, Confidence: judged, CreatedAt: rel.CreatedAt})
+	if err != nil {
+		return ports.Signal{}, fmt.Errorf("capture: encode the %s signal's context: %w", typ, err)
+	}
+	targetKind := ports.TargetKindRelation
+	relType, relID := rel.Type, rel.ID
+	return ports.Signal{
+		ID: id, Type: typ, Valence: valence, TargetKind: &targetKind, TargetID: &relID,
+		RelationType: &relType, Context: contextJSON, OccurredAt: now,
+	}, nil
 }
 
 // recordCheckIn writes one check-in row.

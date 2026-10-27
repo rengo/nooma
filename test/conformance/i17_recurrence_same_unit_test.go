@@ -164,7 +164,7 @@ func (c i17Case) live(t *testing.T) []string {
 		llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel), brain.NewIndex(idx), memrepo.NewSignals(),
 		triggers, memrepo.NewTimers(), 0.5, nil)
 	check := brain.NewCheckService(clock, triggers, memrepo.NewTimers(), ids, log, ch, units, memrepo.NewState(),
-		nil, "12449194", nil, nil)
+		nil, "12449194", nil, nil, nil)
 
 	if _, err := capture.Capture(ctx, brain.CaptureInput{Text: c.text, Channel: "chat"}); err != nil {
 		t.Fatalf("Capture: %v", err)
