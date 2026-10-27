@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/rengo/nooma/internal/brain"
+	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/phrase"
 )
 
 // captureFormMaxBytes bounds a POST /ui/capture or correction submission's
@@ -160,11 +162,13 @@ func renderCaptureResponse(w http.ResponseWriter, r *http.Request, result brain.
 }
 
 // timersSummary says what a list or a cancel of the live timers answered
-// (ADR-0051); the chat names each timer, this page counts them.
-func timersSummary(a brain.TimersAnswer) string {
+// (ADR-0051). A cancel names its timer as the chat does, by when it rings
+// and what it says; a list is counted.
+func timersSummary(result brain.CaptureResult) string {
+	a := *result.Timers
 	switch {
 	case a.Cancelled != nil:
-		return "Cancelled the timer " + a.Cancelled.ID + "."
+		return phrase.For(classify.LanguageEN).TimerCancelledLine(a.Cancelled.FireAt, result.At, a.Cancelled.Text)
 	case a.Gone:
 		return "That timer is no longer set."
 	case len(a.Listed) == 0:

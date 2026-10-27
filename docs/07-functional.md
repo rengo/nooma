@@ -183,7 +183,9 @@ of a black box.
 
 1. **Only speaks to a chat you allowed.** The Telegram channel will not start without
    `allowed_chat_ids`; messages from any other chat are refused. It uses long polling, so it
-   opens no inbound port ([ADR-0014](adr/0014-telegram-transport.md)).
+   opens no inbound port ([ADR-0014](adr/0014-telegram-transport.md)). `/start` gets a short
+   greeting in your Telegram language (Spanish when it has none Nooma speaks), and any other
+   `/command` a line saying it is not one Nooma knows. Neither goes to the model.
 2. **Splits what is urgent from what can wait.** A reminder of an event always goes out on its
    own when due, whatever its urgency, and never after the event has started; the digest drops
    one whose event has passed rather than listing it. Another trigger
@@ -370,6 +372,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Capture, classification, hybrid recall, correction; HTTP API and `nooma capture`; provider wizard and `doctor` quality gate | Shipped in M1 | [05 §M1](05-build-plan.md#m1--capture-and-recall), doc 02 §5 |
 | Weight, decay, the two focuses (as pure functions) | Shipped in M2 | doc 02 §2, §3 |
 | Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2 (`learn` is an empty slot) | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
+| `/start` greets in the sender's Telegram language, Spanish as the fallback, and an unknown `/command` says so, both without the model | Shipped | doc 02 §5 |
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |
 | Event reminders at the user's leads (24 h and 2 h before; a date, the day before at 09:00), stored as vault preferences | Shipped; edited on `/ui/preferences`, which moves the reminders already set; editing them by chat is pending | doc 02 §7; ADR-0029 |

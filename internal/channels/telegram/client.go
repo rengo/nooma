@@ -70,9 +70,13 @@ func NewClient(baseURL, token string, httpClient *http.Client) *Client {
 type update struct {
 	UpdateID int64 `json:"update_id"`
 	Message  *struct {
-		MessageID int64  `json:"message_id"`
-		Text      string `json:"text"`
-		Chat      struct {
+		MessageID int64    `json:"message_id"`
+		Text      string   `json:"text"`
+		Entities  []entity `json:"entities"`
+		From      *struct {
+			LanguageCode string `json:"language_code"`
+		} `json:"from"`
+		Chat struct {
 			ID int64 `json:"id"`
 		} `json:"chat"`
 	} `json:"message"`

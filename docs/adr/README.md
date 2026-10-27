@@ -102,7 +102,7 @@ order, with no correspondence to anything.
 | [0048](0048-recall-reads-a-scope.md) | A recall reads a scope: the model names the topic and the time window asked about, and the code filters on them; beside the terms the model wrote, synonyms included, the lexical leg admits (supersedes ADR-0020 and ADR-0024 in part) | Accepted | M4 |
 | [0049](0049-backup-is-a-built-in-snapshot.md) | Backup is a built-in snapshot: `nooma backup` writes a verified `VACUUM INTO` copy and the vault's config while serve runs; the encrypted upload stays outside the binary, via rclone crypt | Accepted | Deploy |
 | [0050](0050-the-graph-is-drawn-on-the-server.md) | The graph is drawn on the server: one live unit's bounded neighbourhood, laid out in `internal/core/graph` and rendered as SVG, every node a link, no JavaScript (supersedes ADR-0019) | Accepted | M4 |
-| [0051](0051-timers-are-listed-and-cancelled-through-the-shown-list.md) | Timers are listed and cancelled from chat through the list the code shows: every prompt carries the live timers, `timer_request` and `timer_target` carry the reading, a cancel binds only a shown position and is a logged state transition | Proposed | M4 |
+| [0051](0051-timers-are-listed-and-cancelled-through-the-shown-list.md) | Timers are listed and cancelled from chat through the list the code shows: every prompt carries the live timers, `timer_request` and `timer_target` carry the reading, a cancel binds only a shown position and is a logged state transition | Accepted | M4 |
 
 ## Template
 

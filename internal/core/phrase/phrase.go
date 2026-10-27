@@ -91,6 +91,9 @@ type Set struct {
 	// past the listed ones, and TimerCancelled the cancelled timer's line.
 	TimersNone, TimersOne, TimersMany, TimersMore string
 	TimerWhich, TimerCancelled, TimerGone         string
+	// Greeting answers Telegram's /start and UnknownCommand any other bot
+	// command, both without the model: a command is not a message to read.
+	Greeting, UnknownCommand string
 	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
 	// reminder rings, every time it does (ADR-0031 point 7), rather than its
 	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
@@ -232,6 +235,9 @@ var sets = map[classify.Language]Set{
 		TimerWhich:     "Which one should I cancel?",
 		TimerCancelled: "Cancelled: %s.",
 		TimerGone:      "That timer is no longer set.",
+
+		Greeting:       "Hi, I am Nooma. I note down what you write to me, remind you of what you ask, and answer what I know.",
+		UnknownCommand: "I do not know that command. To note something down, just write it.",
 		EveryDay:       "I will remind you every day at %s.",
 		EveryWeek:      "I will remind you every %s at %s.",
 		EveryMonth:     "I will remind you on day %s of every month at %s.",
@@ -319,6 +325,9 @@ var sets = map[classify.Language]Set{
 		TimerWhich:     "¿Cuál cancelo?",
 		TimerCancelled: "Cancelado: %s.",
 		TimerGone:      "Ese temporizador ya no está puesto.",
+
+		Greeting:       "Hola, soy Nooma. Anoto lo que me escribas, te aviso de lo que pidas y respondo lo que sé.",
+		UnknownCommand: "No conozco ese comando. Para anotar algo, basta con escribirlo.",
 		EveryDay:       "Te aviso todos los días a las %s.",
 		EveryWeek:      "Te aviso todos los %s a las %s.",
 		EveryMonth:     "Te aviso el día %s de cada mes a las %s.",

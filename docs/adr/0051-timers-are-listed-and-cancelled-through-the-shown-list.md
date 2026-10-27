@@ -1,6 +1,7 @@
 # ADR-0051 — Timers are listed and cancelled from chat through the list the code shows
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-27: Nooma cancels only a timer it
+  showed; otherwise it asks which)
 - **Date**: 2026-10-26
 - **Supersedes**: —
 - **Superseded by**: —
