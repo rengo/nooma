@@ -18,7 +18,8 @@ import (
 // 0010_remind_me.sql, ADR-0031, and
 // 0011_unit_reminder_leads.sql, ADR-0038, and
 // 0012_conversation_turns.sql, ADR-0041, and
-// 0013_relation_signal_types.sql, ADR-0052) with
+// 0013_relation_signal_types.sql, ADR-0052, and
+// 0014_relation_threshold_origin.sql, ADR-0053) with
 // non-empty SQL, before any other test in this file trusts synthetic inputs
 // to mean anything.
 func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
@@ -26,8 +27,8 @@ func TestParseMigrationsRealEmbeddedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMigrations(migrationFS) = _, %v, want nil error", err)
 	}
-	if len(migrations) != 13 {
-		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 13 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql, 0006_reminder_preferences.sql, 0007_quiet_hours_preferences.sql, 0008_unit_language.sql, 0009_unit_title.sql, 0010_remind_me.sql, 0011_unit_reminder_leads.sql, 0012_conversation_turns.sql, 0013_relation_signal_types.sql)", len(migrations))
+	if len(migrations) != 14 {
+		t.Fatalf("parseMigrations(migrationFS) returned %d migrations, want exactly 14 (R3.8: 0001_core_tables.sql, 0002_learning_and_search.sql, 0003_current_state_source.sql, 0004_pending_questions.sql, 0005_units_browse_index.sql, 0006_reminder_preferences.sql, 0007_quiet_hours_preferences.sql, 0008_unit_language.sql, 0009_unit_title.sql, 0010_remind_me.sql, 0011_unit_reminder_leads.sql, 0012_conversation_turns.sql, 0013_relation_signal_types.sql, 0014_relation_threshold_origin.sql)", len(migrations))
 	}
 	for _, m := range migrations {
 		if strings.TrimSpace(m.SQL) == "" {

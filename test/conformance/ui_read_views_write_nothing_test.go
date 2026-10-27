@@ -378,7 +378,7 @@ func (g *rvwUnits) ApplyBoosts(context.Context, []weight.Boost, time.Time) error
 // would be promoted silently and the gate would stay green.
 var (
 	rvwSelfModelReads = []string{"ActiveBeliefs", "BeliefByID", "RetiredBeliefs"}
-	rvwSignalReads    = []string{"Since"}
+	rvwSignalReads    = []string{"Since", "RelationVerdicts"}
 	rvwDecisionReads  = []string{"Before", "Since"}
 	rvwUnitReads      = []string{
 		"ByID", "LiveByIDs", "CountLiveByType", "IncompleteOlderThan", "LiveDecayStates",

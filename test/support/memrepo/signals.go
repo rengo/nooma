@@ -64,3 +64,19 @@ func (r *Signals) Since(_ context.Context, t time.Time, limit int) ([]ports.Sign
 	}
 	return matched, nil
 }
+
+// RelationVerdicts implements ports.SignalRepo: the typed relation_reject and
+// relation_confirm signals, in Since's order.
+func (r *Signals) RelationVerdicts(ctx context.Context) ([]ports.Signal, error) {
+	all, err := r.Since(ctx, time.Time{}, -1)
+	if err != nil {
+		return nil, err
+	}
+	var out []ports.Signal
+	for _, s := range all {
+		if (s.Type == ports.SignalRelationReject || s.Type == ports.SignalRelationConfirm) && s.RelationType != nil {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}

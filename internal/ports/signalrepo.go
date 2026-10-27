@@ -130,4 +130,10 @@ type SignalRepo interface {
 	// DecisionLog.Since documents. Results are ordered by OccurredAt
 	// ascending, tie-broken by ID. limit bounds how many rows come back.
 	Since(ctx context.Context, t time.Time, limit int) ([]Signal, error)
+
+	// RelationVerdicts returns every relation_reject and relation_confirm
+	// signal that carries its relation_type, oldest first, tie-broken by ID:
+	// the learn pass's evidence (doc 02 §9, M5 link 2c). An untyped one, from
+	// before M5 and not recoverable, is left out.
+	RelationVerdicts(ctx context.Context) ([]Signal, error)
 }

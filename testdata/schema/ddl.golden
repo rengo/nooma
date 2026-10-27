@@ -92,7 +92,8 @@ CREATE TABLE relation_thresholds (
   relation_type              TEXT NOT NULL UNIQUE,
   min_confidence_to_persist  REAL NOT NULL DEFAULT 0.3,
   min_confidence_to_surface  REAL NOT NULL DEFAULT 0.5
-);
+, origin TEXT NOT NULL DEFAULT 'learned'
+  CHECK (origin IN ('learned', 'user')), adjusted_at TEXT);
 
 CREATE TABLE relations (
   id            TEXT PRIMARY KEY,

@@ -389,8 +389,8 @@ func TestAdmin_ViewShowsValuesInForceStoredRowRunAndLearnedThresholds(t *testing
 		t.Errorf("LastRun = %v, Stored = %+v, want the run and the stored row", view.LastRun, view.Stored)
 	}
 	learned := []ports.LearnedThreshold{
-		{RelationType: "duplicate", Thresholds: relation.Thresholds{Persist: 0.2, Surface: 0.8}},
-		{RelationType: "same_topic", Thresholds: relation.Thresholds{Persist: 0.4, Surface: 0.6}},
+		{RelationType: "duplicate", Thresholds: relation.Thresholds{Persist: 0.2, Surface: 0.8}, Origin: ports.ThresholdOriginLearned},
+		{RelationType: "same_topic", Thresholds: relation.Thresholds{Persist: 0.4, Surface: 0.6}, Origin: ports.ThresholdOriginLearned},
 	}
 	if !reflect.DeepEqual(view.Learned, learned) || view.OtherTypes != relation.Resolve(nil) {
 		t.Errorf("Learned = %+v, OtherTypes = %+v", view.Learned, view.OtherTypes)
