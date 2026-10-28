@@ -1,6 +1,7 @@
 # ADR-0056 — An undo pins, and a release starts the evidence afresh
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-28: undo restores the previous
+  value and pins it; a release lets Nooma learn again, counting only what comes after it)
 - **Date**: 2026-10-28
 - **Supersedes**: —
 - **Superseded by**: —

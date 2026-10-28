@@ -1,6 +1,7 @@
 # ADR-0054 — A goal check-in is answered by naming it
 
-- **Status**: Proposed
+- **Status**: Accepted (by the client through the PM, 2026-10-28: the model, which reads the
+  chat, names the goal check-in it answers; no "the next message answers it" rule)
 - **Date**: 2026-10-28
 - **Supersedes**: [ADR-0044](0044-a-chat-answer-names-the-item-it-is-about.md), in part: the
   kinds of thing a chat answer can name. A goal check-in is named by its own listed position,
