@@ -363,6 +363,32 @@ func RunConfigSetters(t *testing.T, newRepo func(t *testing.T) ConfigHarness) {
 			t.Errorf("Load() = days %v, pinned %v, calibrated %v; want 28, unpinned, at %v", got.GoalStagnationDays, got.GoalStagnationPinned, got.GoalCalibratedAt, at)
 		}
 	})
+	t.Run("PinGoalStagnationDays sets the value and pins it; ReleaseGoalStagnationDays unpins and stamps", func(t *testing.T) {
+		repo := newRepo(t)
+		if err := repo.LearnGoalStagnationDays(ctx, 28, at); err != nil {
+			t.Fatal(err)
+		}
+		undone := at.Add(time.Hour)
+		if err := repo.PinGoalStagnationDays(ctx, 21, undone); err != nil {
+			t.Fatalf("PinGoalStagnationDays: %v", err)
+		}
+		got, _ := repo.Load(ctx)
+		if *got.GoalStagnationDays != 21 || !got.GoalStagnationPinned {
+			t.Fatalf("after the pin: days %v, pinned %v; want 21, pinned", *got.GoalStagnationDays, got.GoalStagnationPinned)
+		}
+		released := at.Add(2 * time.Hour)
+		if err := repo.ReleaseGoalStagnationDays(ctx, released); err != nil {
+			t.Fatalf("ReleaseGoalStagnationDays: %v", err)
+		}
+		got, _ = repo.Load(ctx)
+		if *got.GoalStagnationDays != 21 || got.GoalStagnationPinned || got.GoalCalibratedAt == nil || !got.GoalCalibratedAt.Equal(released) {
+			t.Errorf("after the release: days %v, pinned %v, calibrated %v; want 21, unpinned, at %v", *got.GoalStagnationDays, got.GoalStagnationPinned, got.GoalCalibratedAt, released)
+		}
+		if err := repo.ReleaseGoalStagnationDays(ctx, released); !errors.Is(err, ports.ErrNotPinned) {
+			t.Errorf("releasing it again = %v, want ErrNotPinned", err)
+		}
+	})
+
 	t.Run("LearnGoalStagnationDays refuses a pinned value and changes nothing", func(t *testing.T) {
 		repo := newRepo(t)
 		if err := repo.SetGoalStagnationDays(ctx, 45, at); err != nil {

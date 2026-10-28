@@ -491,6 +491,38 @@ func RunLearnedThresholds(t *testing.T, newRepo func(t *testing.T) RelationHarne
 		}
 	})
 
+	// M5 link 6 (ADR-0056): the summary's undo pins a value, its release
+	// hands it back to the learner with the evidence reset.
+	t.Run("PinThresholds sets the user's value and pins it", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedThreshold(t, "same_topic", 0.35, 0.5)
+		back := relation.Thresholds{Persist: 0.3, Surface: 0.5}
+		if err := repo.PinThresholds(ctx, "same_topic", back, at); err != nil {
+			t.Fatalf("PinThresholds: %v", err)
+		}
+		if got := readOne(t, repo); got.Thresholds != back || got.Origin != ports.ThresholdOriginUser {
+			t.Errorf("row = %+v, want %v pinned", got, back)
+		}
+	})
+	t.Run("ReleaseThresholds unpins the value as it is and stamps the release", func(t *testing.T) {
+		repo := newRepo(t)
+		repo.SeedPinnedThreshold(t, "same_topic", 0.3, 0.5)
+		if err := repo.ReleaseThresholds(ctx, "same_topic", at); err != nil {
+			t.Fatalf("ReleaseThresholds: %v", err)
+		}
+		got := readOne(t, repo)
+		if got.Thresholds != (relation.Thresholds{Persist: 0.3, Surface: 0.5}) || got.Origin != ports.ThresholdOriginLearned ||
+			got.AdjustedAt == nil || !got.AdjustedAt.Equal(at) {
+			t.Errorf("row = %+v, want 0.3/0.5 learned, adjusted at %v", got, at)
+		}
+		if err := repo.ReleaseThresholds(ctx, "same_topic", at); !errors.Is(err, ports.ErrNotPinned) {
+			t.Errorf("releasing it again = %v, want ErrNotPinned", err)
+		}
+		if err := repo.ReleaseThresholds(ctx, "never_seen", at); !errors.Is(err, ports.ErrNotPinned) {
+			t.Errorf("releasing a type with no row = %v, want ErrNotPinned", err)
+		}
+	})
+
 	t.Run("LearnThresholds refuses a row the user pinned and changes nothing", func(t *testing.T) {
 		repo := newRepo(t)
 		repo.SeedPinnedThreshold(t, "same_date", 0.9, 0.95)

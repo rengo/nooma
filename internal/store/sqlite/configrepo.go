@@ -205,6 +205,35 @@ ON CONFLICT(id) DO UPDATE SET goal_stagnation_days = excluded.goal_stagnation_da
 	return nil
 }
 
+// PinGoalStagnationDays implements ports.ConfigRepo: the Admin save's write,
+// reached by the summary's undo.
+func (r *ConfigRepo) PinGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
+	return r.SetGoalStagnationDays(ctx, v, at)
+}
+
+// ReleaseGoalStagnationDays implements ports.ConfigRepo: unpin, then stamp, in
+// one transaction.
+func (r *ConfigRepo) ReleaseGoalStagnationDays(ctx context.Context, at time.Time) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("releasing goal_stagnation_days: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `UPDATE config SET goal_stagnation_pinned = 0, updated_at = ? WHERE id = 1 AND goal_stagnation_pinned = 1`, formatUnitTime(at))
+	if err != nil {
+		return fmt.Errorf("releasing goal_stagnation_days: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return errors.Join(ports.ErrNotPinned, err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO learning_state (id, goal_calibrated_at, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET goal_calibrated_at = excluded.goal_calibrated_at, updated_at = excluded.updated_at`,
+		formatUnitTime(at), formatUnitTime(at)); err != nil {
+		return fmt.Errorf("stamping the release: %w", err)
+	}
+	return tx.Commit()
+}
+
 // LearnGoalStagnationDays implements ports.ConfigRepo: in one transaction, the
 // value where it is not pinned (the WHERE decides a race with an Admin save),
 // then the calibration stamp.

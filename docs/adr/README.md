@@ -107,6 +107,7 @@ order, with no correspondence to anything.
 | [0053](0053-a-relation-bar-moves-one-step-on-fresh-evidence.md) | A relation bar moves one step on fresh evidence: 6 of the newest 8 verdicts on Nooma's relations of a type move its persist bar 0.05, within [0.20, 0.90], surface following up; the evidence resets and a 7-day cooldown follows each change; a pinned type is never written | Accepted | M5 |
 | [0054](0054-a-goal-check-in-is-answered-by-naming-it.md) | A goal check-in is answered by naming it: beside a chat the open goal check-ins are listed by position, `goal_target` and `goal_outcome` (engaged, declined, snooze) answer one, and nothing else, a correction above all, can name a goal (supersedes ADR-0044 in part) | Proposed | M5 |
 | [0055](0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md) | Goal cadence learns from answers: five goal check-ins ignored add 7 days, three engaged take 7 off, within [7, 56], cooling down for the new interval; an Admin save pins `goal_stagnation_days` and the learner never writes it | Proposed | M5 |
+| [0056](0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md) | An undo restores the value before the learner's last change and pins it; a release unpins a value and stamps itself as the last change, so only later verdicts move it; one sentence per value built from the decision rows; nothing deleted | Proposed | M5 |
 
 ## Template
 

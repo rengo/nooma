@@ -42,6 +42,8 @@ type (
 		SetMentalLoadThreshold(context.Context, int, time.Time) error
 		SetConsolidationEnabled(context.Context, bool, time.Time) error
 		LearnGoalStagnationDays(context.Context, int, time.Time) error
+		PinGoalStagnationDays(context.Context, int, time.Time) error
+		ReleaseGoalStagnationDays(context.Context, time.Time) error
 	}
 	q5GenericWriter interface {
 		q5Five
@@ -63,6 +65,8 @@ type (
 		SetMentalLoadThreshold(context.Context, int, time.Time) error
 		SetConsolidationEnabled(context.Context, bool, time.Time) error
 		LearnGoalStagnationDays(context.Context, int, time.Time) error
+		PinGoalStagnationDays(context.Context, int, time.Time) error
+		ReleaseGoalStagnationDays(context.Context, time.Time) error
 	}
 )
 
@@ -102,8 +106,11 @@ func configRepoShapeProblems(it reflect.Type) []string {
 		// Not an Admin setter: the learn pass's own write (ADR-0055), shaped
 		// like one, and outside the logged door, which is the Admin's.
 		"LearnGoalStagnationDays": reflect.TypeOf(int(0)),
+		// The summary's undo (ADR-0056), the Admin save's write.
+		"PinGoalStagnationDays": reflect.TypeOf(int(0)),
 	}
-	allowed := map[string]bool{"Load": true, "RecordConsolidationRun": true, "SetReminderPrefs": true}
+	// ReleaseGoalStagnationDays is the summary's release (ADR-0056).
+	allowed := map[string]bool{"Load": true, "RecordConsolidationRun": true, "SetReminderPrefs": true, "ReleaseGoalStagnationDays": true}
 	for name := range scalar {
 		allowed[name] = true
 	}

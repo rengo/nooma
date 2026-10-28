@@ -91,6 +91,13 @@ type ConfigRepo interface {
 	// the user pinned from Admin with ErrGoalStagnationPinned and changes
 	// nothing. SetGoalStagnationDays, the Admin save, pins it.
 	LearnGoalStagnationDays(ctx context.Context, v int, at time.Time) error
+
+	// PinGoalStagnationDays sets the value as the user's, pinned: the
+	// summary's undo (ADR-0056). ReleaseGoalStagnationDays unpins it and
+	// stamps learning_state.goal_calibrated_at at at, so the evidence before
+	// the release is not counted; ErrNotPinned when it is not pinned.
+	PinGoalStagnationDays(ctx context.Context, v int, at time.Time) error
+	ReleaseGoalStagnationDays(ctx context.Context, at time.Time) error
 }
 
 // ReminderPrefsUpdate is the preference columns SetReminderPrefs writes,

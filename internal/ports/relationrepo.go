@@ -56,6 +56,10 @@ const (
 // user's word wins (doc 02 §9, ADR-0053).
 var ErrThresholdsPinned = errors.New("relation thresholds are pinned by the user")
 
+// ErrNotPinned is a release of a learned value the user never pinned: there
+// is nothing to hand back to the learner (ADR-0056).
+var ErrNotPinned = errors.New("the value is not pinned")
+
 // RelationRepo is the repository port over relations — design D8, spec R5.3.
 //
 // Every method has a real caller (design D8's own rule for adding a port
@@ -118,6 +122,13 @@ type RelationRepo interface {
 	// type has none. It refuses a row the user pinned with
 	// ErrThresholdsPinned and changes nothing (doc 02 §9, M5 link 2c).
 	LearnThresholds(ctx context.Context, relType string, t relation.Thresholds, at time.Time) error
+
+	// PinThresholds sets relType's thresholds to t as the user's, origin
+	// user, at at: the summary's undo (ADR-0056). ReleaseThresholds hands a
+	// pinned row back to the learner, origin learned, its adjusted_at at at so
+	// the evidence before it is not counted; ErrNotPinned when none is pinned.
+	PinThresholds(ctx context.Context, relType string, t relation.Thresholds, at time.Time) error
+	ReleaseThresholds(ctx context.Context, relType string, at time.Time) error
 
 	// Evidence returns every relation joined to both endpoints'
 	// last_touched_at, in one read — strengthen's own input (design §4.2,
