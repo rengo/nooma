@@ -170,7 +170,7 @@ did and why.
 7. **Learns.** `learn` moves a kind of link's bar one step when you rejected, or confirmed, 6 of
    the last 8 links of that kind Nooma made, at most once a week per kind. A link of that kind
    now below the bar goes quiet: it is not drawn, listed, asked about or used to rank focus, and
-   it is kept, so it comes back if the bar falls (see [M5](#the-learner-m5-in-progress)).
+   it is kept, so it comes back if the bar falls (see [M5](#the-learner-m5)).
 8. **Tells the story.** Every decision with an effect writes a row to the `decision_log` with a
    rationale naming the specific unit, relation or belief ([doc 02 §11](02-cognitive-core.md#11-the-glass-box)).
    `/ui/activity` tells it newest first, and `sqlite3 <vault>` can read it too (see the
@@ -237,7 +237,7 @@ of a black box.
    stops collecting answers ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
 
 **You end up with** a graph that you correct in one word from your phone, and a nightly job that
-learns what you consider a real connection (the learning itself is [M5](#the-learner-m5-in-progress)).
+learns what you consider a real connection (the learning itself is [M5](#the-learner-m5)).
 
 ---
 
@@ -363,6 +363,15 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
     what "no" does: the link is gone and the learner hears that too. Either one closes a question
     still waiting about that link, shows up in Activity with what the link was, and redraws the
     graph with a line saying what was done.
+13. **Says what it learned** (`/ui/learning`; `GET /learning` returns the same as JSON). One
+    sentence per learned value, each kind of link's bar and then how long goal check-ins wait,
+    says what changed and why ("Nooma raised the same_topic link bar from 0.30 to 0.35 because
+    you rejected 6 of the last 8 same_topic links it made"), with the value now and whether you
+    pinned it. **Undo** puts back the value before Nooma's last change and pins it, so Nooma
+    leaves it alone; it is offered only while that change is the last word on the value.
+    **Let Nooma learn again** releases a pin, including days saved in Admin, and Nooma counts
+    only what you do from then on. A refusal changes nothing and says so; both acts show up in
+    Activity. Before anything is learned, the page says so in one line.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
@@ -407,7 +416,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat: "¿qué temporizadores tengo?" lists the live timers, "cancelá el del horno" cancels the one it names through that list, asks which when it cannot tell | Shipped | doc 02 §8; ADR-0051 |
 | Timer list and cancel from the UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
-| The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | In progress: M5. Signals from every surface (ADR-0052) and the relation `learn` pass (ADR-0053) shipped; goal cadence and the summary planned | doc 02 §9; 05 §M5 |
+| The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Shipped in M5: signals from every surface (ADR-0052), the relation and goal cadence `learn` pass (ADR-0053, ADR-0055), the summary with undo and release (ADR-0056) | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
 | Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
@@ -443,15 +452,14 @@ forget to configure.
 
 ---
 
-## The learner (M5, in progress)
+## The learner (M5)
 
-> **In progress.** Steps 1 to 3 run today: each verdict is recorded as a typed learning signal,
-> from the graph, the chat and the morning digest alike ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)),
-> and the nightly `learn` phase moves a kind of link's bar from them ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md))
-> and how often a goal is asked about ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md)).
-> Step 4 is planned. The story below
-> is the design target in [doc 02 §9](02-cognitive-core.md#9-learning--the-prediction-error-loop).
-> Every threshold, window and interval M5 uses is **decided by M5**; none is fixed here.
+> **Shipped.** Each verdict is recorded as a typed learning signal, from the graph, the chat and
+> the morning digest alike ([ADR-0052](adr/0052-every-verdict-is-a-typed-signal.md)); the nightly
+> `learn` phase moves a kind of link's bar from them ([ADR-0053](adr/0053-a-relation-bar-moves-one-step-on-fresh-evidence.md))
+> and how often a goal is asked about ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md));
+> and `/ui/learning` says what it learned, to undo or release ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md)).
+> The rules are [doc 02 §9](02-cognitive-core.md#9-learning--the-prediction-error-loop).
 
 **María** tells Nooma things for months. It connects her notes, but it is eager: it links
 two items just because they share a date.
@@ -469,11 +477,11 @@ two items just because they share a date.
    answered of five take one off, within one to eight weeks. Days she saves in Admin stay hers.
 4. **She can read what it learned.** A plain-language summary, in the UI and the API, says what
    changed and why ("I raised the `same_topic` bar because you rejected most of the last
-   links"), and she can correct it.
+   links"), and she can undo it, or let Nooma learn it again (`/ui/learning`).
 
 What this demonstrates is the line between a wrapper and a brain: the same engine adapts to each
 person's actual behavior, visibly and auditably. How the thresholds move, over what window, and
-with what cooldown is M5's design work.
+with what cooldown is doc 02 §9's.
 
 ---
 

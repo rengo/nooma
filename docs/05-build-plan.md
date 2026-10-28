@@ -224,7 +224,7 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 - **Demo**: reject 6 `same_topic` connections → the threshold rises and the decision_log
   explains it.
 
-**In progress**, as a stacked-to-main chain:
+**Shipped** (2026-10-28), as a stacked-to-main chain:
 
 | Link | What | State |
 |---|---|---|
@@ -237,8 +237,9 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 | 4a | A goal check-in is answered by naming it (ADR-0054, I50) | Shipped |
 | 4b | Goal check-ins delivered: `pattern_eval` arms one per stagnant goal at most once per `goal_stagnation_days`, twice that after a decline, and the morning digest asks it (I51) | Shipped |
 | 5 | Goal cadence learned from how goal check-ins closed, pinned by an Admin save ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md), I52) | Shipped |
-| 6a | The summary of what was learned, its undo and its release, in brain and the stores ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md), I53) | Shipped |
-| 6b | `/ui/learning` and `GET /learning`: the summary shown and corrected from the UI and the API | Planned |
+| 6a | A learned value pinned and released in the stores, the evidence before a release set aside (#416, [ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md)) | Shipped |
+| 6b | The summary of what was learned, its undo and its release, in brain (#418, I53) | Shipped |
+| 6c | `/ui/learning` and `GET /learning`: the summary read from the UI and the API, undone and released from the UI | Shipped |
 
 ## M6 — Release polish
 

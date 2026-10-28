@@ -143,6 +143,16 @@ func (stubAdmin) Update(context.Context, brain.ConfigField, string) (brain.Updat
 	return brain.UpdateResult{}, nil
 }
 
+type stubLearning struct{}
+
+func (stubLearning) View(context.Context) (brain.LearningView, error) {
+	return brain.LearningView{}, nil
+}
+
+func (stubLearning) Undo(context.Context, brain.LearnedKind, string) error { return nil }
+
+func (stubLearning) Release(context.Context, brain.LearnedKind, string) error { return nil }
+
 // stubUnitDetail is the one fixed detail body every guarded-leaf wiring
 // test in this file renders when it needs GET /ui/units/{id} to answer
 // 200 — its own content is irrelevant to these tests (unit_test.go owns
@@ -161,7 +171,7 @@ var stubUnitDetail = brain.UnitDetail{Unit: unit.Unit{ID: "unit-1", Type: unit.T
 func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 	t.Parallel()
 
-	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}, Preferences: stubPreferences{}, Admin: stubAdmin{}, Graph: stubGraph{}})})
+	h := Handler(Deps{Version: "test", UI: ui.New(ui.Deps{Today: stubTodayReader{}, Units: stubUnitsReader{detail: stubUnitDetail, detailFound: true}, Beliefs: stubBeliefs{}, Activity: stubActivity{}, Preferences: stubPreferences{}, Admin: stubAdmin{}, Learning: stubLearning{}, Graph: stubGraph{}})})
 
 	// wantMarker names, per leaf, a string only that leaf's own view
 	// renders from these stubs — Today's "SYSTEM" section, units'
@@ -188,9 +198,10 @@ func TestUIGuardedLeavesEachReachAView(t *testing.T) {
 		"/ui/activity":     "<h2>ACTIVITY</h2>",
 		"/ui/preferences":  "<h2>PREFERENCES</h2>",
 		"/ui/admin":        "<h2>ADMIN</h2>",
+		"/ui/learning":     "<h2>LEARNING</h2>",
 	}
 
-	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/graph?unit=c", "/ui/capture", "/ui/beliefs", "/ui/activity", "/ui/preferences", "/ui/admin"} {
+	for _, leaf := range []string{"/ui", "/ui/units", "/ui/units/unit-1", "/ui/graph?unit=c", "/ui/capture", "/ui/beliefs", "/ui/activity", "/ui/preferences", "/ui/admin", "/ui/learning"} {
 		leaf := leaf
 		t.Run(leaf, func(t *testing.T) {
 			t.Parallel()

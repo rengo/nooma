@@ -425,6 +425,12 @@ func wirePreferences(db *sqlite.Vault) *brain.PreferencesService {
 		sqlite.NewUnitRepo(db), sqlite.NewTriggerRepo(db))
 }
 
+// wireLearning builds the summary of what was learned over db, for
+// /ui/learning and GET /learning. It resolves no provider, wireAdmin's reason.
+func wireLearning(db *sqlite.Vault) *brain.LearningService {
+	return brain.NewLearningService(systemClock{}, uuidGen{}, sqlite.NewRelationRepo(db), sqlite.NewConfigRepo(db), sqlite.NewDecisionLog(db))
+}
+
 // wireAdmin builds a *brain.AdminService over db: the five settings, the
 // learned relation thresholds and the recent consolidation effects behind
 // /ui/admin. It resolves no provider, wireUnits' reason, and is wired

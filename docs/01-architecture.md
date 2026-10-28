@@ -123,6 +123,7 @@ queues nudges that remain visible in the UI.
 | `/ui/beliefs` | Self-model: beliefs by facet, edit/delete (each action emits a learning signal) |
 | `/ui/activity` | Glass box: chronological decision_log, "why did you do that" |
 | `/ui/tracking` | Measurement series + derived insights (once perception exists) |
+| `/ui/learning` | What the learner learned, one sentence per value, to undo or let it learn again ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md)) |
 | `/ui/admin` | System config, job status, thresholds, logs |
 
 UI principles: a mirror, not an advisor (insight-led, the chart as evidence); server-side

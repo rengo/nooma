@@ -189,6 +189,28 @@ func TestUIReadViewsWriteNothing_AdminGet(t *testing.T) {
 	}
 }
 
+// TestUIReadViewsWriteNothing_LearningGet is G7 for /ui/learning and GET
+// /learning (doc 02 §9): the summary reads the bars, config and log, and
+// reaches no relation or config write and no DecisionLog.Record.
+func TestUIReadViewsWriteNothing_LearningGet(t *testing.T) {
+	v := newI48Vault(t)
+	v.judgeSix(t)
+	v.learn(t, i48Night)
+	log := &rvwDecisionLog{DecisionLog: v.log, t: t}
+	svc := brain.NewLearningService(fixedClock{now: i48Night}, &counterIDs{n: 1000}, &i27Relations{Relations: v.rels, t: t}, &i27Config{Config: v.cfg, t: t}, log)
+	h := httpapi.Handler(httpapi.Deps{Version: "test", Learning: svc, UI: ui.New(ui.Deps{Learning: svc})})
+	for _, path := range []string{"/ui/learning", "/learning"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "0.35") {
+			t.Fatalf("GET %s = %d, want 200 rendering the raised bar: %s", path, rec.Code, rec.Body)
+		}
+	}
+	if log.beforeReads == 0 {
+		t.Error("the summary never read the decorated log")
+	}
+}
+
 // TestUIReadViewsWriteNothing_GraphGet is G7 for /ui/graph (ADR-0050): the
 // drawing reads units and relations, reaches no UnitRepo write and neither
 // RelationRepo write, and draws only live units (I02) through the real mux.

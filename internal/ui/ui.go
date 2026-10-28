@@ -64,6 +64,15 @@ type Admin interface {
 	Update(ctx context.Context, field brain.ConfigField, raw string) (brain.UpdateResult, error)
 }
 
+// Learning is /ui/learning's own entry point (doc 02 §9, ADR-0056): View for
+// the summary, Undo and Release for its two POSTs. *brain.LearningService
+// satisfies it.
+type Learning interface {
+	View(ctx context.Context) (brain.LearningView, error)
+	Undo(ctx context.Context, kind brain.LearnedKind, key string) error
+	Release(ctx context.Context, kind brain.LearnedKind, key string) error
+}
+
 // Deps is what New needs to build the mirror's handler. Today, Units,
 // Search, Capture, Beliefs and Activity are nil until wired (cmd/nooma's own transitional
 // state, and every test fixture that does not need a real view); each nil
@@ -80,6 +89,8 @@ type Deps struct {
 	Preferences Preferences
 	// Admin is the settings and job status page's.
 	Admin Admin
+	// Learning is the summary of what was learned.
+	Learning Learning
 	// Graph is /ui/graph's; Curation, its relation confirm and delete.
 	Graph    GraphReader
 	Curation Curator
@@ -157,6 +168,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdmin(w, r)
 	case "POST /ui/admin":
 		h.serveAdminSave(w, r)
+	case "GET /ui/learning":
+		h.serveLearning(w, r)
+	case "POST /ui/learning/undo":
+		h.serveLearningAct(w, r, learningUndo)
+	case "POST /ui/learning/release":
+		h.serveLearningAct(w, r, learningRelease)
 	default:
 		http.NotFound(w, r)
 	}

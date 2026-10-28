@@ -105,6 +105,26 @@ func (c countingAdmin) Update(context.Context, brain.ConfigField, string) (brain
 	return brain.UpdateResult{}, nil
 }
 
+// countingLearning is this file's own ui.Learning stub on the same counter:
+// Undo and Release, the two writes, count.
+type countingLearning struct {
+	calls *int
+}
+
+func (countingLearning) View(context.Context) (brain.LearningView, error) {
+	return brain.LearningView{}, nil
+}
+
+func (c countingLearning) Undo(context.Context, brain.LearnedKind, string) error {
+	*c.calls++
+	return nil
+}
+
+func (c countingLearning) Release(context.Context, brain.LearnedKind, string) error {
+	*c.calls++
+	return nil
+}
+
 // uiCrossOriginBodies maps every non-GET route pattern to a form body that
 // passes THAT handler's parsing (m4e design 3.12 G6, spec R9). A fixed body
 // shared by every route would make a new route's same-origin case fail on a
@@ -118,6 +138,8 @@ var uiCrossOriginBodies = map[string]string{
 	"POST /ui/beliefs/{id}/retire":          "",
 	"POST /ui/preferences":                  "lead_amount=2&lead_unit=hours&date_only_reminder_at=09:00&quiet_hours_end=07:00&evening_reminder_at=22:00",
 	"POST /ui/admin":                        "field=weight_threshold&value=0.6",
+	"POST /ui/learning/undo":                "kind=relation_bar&key=same_topic",
+	"POST /ui/learning/release":             "kind=relation_bar&key=same_topic",
 	"POST /ui/graph/relations/{id}/confirm": "unit=unit-1",
 	"POST /ui/graph/relations/{id}/reject":  "unit=unit-1",
 }
@@ -304,7 +326,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 				return httpapi.Handler(httpapi.Deps{
 					Version: "test",
 					Token:   token,
-					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}}),
+					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Learning: countingLearning{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}}),
 				})
 			}
 

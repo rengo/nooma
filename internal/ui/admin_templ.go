@@ -226,7 +226,7 @@ func adminBody(p adminPage) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</ol><h3>Relation thresholds</h3><p data-hint>These are learned by the nightly learning pass (M5); not editable here.</p><ul data-thresholds>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</ol><h3>Relation thresholds</h3><p data-hint>These are learned by the nightly learning pass; not editable here. Learning says why, and undoes a change.</p><ul data-thresholds>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

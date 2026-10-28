@@ -1,0 +1,64 @@
+package ui
+
+import (
+	"time"
+
+	"github.com/rengo/nooma/internal/brain"
+)
+
+// LearningPage is GET /ui/learning's full page.
+templ LearningPage(p learningPage) {
+	@Page("nooma — learning", learningBody(p))
+}
+
+templ learningBody(p learningPage) {
+	<section data-view="learning">
+		<h2>LEARNING</h2>
+		<div id="learning-result" aria-live="polite">
+			if p.Outcome != nil {
+				@beliefOutcomeView(*p.Outcome)
+			}
+		</div>
+		if p.nothingLearned() {
+			<p data-empty>Nooma has not learned anything yet: what it learns from your answers shows up here, one sentence each.</p>
+		}
+		<ul data-learned>
+			for _, v := range p.View.Values {
+				@learnedItem(v)
+			}
+		</ul>
+	</section>
+}
+
+// learnedItem is one learned value: its sentence, the value in force, the
+// pin, and only the acts the summary offers.
+templ learnedItem(v brain.LearnedValue) {
+	<li data-kind={ string(v.Kind) } data-key={ v.Key }>
+		<p data-sentence>{ v.Sentence }</p>
+		<p>
+			Now: <strong>{ v.Value }</strong>
+			if v.Pinned {
+				<span data-pinned>pinned by you</span>
+			}
+			if v.At != nil {
+				<time datetime={ v.At.UTC().Format(time.RFC3339) }>{ formatTime(ctx, *v.At) }</time>
+			}
+		</p>
+		if v.CanUndo {
+			@learningActForm("/ui/learning/undo", v, "Undo", "Undoing…")
+		}
+		if v.CanRelease {
+			@learningActForm("/ui/learning/release", v, "Let Nooma learn again", "Releasing…")
+		}
+	</li>
+}
+
+templ learningActForm(action string, v brain.LearnedValue, label, busy string) {
+	<form method="post" action={ templ.SafeURL(action) } hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
+		<input type="hidden" name="kind" value={ string(v.Kind) }/>
+		<input type="hidden" name="key" value={ v.Key }/>
+		<button type="submit">
+			@submitLabel(label, busy)
+		</button>
+	</form>
+}

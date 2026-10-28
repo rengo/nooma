@@ -35,6 +35,9 @@ type Deps struct {
 	// own nil-dependency window has; every route below checks for nil
 	// before every call and answers 503 rather than reaching it.
 	Recall *brain.RecallService
+	// Learning is what GET /learning reads: the summary of what was learned
+	// (doc 02 §9). Nil answers 503, Recall's posture.
+	Learning *brain.LearningService
 	// Token is the bearer token requireToken checks against, or "" for "no
 	// token configured" — see ResolveToken (auth.go), the one function that
 	// produces this value from server.auth_token_env.
@@ -71,6 +74,7 @@ func apiRoutes(d Deps) []apiRoute {
 		{pattern: "POST /recall", handler: recallHandler(d)},
 		{pattern: "GET /units/{id}", handler: unitByIDHandler(d)},
 		{pattern: "GET /units", handler: unitsListHandler(d)},
+		{pattern: "GET /learning", handler: learningHandler(d)},
 	}
 }
 
@@ -180,6 +184,9 @@ func newUIMux(d Deps) *http.ServeMux {
 	mux.Handle("POST /ui/preferences", guardedUI)
 	mux.Handle("GET /ui/admin", guardedUI)
 	mux.Handle("POST /ui/admin", guardedUI)
+	mux.Handle("GET /ui/learning", guardedUI)
+	mux.Handle("POST /ui/learning/undo", guardedUI)
+	mux.Handle("POST /ui/learning/release", guardedUI)
 
 	return mux
 }
