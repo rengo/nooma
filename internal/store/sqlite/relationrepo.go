@@ -189,6 +189,34 @@ WHERE relation_thresholds.origin = 'learned'`
 	return nil
 }
 
+// PinThresholds implements ports.RelationRepo.
+func (r *RelationRepo) PinThresholds(ctx context.Context, relType string, t relation.Thresholds, at time.Time) error {
+	const q = `
+INSERT INTO relation_thresholds (id, relation_type, min_confidence_to_persist, min_confidence_to_surface, origin, adjusted_at)
+VALUES (lower(hex(randomblob(16))), ?, ?, ?, 'user', ?)
+ON CONFLICT (relation_type) DO UPDATE SET
+  min_confidence_to_persist = excluded.min_confidence_to_persist,
+  min_confidence_to_surface = excluded.min_confidence_to_surface,
+  origin = 'user', adjusted_at = excluded.adjusted_at`
+	if _, err := r.db.ExecContext(ctx, q, relType, t.Persist, t.Surface, at.UTC().Format(unitTimeLayout)); err != nil {
+		return fmt.Errorf("pinning thresholds for relation type %s: %w", relType, err)
+	}
+	return nil
+}
+
+// ReleaseThresholds implements ports.RelationRepo.
+func (r *RelationRepo) ReleaseThresholds(ctx context.Context, relType string, at time.Time) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE relation_thresholds SET origin = 'learned', adjusted_at = ?
+WHERE relation_type = ? AND origin = 'user'`, at.UTC().Format(unitTimeLayout), relType)
+	if err != nil {
+		return fmt.Errorf("releasing thresholds for relation type %s: %w", relType, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return errors.Join(ports.ErrNotPinned, err)
+	}
+	return nil
+}
+
 // Evidence implements ports.RelationRepo — the join design §4.2 fixed:
 // every relation, joined to both endpoints' own last_touched_at, in one
 // query — never relations, then units, then a zip in brain (design §4.1's

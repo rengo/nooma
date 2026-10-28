@@ -32,6 +32,8 @@ func (errConfigRepo) SetWeightThreshold(context.Context, float64, time.Time) err
 func (errConfigRepo) SetHysteresisMargin(context.Context, float64, time.Time) error { return nil }
 func (errConfigRepo) SetGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
 func (errConfigRepo) LearnGoalStagnationDays(context.Context, int, time.Time) error { return nil }
+func (errConfigRepo) PinGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
+func (errConfigRepo) ReleaseGoalStagnationDays(context.Context, time.Time) error    { return nil }
 func (errConfigRepo) SetMentalLoadThreshold(context.Context, int, time.Time) error  { return nil }
 func (errConfigRepo) SetConsolidationEnabled(context.Context, bool, time.Time) error {
 	return nil

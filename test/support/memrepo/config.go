@@ -109,6 +109,22 @@ func (c *Config) SetGoalStagnationDays(_ context.Context, v int, at time.Time) e
 	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationDays = &v; r.GoalStagnationPinned = true })
 }
 
+// PinGoalStagnationDays implements ports.ConfigRepo, as the Admin save does.
+func (c *Config) PinGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
+	return c.SetGoalStagnationDays(ctx, v, at)
+}
+
+// ReleaseGoalStagnationDays implements ports.ConfigRepo.
+func (c *Config) ReleaseGoalStagnationDays(_ context.Context, at time.Time) error {
+	c.mu.Lock()
+	pinned := c.row != nil && c.row.GoalStagnationPinned
+	c.mu.Unlock()
+	if !pinned {
+		return ports.ErrNotPinned
+	}
+	return c.set(at, func(r *ports.VaultConfig) { r.GoalStagnationPinned = false; r.GoalCalibratedAt = &at })
+}
+
 // LearnGoalStagnationDays implements ports.ConfigRepo, refusing a pin as the
 // store's WHERE does.
 func (c *Config) LearnGoalStagnationDays(_ context.Context, v int, at time.Time) error {

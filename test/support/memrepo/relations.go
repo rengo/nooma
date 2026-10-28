@@ -79,6 +79,27 @@ func (r *Relations) SeedPinnedThreshold(_ *testing.T, relType string, persist, s
 		Thresholds: relation.Thresholds{Persist: persist, Surface: surface}, Origin: ports.ThresholdOriginUser}
 }
 
+// PinThresholds implements ports.RelationRepo.
+func (r *Relations) PinThresholds(_ context.Context, relType string, t relation.Thresholds, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.thresholds[relType] = ports.LearnedThreshold{RelationType: relType, Thresholds: t, Origin: ports.ThresholdOriginUser, AdjustedAt: &at}
+	return nil
+}
+
+// ReleaseThresholds implements ports.RelationRepo.
+func (r *Relations) ReleaseThresholds(_ context.Context, relType string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lt, ok := r.thresholds[relType]
+	if !ok || lt.Origin != ports.ThresholdOriginUser {
+		return ports.ErrNotPinned
+	}
+	lt.Origin, lt.AdjustedAt = ports.ThresholdOriginLearned, &at
+	r.thresholds[relType] = lt
+	return nil
+}
+
 // LearnThresholds implements ports.RelationRepo, refusing a pinned row as
 // the store's WHERE does.
 func (r *Relations) LearnThresholds(_ context.Context, relType string, t relation.Thresholds, at time.Time) error {

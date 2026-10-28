@@ -269,6 +269,14 @@ func (g *i27Config) SetHysteresisMargin(context.Context, float64, time.Time) err
 	i27Fail(g.t, "ConfigRepo", "SetHysteresisMargin")
 	return nil
 }
+func (g *i27Config) PinGoalStagnationDays(context.Context, int, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "PinGoalStagnationDays")
+	return nil
+}
+func (g *i27Config) ReleaseGoalStagnationDays(context.Context, time.Time) error {
+	i27Fail(g.t, "ConfigRepo", "ReleaseGoalStagnationDays")
+	return nil
+}
 func (g *i27Config) LearnGoalStagnationDays(context.Context, int, time.Time) error {
 	i27Fail(g.t, "ConfigRepo", "LearnGoalStagnationDays")
 	return nil
@@ -312,6 +320,14 @@ func (g *i27Relations) Upsert(context.Context, ports.Relation) error {
 }
 func (g *i27Relations) Delete(context.Context, string) error {
 	i27Fail(g.t, "RelationRepo", "Delete")
+	return nil
+}
+func (g *i27Relations) PinThresholds(context.Context, string, relation.Thresholds, time.Time) error {
+	i27Fail(g.t, "RelationRepo", "PinThresholds")
+	return nil
+}
+func (g *i27Relations) ReleaseThresholds(context.Context, string, time.Time) error {
+	i27Fail(g.t, "RelationRepo", "ReleaseThresholds")
 	return nil
 }
 func (g *i27Relations) LearnThresholds(context.Context, string, relation.Thresholds, time.Time) error {
