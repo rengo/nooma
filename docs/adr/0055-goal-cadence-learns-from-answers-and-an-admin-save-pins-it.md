@@ -1,7 +1,7 @@
 # ADR-0055 — Goal cadence learns from answers, and an Admin save pins it
 
 - **Status**: Accepted (by the client through the PM, 2026-10-28: five ignored goal questions
-  lengthen the wait by a week, three answered of the last five shorten it, between one and eight
+  lengthen the wait by a week, three of the last five answered "yes" shorten it, between one and eight
   weeks; a value set in Admin is never changed)
 - **Date**: 2026-10-28
 - **Supersedes**: —
