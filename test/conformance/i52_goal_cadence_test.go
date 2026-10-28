@@ -34,6 +34,12 @@ func newI52Vault() *i52Vault {
 // day before the night; belief "" records a nudge about no goal.
 func (v *i52Vault) closed(t *testing.T, belief string, types ...ports.SignalType) {
 	t.Helper()
+	v.closedBefore(t, belief, i52Night, types...)
+}
+
+// closedBefore is closed with the newest a day before anchor.
+func (v *i52Vault) closedBefore(t *testing.T, belief string, anchor time.Time, types ...ports.SignalType) {
+	t.Helper()
 	kind := ports.TargetKindTrigger
 	for i, typ := range types {
 		target := fmt.Sprintf("trg-%s-%d", belief, i)
@@ -43,7 +49,7 @@ func (v *i52Vault) closed(t *testing.T, belief string, types ...ports.SignalType
 		}
 		if err := v.signals.Record(context.Background(), ports.Signal{ID: fmt.Sprintf("s-%s-%d", belief, i), Type: typ,
 			Valence: ports.ValenceNegative, TargetKind: &kind, TargetID: &target, Context: ctx,
-			OccurredAt: i52Night.Add(-time.Duration(len(types)-i) * 24 * time.Hour)}); err != nil {
+			OccurredAt: anchor.Add(-time.Duration(len(types)-i) * 24 * time.Hour)}); err != nil {
 			t.Fatal(err)
 		}
 	}

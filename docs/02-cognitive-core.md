@@ -2312,7 +2312,19 @@ the learner does not count it.
     interval 21 → 28 days: you ignored 5 of the last 5 goal check-ins") with its evidence.
 - **Transparency**: a natural-language summary of what it learned and why ("I raised the
   same_topic threshold 0.30→0.35 — you rejected 6 of 8"), queryable and correctable (UI +
-  API). What it learns is never a black box.
+  API). What it learns is never a black box. `brain.LearningService`
+  ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md), I53):
+  - **The summary** is one sentence per learned value: each relation type's bar, then the goal
+    cadence. Each is built from the structured decision rows, never from stored text, with the
+    value in force and whether the user pinned it. Reading it writes nothing.
+  - **Undo** restores the value before the learner's last change and pins it, because a user
+    who undoes has decided (`learning.undone`). It is offered only while that change is the
+    value's newest event (no undo, release or Admin save since), its value in force and not
+    pinned. An Admin save of the goal days is the user's word, and its sentence says so.
+  - **Release** ("let Nooma learn again") unpins a value as it stands and stamps the release as
+    its last change, so the learner counts only what comes after it and waits its cooldown
+    (`learning.released`). It also releases an Admin-pinned goal cadence.
+  - A refusal writes nothing. Nothing is deleted: no signal, no row, no relation.
 
 ## 10. The self-model
 

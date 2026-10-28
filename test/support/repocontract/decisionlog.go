@@ -352,6 +352,8 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionPatternEvalGoalCheckInArmed:     true,
 			ports.ActionCheckDigestGoalAsked:            true,
 			ports.ActionLearnGoalCadence:                true,
+			ports.ActionLearningUndone:                  true,
+			ports.ActionLearningReleased:                true,
 			ports.ActionLearnRelationThreshold:          true,
 			ports.ActionConnectQuestionCreated:          true,
 			ports.ActionCheckDigestQuestionAsked:        true,

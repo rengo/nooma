@@ -209,6 +209,11 @@ const (
 	// ActionLearnGoalCadence is the learn slot's goal cadence change (M5
 	// link 5): goal_stagnation_days moved one step, with its evidence.
 	ActionLearnGoalCadence DecisionAction = "consolidate.learn.goal_cadence"
+	// ActionLearningUndone and ActionLearningReleased are the summary's two
+	// acts (ADR-0056): an undo restored a learned value's previous one and
+	// pinned it; a release handed a pinned value back to the learner.
+	ActionLearningUndone   DecisionAction = "learning.undone"
+	ActionLearningReleased DecisionAction = "learning.released"
 
 	// ActionConnectQuestionCreated is m3e's own addition (I09's storing
 	// half): an Uncertain-band relation was stored and a pending_questions
@@ -310,7 +315,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionStrengthenApplied, ActionConnectRelationPersisted, ActionDeriveBeliefCreated,
 		ActionDeriveBeliefReinforced, ActionDeriveBeliefSkipped, ActionDeriveRetiredEmbedFailed,
 		ActionReweightBoostApplied, ActionPatternEvalStagnationFound,
-		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionCheckDigestGoalAsked, ActionLearnRelationThreshold, ActionLearnGoalCadence,
+		ActionPatternEvalLoadHypothesisOpened, ActionPatternEvalGoalCheckInArmed, ActionCheckDigestGoalAsked, ActionLearnRelationThreshold, ActionLearnGoalCadence, ActionLearningUndone, ActionLearningReleased,
 		ActionConnectQuestionCreated, ActionCheckDigestQuestionAsked, ActionCheckQuestionExpired,
 		ActionCaptureRelationCheckInResolved, ActionCaptureRelationCheckInUnmatched,
 		ActionRelationConfirmed, ActionRelationRejected,
