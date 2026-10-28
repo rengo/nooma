@@ -237,7 +237,8 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 | 4a | A goal check-in is answered by naming it (ADR-0054, I50) | Shipped |
 | 4b | Goal check-ins delivered: `pattern_eval` arms one per stagnant goal at most once per `goal_stagnation_days`, twice that after a decline, and the morning digest asks it (I51) | Shipped |
 | 5 | Goal cadence learned from how goal check-ins closed, pinned by an Admin save ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md), I52) | Shipped |
-| 6 | The correctable summary of what was learned (UI and API) | Planned |
+| 6a | The summary of what was learned, its undo and its release, in brain and the stores ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md), I53) | Shipped |
+| 6b | `/ui/learning` and `GET /learning`: the summary shown and corrected from the UI and the API | Planned |
 
 ## M6 — Release polish
 
