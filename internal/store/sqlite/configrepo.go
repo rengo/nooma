@@ -45,7 +45,8 @@ func (r *ConfigRepo) Load(ctx context.Context) (ports.VaultConfig, error) {
 SELECT weight_threshold, hysteresis_margin, consolidation_enabled,
        goal_stagnation_days, mental_load_threshold, consolidation_last_run_at,
        event_reminder_leads, date_only_reminder_at,
-       quiet_hours_end, evening_reminder_at, remind_me_lead_minutes
+       quiet_hours_end, evening_reminder_at, remind_me_lead_minutes,
+       goal_stagnation_pinned, (SELECT goal_calibrated_at FROM learning_state WHERE id = 1)
 FROM config WHERE id = 1`
 
 	var (
@@ -56,11 +57,14 @@ FROM config WHERE id = 1`
 		reminderLeads, dateOnlyAt               sql.NullString
 		quietEnd, eveningAt                     sql.NullString
 		remindMeLead                            sql.NullInt64
+		goalPinned                              bool
+		goalCalibratedAt                        sql.NullString
 	)
 	err := r.db.QueryRowContext(ctx, q).Scan(
 		&weightThreshold, &hysteresisMargin, &consolidationEnabled,
 		&goalStagnationDays, &mentalLoadThreshold, &consolidationLastRunAt,
 		&reminderLeads, &dateOnlyAt, &quietEnd, &eveningAt, &remindMeLead,
+		&goalPinned, &goalCalibratedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ports.VaultConfig{}, nil
@@ -112,6 +116,14 @@ FROM config WHERE id = 1`
 			return ports.VaultConfig{}, fmt.Errorf("config.consolidation_last_run_at: %w", err)
 		}
 		cfg.ConsolidationLastRunAt = &t
+	}
+	cfg.GoalStagnationPinned = goalPinned
+	if goalCalibratedAt.Valid {
+		t, err := time.Parse(unitTimeLayout, goalCalibratedAt.String)
+		if err != nil {
+			return ports.VaultConfig{}, fmt.Errorf("learning_state.goal_calibrated_at: %w", err)
+		}
+		cfg.GoalCalibratedAt = &t
 	}
 	return cfg, nil
 }
@@ -183,7 +195,40 @@ func (r *ConfigRepo) SetHysteresisMargin(ctx context.Context, v float64, at time
 	return r.setColumn(ctx, "hysteresis_margin", v, at)
 }
 func (r *ConfigRepo) SetGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
-	return r.setColumn(ctx, "goal_stagnation_days", v, at)
+	// The Admin save pins it (ADR-0055).
+	const q = `INSERT INTO config (id, goal_stagnation_days, goal_stagnation_pinned, updated_at) VALUES (1, ?, 1, ?)
+ON CONFLICT(id) DO UPDATE SET goal_stagnation_days = excluded.goal_stagnation_days,
+  goal_stagnation_pinned = 1, updated_at = excluded.updated_at`
+	if _, err := r.db.ExecContext(ctx, q, v, formatUnitTime(at)); err != nil {
+		return fmt.Errorf("writing config.goal_stagnation_days at %s: %w", at, err)
+	}
+	return nil
+}
+
+// LearnGoalStagnationDays implements ports.ConfigRepo: in one transaction, the
+// value where it is not pinned (the WHERE decides a race with an Admin save),
+// then the calibration stamp.
+func (r *ConfigRepo) LearnGoalStagnationDays(ctx context.Context, v int, at time.Time) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("learning goal_stagnation_days: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `INSERT INTO config (id, goal_stagnation_days, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET goal_stagnation_days = excluded.goal_stagnation_days, updated_at = excluded.updated_at
+WHERE config.goal_stagnation_pinned = 0`, v, formatUnitTime(at))
+	if err != nil {
+		return fmt.Errorf("learning goal_stagnation_days: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return errors.Join(ports.ErrGoalStagnationPinned, err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO learning_state (id, goal_calibrated_at, updated_at) VALUES (1, ?, ?)
+ON CONFLICT(id) DO UPDATE SET goal_calibrated_at = excluded.goal_calibrated_at, updated_at = excluded.updated_at`,
+		formatUnitTime(at), formatUnitTime(at)); err != nil {
+		return fmt.Errorf("stamping the goal cadence's change: %w", err)
+	}
+	return tx.Commit()
 }
 func (r *ConfigRepo) SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error {
 	return r.setColumn(ctx, "mental_load_threshold", v, at)

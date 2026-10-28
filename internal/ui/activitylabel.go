@@ -75,6 +75,7 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionPatternEvalGoalCheckInArmed:     "Goal check-in set",
 	ports.ActionCheckDigestGoalAsked:            "Goal asked",
 	ports.ActionLearnRelationThreshold:          "Link bar learned",
+	ports.ActionLearnGoalCadence:                "Goal cadence learned",
 	ports.ActionConnectQuestionCreated:          "Question queued",
 	ports.ActionCheckDigestQuestionAsked:        "Question asked",
 	ports.ActionCheckQuestionExpired:            "Question expired",

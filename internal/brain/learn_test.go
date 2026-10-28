@@ -75,3 +75,56 @@ func TestLearn_APinnedRowIsNeitherWrittenNorRecorded(t *testing.T) {
 		})
 	}
 }
+
+// goalSignals answers GoalVerdicts with five ignored goal check-ins: enough
+// to lengthen the interval.
+type goalSignals struct{ ports.SignalRepo }
+
+func (goalSignals) GoalVerdicts(context.Context) ([]ports.Signal, error) {
+	var out []ports.Signal
+	for i := range 5 {
+		out = append(out, ports.Signal{ID: fmt.Sprintf("g-%d", i), Type: ports.SignalNudgeIgnored,
+			Context: json.RawMessage(`{"belief_id":"b-run"}`), OccurredAt: learnTestNow.Add(-time.Duration(i+1) * 24 * time.Hour)})
+	}
+	return out, nil
+}
+
+// pinnedCadence refuses every learner write as pinned, counting them.
+type pinnedCadence struct {
+	ports.ConfigRepo
+	writes int
+}
+
+func (p *pinnedCadence) LearnGoalStagnationDays(context.Context, int, time.Time) error {
+	p.writes++
+	return ports.ErrGoalStagnationPinned
+}
+
+// TestLearnGoalCadence_APinIsNeitherWrittenNorRecorded (the shape of #408's
+// pin-guard test): read as pinned, nothing is sent to the store; pinned
+// between the read and the write, the refusal is no change, with no error and
+// no row.
+func TestLearnGoalCadence_APinIsNeitherWrittenNorRecorded(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		pinned     bool
+		wantWrites int
+	}{
+		{"read as pinned: never sent", true, 0},
+		{"pinned between read and write: skipped", false, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &pinnedCadence{}
+			log := &recordingLog{}
+			days := 21
+			r := consolidateRunner{cfg: store, signals: goalSignals{}, log: log, ids: &countingIDs{}}
+			err := r.learnGoalCadence(context.Background(), ports.VaultConfig{GoalStagnationDays: &days, GoalStagnationPinned: tc.pinned}, learnTestNow)
+			if err != nil {
+				t.Fatalf("learnGoalCadence = %v, want the pinned value skipped without error", err)
+			}
+			if store.writes != tc.wantWrites || len(log.actions) != 0 {
+				t.Errorf("%d writes, rows %v; want %d writes and no row", store.writes, log.actions, tc.wantWrites)
+			}
+		})
+	}
+}

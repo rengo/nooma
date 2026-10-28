@@ -136,4 +136,10 @@ type SignalRepo interface {
 	// the learn pass's evidence (doc 02 §9, M5 link 2c). An untyped one, from
 	// before M5 and not recoverable, is left out.
 	RelationVerdicts(ctx context.Context) ([]Signal, error)
+
+	// GoalVerdicts returns every nudge_engaged, nudge_declined and
+	// nudge_ignored signal whose context names a goal's belief_id, oldest
+	// first, tie-broken by ID: how goal check-ins closed, goal cadence's
+	// evidence (doc 02 §9, ADR-0055).
+	GoalVerdicts(ctx context.Context) ([]Signal, error)
 }

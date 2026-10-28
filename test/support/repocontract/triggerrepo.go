@@ -900,7 +900,7 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		ctx := context.Background()
 		at := contractNow
 		if err := repo.Create(ctx, ports.Trigger{ID: "goal-1", Kind: ports.TriggerKindPatternBased, FireAt: &at, CreatedAt: at,
-			Payload: ports.TriggerPayload{ActionText: "¿Seguís con correr?", BeliefID: "b-run"}}); err != nil {
+			Payload: ports.TriggerPayload{ActionText: "¿Seguís con correr?", BeliefID: "b-run", GoalText: "correr"}}); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 		if err := repo.Fire(ctx, "goal-1", at); err != nil {
@@ -912,6 +912,11 @@ func RunTriggerDelivery(t *testing.T, newRepo func(t *testing.T) TriggerHarness)
 		got, err := repo.Delivered(ctx)
 		if err != nil || len(got) != 1 || got[0].UnitID != nil || got[0].Payload.BeliefID != "b-run" || got[0].Payload.ActionText != "¿Seguís con correr?" {
 			t.Errorf("Delivered = %+v, %v; want goal-1 with no unit, carrying b-run", got, err)
+		}
+		// #414 review: the goal's own text survives the store, or every view
+		// falls back to the wording frozen at arming.
+		if len(got) == 1 && got[0].Payload.GoalText != "correr" {
+			t.Errorf("Payload.GoalText = %q, want %q", got[0].Payload.GoalText, "correr")
 		}
 	})
 

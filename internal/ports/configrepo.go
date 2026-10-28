@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -23,7 +24,16 @@ type VaultConfig struct {
 	QuietHoursEnd          *string    // → prospection.ResolveReminderPrefs (ADR-0030)
 	EveningReminderAt      *string    // → prospection.ResolveReminderPrefs
 	RemindMeLeadMinutes    *int       // → prospection.ResolveReminderPrefs (ADR-0031)
+	// GoalStagnationPinned is an Admin save of GoalStagnationDays: the user's
+	// own, never written by the learn pass (ADR-0055). GoalCalibratedAt is the
+	// learn pass's last change of it, nil when none (learning_state).
+	GoalStagnationPinned bool
+	GoalCalibratedAt     *time.Time
 }
+
+// ErrGoalStagnationPinned is LearnGoalStagnationDays refusing the user's own
+// value (ADR-0055).
+var ErrGoalStagnationPinned = errors.New("goal_stagnation_days is pinned by the user")
 
 // ConfigRepo is the repository port over the config singleton row —
 // design §3.4, spec R2.4-R2.6.
@@ -74,6 +84,13 @@ type ConfigRepo interface {
 	SetGoalStagnationDays(ctx context.Context, v int, at time.Time) error
 	SetMentalLoadThreshold(ctx context.Context, v int, at time.Time) error
 	SetConsolidationEnabled(ctx context.Context, v bool, at time.Time) error
+
+	// LearnGoalStagnationDays is the learn pass's write of
+	// goal_stagnation_days (doc 02 §9, ADR-0055): the value, unpinned, and
+	// learning_state.goal_calibrated_at at at, together. It refuses a value
+	// the user pinned from Admin with ErrGoalStagnationPinned and changes
+	// nothing. SetGoalStagnationDays, the Admin save, pins it.
+	LearnGoalStagnationDays(ctx context.Context, v int, at time.Time) error
 }
 
 // ReminderPrefsUpdate is the preference columns SetReminderPrefs writes,

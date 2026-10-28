@@ -31,6 +31,7 @@ func (errConfigRepo) SetReminderPrefs(context.Context, ports.ReminderPrefsUpdate
 func (errConfigRepo) SetWeightThreshold(context.Context, float64, time.Time) error  { return nil }
 func (errConfigRepo) SetHysteresisMargin(context.Context, float64, time.Time) error { return nil }
 func (errConfigRepo) SetGoalStagnationDays(context.Context, int, time.Time) error   { return nil }
+func (errConfigRepo) LearnGoalStagnationDays(context.Context, int, time.Time) error { return nil }
 func (errConfigRepo) SetMentalLoadThreshold(context.Context, int, time.Time) error  { return nil }
 func (errConfigRepo) SetConsolidationEnabled(context.Context, bool, time.Time) error {
 	return nil

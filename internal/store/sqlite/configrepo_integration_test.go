@@ -557,7 +557,7 @@ func TestConfigRepo_SetterLazyCreateUsesMigrationDefaults(t *testing.T) {
 		{"SetHysteresisMargin", func(r *ConfigRepo) error { return r.SetHysteresisMargin(ctx, 0.25, configFixtureTime) },
 			func(c *ports.VaultConfig) { v := 0.25; c.HysteresisMargin = &v }},
 		{"SetGoalStagnationDays", func(r *ConfigRepo) error { return r.SetGoalStagnationDays(ctx, 45, configFixtureTime) },
-			func(c *ports.VaultConfig) { v := 45; c.GoalStagnationDays = &v }},
+			func(c *ports.VaultConfig) { v := 45; c.GoalStagnationDays = &v; c.GoalStagnationPinned = true }},
 		{"SetMentalLoadThreshold", func(r *ConfigRepo) error { return r.SetMentalLoadThreshold(ctx, 12, configFixtureTime) },
 			func(c *ports.VaultConfig) { v := 12; c.MentalLoadThreshold = &v }},
 		{"SetConsolidationEnabled", func(r *ConfigRepo) error { return r.SetConsolidationEnabled(ctx, false, configFixtureTime) },

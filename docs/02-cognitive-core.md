@@ -2295,7 +2295,21 @@ the learner does not count it.
   whether it was delivered (`surfaced_at`) — 5 nudges with no response are 5 ignored ones.
   Systematically ignoring lengthens the interval (21 → 28 days); engaging shortens it.
   **Cooldown**: after adjusting, do not re-evaluate until the new interval has had time to
-  show its effect.
+  show its effect. The rule
+  ([ADR-0055](adr/0055-goal-cadence-learns-from-answers-and-an-admin-save-pins-it.md),
+  `internal/core/learning.StepGoalCadence`):
+  - **Evidence** is the newest five goal check-ins closed strictly after the last change: the
+    `nudge_engaged`/`declined`/`ignored` signals naming a goal's `belief_id`. A snooze does not.
+  - **Step.** All five ignored add 7 days to `goal_stagnation_days`; three or more engaged take
+    7 off. A decline is an answer and does neither; anything else, or fewer than five, holds.
+  - **Bounds and cooldown.** Within [7, 56] days; after a change it waits the new interval,
+    from `learning_state.goal_calibrated_at`, stamped at the pass's instant. It is idempotent.
+  - **Pin.** An Admin save pins it (`config.goal_stagnation_pinned`, client answer 6), even of
+    the value in force; the learn slot never writes a pinned value, and the store refuses it too.
+  - **The decline factor follows it**: after "dejala descansar" a goal waits twice the value in
+    force, learned or pinned (§7).
+  - Each change is one `consolidate.learn.goal_cadence` row ("raised the goal check-in
+    interval 21 → 28 days: you ignored 5 of the last 5 goal check-ins") with its evidence.
 - **Transparency**: a natural-language summary of what it learned and why ("I raised the
   same_topic threshold 0.30→0.35 — you rejected 6 of 8"), queryable and correctable (UI +
   API). What it learns is never a black box.
@@ -2468,7 +2482,12 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `max_learned_persist` (`internal/core/learning.MaxLearnedPersist`) | 0.90 — the highest persist bar learning sets; chosen: above it a type is all but switched off, which is the user's decision, not a count's |
 | `relation_cooldown_days` (`internal/core/learning.RelationCooldownDays`) | 7 — how long a changed type waits before it is judged again; chosen: a week of nights for the new bar to show its effect. Coincides with `load_cooldown_days` by coincidence, not by relation |
 | `min_confidence_to_surface` | 0.50 |
-| `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
+| `goal_cadence_sample` (`internal/core/learning.GoalCadenceSample`) | 5 — how many closed goal check-ins the goal cadence reads (§9, ADR-0055); doc 02's own "5 nudges with no response" |
+| `goal_cadence_engaged_to_shorten` (`internal/core/learning.GoalCadenceEngagedToShorten`) | 3 — how many of them engaged shorten the interval; a majority, so one sample moves it one way only. Lengthening needs all five ignored |
+| `goal_cadence_step_days` (`internal/core/learning.GoalCadenceStepDays`) | 7 — how far one change moves `goal_stagnation_days`; doc 02's own 21 → 28 |
+| `min_goal_stagnation_days` (`internal/core/learning.MinGoalStagnationDays`) | 7 — the shortest interval learning sets; chosen: below a week a goal is nagged |
+| `max_goal_stagnation_days` (`internal/core/learning.MaxGoalStagnationDays`) | 56 — the longest; chosen: past eight weeks a goal is forgotten rather than asked less often |
+| `goal_stagnation_days` ⚙ (`internal/core/consolidation.DefaultGoalStagnationDays` + `ResolveGoalStagnationDays`) | 21 — learned per user since M5 within [7, 56] (§9, ADR-0055) and pinned by an Admin save (`config.goal_stagnation_pinned`); `config.goal_stagnation_days` is this knob's one schema home for the whole of M2; `ports.ConfigRepo` reads it, never `calibration`'s own generic key/value row (`m2c` spec R2.5, discharging `m2b design.md` §9 Q3). `calibration` stays unused through `m2c`, verified by a source-tree scan (`test/conformance`); it remains reserved for M5's learning module to write arbitrary future per-user knobs that have no dedicated `config` column |
 | `goal_checkin_decline_factor` (`internal/core/consolidation.GoalCheckInDeclinedFactor`) | 2 — how many `goal_stagnation_days` a goal waits for its next check-in after a declined answer (§7); the client's ruling of 2026-10-28 on "ask less often" |
 | `mental_load_threshold` (`internal/core/consolidation.DefaultMentalLoadThreshold` + `ResolveMentalLoadThreshold`) | 7 |
 | `load_cooldown_days` (`internal/core/consolidation.LoadCooldownDays`) | 7 — chosen; unrelated to `mental_load_threshold`'s own coincidentally-equal 7 (a duration versus a count), no test ties them |
