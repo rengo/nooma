@@ -323,3 +323,25 @@ func TestI53_AnUndoRestoresTheSurfaceBarTheLearnerLifted(t *testing.T) {
 		t.Errorf("after the undo the bar is %+v, want 0.35/0.35", bar)
 	}
 }
+
+// TestI53_InOneSecondTheLaterRowIsTheNewest: rows of one second are ordered
+// by write order, so an undo, then a release, written the second the learner
+// changed the bar, each read as the newest word.
+func TestI53_InOneSecondTheLaterRowIsTheNewest(t *testing.T) {
+	v := newI48Vault(t)
+	v.judgeSix(t)
+	v.learn(t, i48Night)
+	svc := brain.NewLearningService(fixedClock{now: i48Night}, v.ids, v.rels, v.cfg, v.log)
+	if err := svc.Undo(context.Background(), brain.LearnedRelationBar, "same_topic"); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	if got := valueOf(t, svc, brain.LearnedRelationBar, "same_topic"); !strings.Contains(got.Sentence, "undid") {
+		t.Errorf("an undo the learner's second reads: %+v", got)
+	}
+	if err := svc.Release(context.Background(), brain.LearnedRelationBar, "same_topic"); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if got := valueOf(t, svc, brain.LearnedRelationBar, "same_topic"); !strings.Contains(got.Sentence, "learn the same_topic link bar again") || got.CanUndo {
+		t.Errorf("a release the same second reads: %+v", got)
+	}
+}

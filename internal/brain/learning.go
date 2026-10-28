@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -90,7 +91,13 @@ func (s *LearningService) history(ctx context.Context) (map[LearnedKind]map[stri
 		}
 		rows = append(rows, got...)
 	}
-	slices.SortStableFunc(rows, func(a, b ports.DecisionRow) int { return b.OccurredAt.Compare(a.OccurredAt) })
+	// Newest first; within one second, by write order (Seq).
+	slices.SortFunc(rows, func(a, b ports.DecisionRow) int {
+		if c := b.OccurredAt.Compare(a.OccurredAt); c != 0 {
+			return c
+		}
+		return cmp.Compare(b.Seq, a.Seq)
+	})
 	for _, r := range rows {
 		kind, key := LearnedKind(""), ""
 		switch r.Action {
