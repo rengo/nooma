@@ -78,11 +78,12 @@ type summaryDetail struct {
 	Next     any         `json:"next,omitempty"`
 }
 
-// history is every learn and summary row, newest first, by value.
+// history is every learn, summary and Admin save row about a learned value,
+// newest first, by value.
 func (s *LearningService) history(ctx context.Context) (map[LearnedKind]map[string][]learnEvent, error) {
 	out := map[LearnedKind]map[string][]learnEvent{LearnedRelationBar: {}, LearnedGoalCadence: {}}
 	var rows []ports.DecisionRow
-	for _, prefix := range []string{"consolidate.learn.", "learning."} {
+	for _, prefix := range []string{"consolidate.learn.", "learning.", string(ports.ActionConfigUpdated)} {
 		got, err := s.log.Before(ctx, nil, prefix, learningHistory)
 		if err != nil {
 			return nil, fmt.Errorf("learning: read history: %w", err)
@@ -99,6 +100,11 @@ func (s *LearningService) history(ctx context.Context) (map[LearnedKind]map[stri
 			kind, key = LearnedRelationBar, d.RelationType
 		case ports.ActionLearnGoalCadence:
 			kind, key = LearnedGoalCadence, GoalCadenceKey
+		case ports.ActionConfigUpdated:
+			var d struct{ Fields []string }
+			if _ = json.Unmarshal(r.Context, &d); slices.Contains(d.Fields, GoalCadenceKey) {
+				kind, key = LearnedGoalCadence, GoalCadenceKey
+			}
 		case ports.ActionLearningUndone, ports.ActionLearningReleased:
 			var d summaryDetail
 			_ = json.Unmarshal(r.Context, &d)
@@ -111,12 +117,11 @@ func (s *LearningService) history(ctx context.Context) (map[LearnedKind]map[stri
 	return out, nil
 }
 
-// lastLearned is the newest event the learner wrote.
+// lastLearned is the learner's change when it is the newest event: after the
+// user's undo, release or Admin save there is nothing of the learner's to undo.
 func lastLearned(events []learnEvent) (learnEvent, bool) {
-	for _, e := range events {
-		if e.action == ports.ActionLearnRelationThreshold || e.action == ports.ActionLearnGoalCadence {
-			return e, true
-		}
+	if len(events) > 0 && (events[0].action == ports.ActionLearnRelationThreshold || events[0].action == ports.ActionLearnGoalCadence) {
+		return events[0], true
 	}
 	return learnEvent{}, false
 }
@@ -204,6 +209,8 @@ func goalValue(cfg ports.VaultConfig, events []learnEvent) LearnedValue {
 		v.Sentence = fmt.Sprintf("You undid Nooma's last change to how long goal check-ins wait, so it stays at %d days until you let Nooma learn it again.", days)
 	case ports.ActionLearningReleased:
 		v.Sentence = "You let Nooma learn how long goal check-ins wait again; it counts only what you do from then on."
+	case ports.ActionConfigUpdated:
+		v.Sentence = fmt.Sprintf("You set goal check-ins to wait %d days in Admin.", days)
 	default:
 		var d goalCadenceDetail
 		_ = json.Unmarshal(e.ctx, &d)

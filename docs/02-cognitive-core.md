@@ -2318,8 +2318,9 @@ the learner does not count it.
     cadence. Each is built from the structured decision rows, never from stored text, with the
     value in force and whether the user pinned it. Reading it writes nothing.
   - **Undo** restores the value before the learner's last change and pins it, because a user
-    who undoes has decided (`learning.undone`). It is offered only while that change's value is
-    the one in force and not pinned.
+    who undoes has decided (`learning.undone`). It is offered only while that change is the
+    value's newest event (no undo, release or Admin save since), its value in force and not
+    pinned. An Admin save of the goal days is the user's word, and its sentence says so.
   - **Release** ("let Nooma learn again") unpins a value as it stands and stamps the release as
     its last change, so the learner counts only what comes after it and waits its cooldown
     (`learning.released`). It also releases an Admin-pinned goal cadence.
