@@ -31,6 +31,7 @@ type composeService struct {
 		Dockerfile string `yaml:"dockerfile"`
 	} `yaml:"build"`
 	Image       string            `yaml:"image"`
+	PullPolicy  string            `yaml:"pull_policy"`
 	Restart     string            `yaml:"restart"`
 	EnvFile     string            `yaml:"env_file"`
 	Environment map[string]string `yaml:"environment"`
@@ -41,16 +42,21 @@ type composeService struct {
 
 func readCompose(t *testing.T) composeFile {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(repoRootFromCaller(t), "deploy", "docker", "compose.yml"))
+	return readComposeFile(t, "compose.yml")
+}
+
+func readComposeFile(t *testing.T, name string) composeFile {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(repoRootFromCaller(t), "deploy", "docker", name))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var c composeFile
 	if err := yaml.UnmarshalWithOptions(b, &c, yaml.Strict()); err != nil {
-		t.Fatalf("compose.yml does not parse into the shape this test knows: %v", err)
+		t.Fatalf("%s does not parse into the shape this test knows: %v", name, err)
 	}
 	if len(c.Services) == 0 {
-		t.Fatal("compose.yml declares no services")
+		t.Fatalf("%s declares no services", name)
 	}
 	return c
 }
@@ -88,8 +94,8 @@ func TestDeploy_ComposeNeverExposesNooma(t *testing.T) {
 }
 
 // TestDeploy_ComposeRunsTheServiceTheBackupScriptExpects: the service, its
-// mounts, its secrets file and its build are the ones docs/08 and
-// nooma-backup.sh rely on.
+// mounts and its secrets file are the ones docs/08 and nooma-backup.sh rely
+// on.
 func TestDeploy_ComposeRunsTheServiceTheBackupScriptExpects(t *testing.T) {
 	c := readCompose(t)
 	s, ok := c.Services["nooma"]
@@ -105,9 +111,6 @@ func TestDeploy_ComposeRunsTheServiceTheBackupScriptExpects(t *testing.T) {
 	if s.Environment["TZ"] == "" {
 		t.Error("TZ is not set; the binary's clock reads the process zone")
 	}
-	if s.Build.Context != "../.." || s.Build.Dockerfile != "deploy/docker/Dockerfile" {
-		t.Errorf("build = %+v, want the repository root and deploy/docker/Dockerfile", s.Build)
-	}
 	for _, want := range []string{"/srv/nooma/data:/data", "/srv/nooma/backups:/backups"} {
 		if !contains(s.Volumes, want) {
 			t.Errorf("volumes %v lack %s", s.Volumes, want)
@@ -120,6 +123,40 @@ func TestDeploy_ComposeRunsTheServiceTheBackupScriptExpects(t *testing.T) {
 	}
 	if !strings.Contains(readRepoFile(t, "deploy/docker/Dockerfile"), "ENV NOOMA_VAULT=/data/vault") {
 		t.Error("the image does not point NOOMA_VAULT at /data/vault, the vault the script backs up")
+	}
+}
+
+// TestDeploy_ComposePullsTheReleaseAndTheOverrideBuildsFromSource: by
+// default the service runs the published image (ADR-0060), latest unless
+// NOOMA_VERSION pins one, and builds nothing; compose.build.yml builds the
+// working tree instead, under a local name that never shadows the release.
+func TestDeploy_ComposePullsTheReleaseAndTheOverrideBuildsFromSource(t *testing.T) {
+	s := readCompose(t).Services["nooma"]
+	if s.Image != "ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}" {
+		t.Errorf("image = %q, want ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}", s.Image)
+	}
+	if s.PullPolicy != "always" {
+		t.Errorf("pull_policy = %q, want always: an up -d never runs a stale cached release", s.PullPolicy)
+	}
+	if s.Build.Context != "" || s.Build.Dockerfile != "" {
+		t.Errorf("compose.yml builds (%+v); the source build is compose.build.yml's", s.Build)
+	}
+	if !strings.Contains(readRepoFile(t, "deploy/docker/.env.example"), "\nNOOMA_VERSION=\n") {
+		t.Error(".env.example does not offer NOOMA_VERSION")
+	}
+
+	o, ok := readComposeFile(t, "compose.build.yml").Services["nooma"]
+	if !ok {
+		t.Fatal(`compose.build.yml does not override the "nooma" service`)
+	}
+	if o.Build.Context != "../.." || o.Build.Dockerfile != "deploy/docker/Dockerfile" {
+		t.Errorf("build = %+v, want the repository root and deploy/docker/Dockerfile", o.Build)
+	}
+	if o.PullPolicy != "build" {
+		t.Errorf("override pull_policy = %q, want build: nooma:local is never pulled", o.PullPolicy)
+	}
+	if o.Image != "nooma:local" {
+		t.Errorf("override image = %q, want nooma:local", o.Image)
 	}
 }
 

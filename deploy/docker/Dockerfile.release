@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+#
+# Nooma's published image, ghcr.io/rengo/nooma (ADR-0060). goreleaser builds
+# it from the binaries it already compiled, one per platform, placed in the
+# build context as $TARGETPLATFORM/nooma; nothing is compiled here. The
+# runtime stage is deploy/docker/Dockerfile's, line for line, and
+# test/harness/release_test.go holds the two to it.
+
+# distroless has no shell to create the mount points with, so an empty pair
+# is made here, on the build platform, and copied in. Both bases are pinned
+# to their multi-arch index digest; deploy/docker/Dockerfile shares the
+# runtime one, so bump the two together.
+FROM --platform=$BUILDPLATFORM busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec AS dirs
+RUN mkdir -p /out/data /out/backups
+
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/nooma /usr/local/bin/nooma
+COPY --from=dirs --chown=65532:65532 /out/data /data
+COPY --from=dirs --chown=65532:65532 /out/backups /backups
+ENV NOOMA_VAULT=/data/vault
+USER 65532:65532
+EXPOSE 7777
+ENTRYPOINT ["nooma"]
+CMD ["serve"]

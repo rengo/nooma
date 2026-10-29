@@ -1,0 +1,15 @@
+# Builds Nooma from the working tree instead of pulling a release, for
+# development and for running unreleased main (docs/08-deploy.md). Layered on
+# compose.yml, from the repository root:
+#
+#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.build.yml up -d --build
+#
+# The local name keeps a source build from ever passing for a release.
+services:
+  nooma:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: nooma:local
+    # Built here, never pulled.
+    pull_policy: build

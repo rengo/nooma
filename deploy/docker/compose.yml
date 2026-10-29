@@ -1,6 +1,12 @@
 # Nooma on a server (docs/08-deploy.md). From the repository root:
 #
-#   docker compose -f deploy/docker/compose.yml up -d --build
+#   docker compose -f deploy/docker/compose.yml pull
+#   docker compose -f deploy/docker/compose.yml up -d
+#
+# That runs the published image (ADR-0060): latest, or the release
+# NOOMA_VERSION names in deploy/docker/.env. To run the working tree instead,
+# add compose.build.yml: -f deploy/docker/compose.yml -f deploy/docker/compose.build.yml
+# up -d --build.
 #
 # Nooma is never public: no VIRTUAL_HOST, no shared proxy network, and its
 # port is published on the host's loopback only. Reach it over Tailscale.
@@ -8,10 +14,10 @@ name: nooma
 
 services:
   nooma:
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
-    image: nooma:local
+    image: ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}
+    # Every up -d checks the registry, so a forgotten pull never runs a
+    # stale cached latest.
+    pull_policy: always
     restart: unless-stopped
     # Secrets: the provider key, the Telegram token and the server token.
     env_file: .env

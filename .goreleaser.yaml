@@ -1,0 +1,85 @@
+# Nooma's release (ADR-0060). Runs from .github/workflows/release.yml on a
+# v* tag push; nothing here runs on a pull request. test/harness/release_test.go
+# pins the decisions below.
+version: 2
+project_name: nooma
+
+builds:
+  - id: nooma
+    main: ./cmd/nooma
+    binary: nooma
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # The zone database is embedded, so TZ works on any host or image.
+    tags:
+      - timetzdata
+    # The stamp the Makefile's LDFLAGS writes (ADR-0015): on a tag commit
+    # `git describe --tags` prints the tag, v-prefixed, and so does .Tag.
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+    # ADR-0013's seven targets, the same list as `make cross-compile`.
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64, arm]
+    # GOARM=7 is what `make cross-compile` builds off an ARM host, and the
+    # image's linux/arm/v7.
+    goarm: ["7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+# Keyless: cosign signs with the workflow's GitHub OIDC identity, and the
+# certificate and transparency-log entry travel in the bundle.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+
+dockers_v2:
+  - ids: [nooma]
+    dockerfile: deploy/docker/Dockerfile.release
+    images:
+      - ghcr.io/rengo/nooma
+    # The version without its v (0.5.0, 1.0.0-rc.1). latest moves only on a
+    # tag without a prerelease suffix; an empty tag is skipped.
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
+    labels:
+      org.opencontainers.image.source: https://github.com/rengo/nooma
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+
+release:
+  github:
+    owner: rengo
+    name: nooma
+  # A -rc.N tag is published as a prerelease.
+  prerelease: auto
+
+changelog:
+  sort: asc

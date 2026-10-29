@@ -244,7 +244,8 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 
 ## M6 — Release polish
 
-Prior decisions: **[ADR-0004](adr/0004-license.md)** (license).
+Prior decisions: **[ADR-0004](adr/0004-license.md)** (license),
+**[ADR-0015](adr/0015-versioning.md)** (versioning).
 
 - `nooma export` / `import` (.noomabundle), complete `doctor` (providers, hardware, channels),
   embedding `reindex`. The hot backup is not here: `nooma backup` shipped ahead of M6 for the
@@ -252,6 +253,10 @@ Prior decisions: **[ADR-0004](adr/0004-license.md)** (license).
   stays M6's.
 - Goreleaser / multi-platform binary CI, public README, license.
 - **Demo**: installable release used by a stranger without help.
+
+| Slice | What | State |
+|---|---|---|
+| F | The release pipeline: a `v*` tag builds ADR-0013's seven targets, a cosign-signed `checksums.txt`, the GitHub Release and `ghcr.io/rengo/nooma` for three Linux platforms; the server pulls the image ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)) | In review |
 
 ## After v1
 
