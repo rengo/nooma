@@ -2197,7 +2197,14 @@ what tells the two apart.
   step 1's follow-ups) and the list shown again. A timer that rang in between is said to be no
   longer set.
 
-Listing and cancelling from the UI is still `m4f`'s.
+**Listed and cancelled from the UI through the same transition.** `/ui/timers` lists every
+live timer, by `fire_at` then id, each at its instant in the user's zone, and says when none is
+set; reading it writes nothing, and it reads `timers` alone, never units. A cancel there names
+the timer by its id, is counted at its position in the live list read at that moment, and is the
+chat's own cancel: `pending → cancelled`, one `capture.timer.cancelled` row naming the timer, its
+instant, its position and the surface (`ui`; the chat's rows say `chat`), and no signal. A timer
+that rang or was cancelled since the page was drawn is said to be no longer set, and nothing is
+logged as cancelled.
 
 ## 9. Learning — the prediction-error loop
 

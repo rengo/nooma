@@ -454,6 +454,13 @@ func wireCuration(db *sqlite.Vault) *brain.CurationService {
 		sqlite.NewSignalRepo(db), sqlite.NewDecisionLog(db), sqlite.NewPendingQuestionRepo(db))
 }
 
+// wireTimers builds a *brain.TimersService over db: the live timers behind
+// /ui/timers and their cancel. It resolves no provider, wireUnits' reason, and
+// is wired unconditionally at vault open.
+func wireTimers(db *sqlite.Vault) *brain.TimersService {
+	return brain.NewTimersService(systemClock{}, uuidGen{}, sqlite.NewTimerRepo(db), sqlite.NewDecisionLog(db))
+}
+
 func wireBrain(ctx context.Context, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool)) (*brain.CaptureService, *brain.RecallService, error) {
 	llm, judge, chatter, embed, embedModel, ok := resolveTaskProviders(cfg, lookup)
 	if !ok {

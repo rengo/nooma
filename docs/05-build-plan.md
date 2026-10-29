@@ -192,7 +192,8 @@ A timer's **list and cancel** from chat was M4's surface rather than M3's: doc 0
 both, and `ports.TimerRepo` declared neither, because a method with no caller is what this
 repository refuses to ship. **It closed on 2026-10-26** with `m4f`'s chat half (ADR-0051):
 `TimerRepo.Pending` lists the live timers into every prompt, and a cancel moves the one it names
-through that list to `cancelled`. The UI's list and cancel remain `m4f`'s.
+through that list to `cancelled`. The UI's list and cancel shipped with `m4f`'s UI half
+(2026-10-29): `/ui/timers` cancels through the same transition.
 
 The other — a **relation confirmation** that knew how to reject a relation but not yet *which*
 relation an inbound answer was about (`m3d` finding J24) — **closed on 2026-09-16 with

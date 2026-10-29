@@ -84,6 +84,19 @@ func (c countingCuration) Reject(context.Context, string) error {
 	return nil
 }
 
+// countingTimers is this file's ui.Timers stub: Cancel, the one write,
+// counts; Live is a read and counts nothing.
+type countingTimers struct {
+	calls *int
+}
+
+func (countingTimers) Live(context.Context) ([]brain.ListedTimer, error) { return nil, nil }
+
+func (c countingTimers) Cancel(context.Context, string) (brain.ListedTimer, error) {
+	*c.calls++
+	return brain.ListedTimer{}, nil
+}
+
 // centreOnlyGraph redraws any unit as a centre alone: what a curation POST
 // needs to answer.
 type centreOnlyGraph struct{}
@@ -142,6 +155,7 @@ var uiCrossOriginBodies = map[string]string{
 	"POST /ui/learning/release":             "kind=relation_bar&key=same_topic",
 	"POST /ui/graph/relations/{id}/confirm": "unit=unit-1",
 	"POST /ui/graph/relations/{id}/reject":  "unit=unit-1",
+	"POST /ui/timers/{id}/cancel":           "",
 }
 
 // uiCrossOriginBodyExempt lists the rows that have no valid-body entry, each
@@ -326,7 +340,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 				return httpapi.Handler(httpapi.Deps{
 					Version: "test",
 					Token:   token,
-					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Learning: countingLearning{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}}),
+					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Learning: countingLearning{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}, Timers: countingTimers{calls: &calls}}),
 				})
 			}
 
