@@ -256,7 +256,7 @@ Prior decisions: **[ADR-0004](adr/0004-license.md)** (license),
 
 | Slice | What | State |
 |---|---|---|
-| F | The release pipeline: a `v*` tag builds ADR-0013's seven targets, a cosign-signed `checksums.txt`, the GitHub Release and `ghcr.io/rengo/nooma` for three Linux platforms; the server pulls the image ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)) | In review |
+| F | The release pipeline: a `v*` tag builds ADR-0013's seven targets, a cosign-signed `checksums.txt`, the GitHub Release and `ghcr.io/rengo/nooma` for three Linux platforms; the server pulls the image ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)) | Shipped (#421, first release v0.5.0) |
 
 ## After v1
 

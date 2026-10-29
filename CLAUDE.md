@@ -39,7 +39,7 @@ rclone crypt, outside the binary, uploads it encrypted (ADR-0049,
 targets and a multi-arch image at `ghcr.io/rengo/nooma`, which the server pulls (ADR-0060; first
 release v0.5.0).
 
-**M6 is release polish**, in progress: export/import, a read-only and complete `doctor`, `reindex`,
+**M6 is release polish**, in progress: export/import, a complete `doctor`, `reindex`,
 the public README and the 1.0 candidate.
 
 Both M3 list items left deliberately open are closed: which relation an inbound confirmation
