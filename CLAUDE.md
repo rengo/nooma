@@ -24,6 +24,12 @@ settings changed and logged, the learned thresholds and the nightly job's status
 `m4d` (`/ui/graph`: one unit's bounded neighbourhood as an SVG the server draws, with no
 JavaScript of its own, each relation confirmed or deleted in place; ADR-0050). Pending: `m4f`.
 
+**M5 is the learner**, shipped 2026-10-29. Every verdict is a typed signal (ADR-0052). Each
+night a relation type's bar moves one step on fresh evidence, and a link below its bar goes
+dormant rather than deleted (ADR-0053). Goals are asked about in the morning digest and answered
+by naming them (ADR-0054). Their cadence is learned, and an Admin save pins it (ADR-0055).
+`/ui/learning` says what was learned and lets the user undo or release it (ADR-0056).
+
 Outside the plan: recall reads a time window and the topic's words (ADR-0048). Ahead of M6:
 Nooma runs unattended on a server in Docker; `nooma backup` writes a verified snapshot daily, and
 rclone crypt, outside the binary, uploads it encrypted (ADR-0049,
