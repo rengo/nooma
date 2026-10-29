@@ -14,15 +14,17 @@ timer and asks its own check-ins. And it **asks about what it is not sure of** (
 as a question naming both endpoints, and the answer raises its confidence or deletes it. All
 against a real migrated vault, on Linux and Windows.
 
-**M4 is the mirror: the complete UI**, in progress. Shipped: `m4a` (Today, cookie login,
+**M4 is the mirror: the complete UI**, shipped 2026-10-29: `m4a` (Today, cookie login,
 `--no-ui`), `m4b` (units browse, search, detail, capture and correction), `m4c` (a focus held
 by hysteresis and fed by relation adjacency, shared by Today and the digest), `m4e` (beliefs:
 list by facet, edit, claim on save, retire, and a nightly derive that never brings back what the
 user retired or overwrites what they edited), `m4e-activity` (`/ui/activity`: the
 `decision_log` newest first, an edit's pre-image shown, read-only), `m4e2` (`/ui/admin`: five
-settings changed and logged, the learned thresholds and the nightly job's status read-only) and
+settings changed and logged, the learned thresholds and the nightly job's status read-only),
 `m4d` (`/ui/graph`: one unit's bounded neighbourhood as an SVG the server draws, with no
-JavaScript of its own, each relation confirmed or deleted in place; ADR-0050). Pending: `m4f`.
+JavaScript of its own, each relation confirmed or deleted in place; ADR-0050) and `m4f`
+(`/ui/timers` lists and cancels the live timers through the chat's own cancel, and Today's
+relation question is answered in place by its id).
 
 **M5 is the learner**, shipped 2026-10-29. Every verdict is a typed signal (ADR-0052). Each
 night a relation type's bar moves one step on fresh evidence, and a link below its bar goes
@@ -33,12 +35,17 @@ by naming them (ADR-0054). Their cadence is learned, and an Admin save pins it (
 Outside the plan: recall reads a time window and the topic's words (ADR-0048). Ahead of M6:
 Nooma runs unattended on a server in Docker; `nooma backup` writes a verified snapshot daily, and
 rclone crypt, outside the binary, uploads it encrypted (ADR-0049,
-[`docs/08-deploy.md`](docs/08-deploy.md)).
+[`docs/08-deploy.md`](docs/08-deploy.md)). A `v*` tag releases signed binaries for the seven
+targets and a multi-arch image at `ghcr.io/rengo/nooma`, which the server pulls (ADR-0060; first
+release v0.5.0).
+
+**M6 is release polish**, in progress: export/import, a complete `doctor`, `reindex`,
+the public README and the 1.0 candidate.
 
 Both M3 list items left deliberately open are closed: which relation an inbound confirmation
 answers (`m3e`), and a timer's list and cancel from chat (ADR-0051: `TimerRepo.Pending` lists the
-live timers into every prompt, and a cancel binds one through that list). The UI's list and
-cancel stay `m4f`'s. `internal/core/` holds the brain's decision logic.
+live timers into every prompt, and a cancel binds one through that list). `internal/core/` holds
+the brain's decision logic.
 
 ## Documentation
 
