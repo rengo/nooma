@@ -495,11 +495,12 @@ real run is the first tag.
 
 Cutting a release is pushing an annotated tag on a `main` commit (ADR-0015):
 `git tag -a v0.5.0 <sha> -m v0.5.0 && git push origin v0.5.0`. To verify one, download
-`checksums.txt` and `checksums.txt.sigstore.json` beside the archive:
+`checksums.txt` and `checksums.txt.sigstore.json` beside the archive. The identity is
+`release.yml` on a `v*` tag, so a signature from any other workflow or ref fails:
 
 ```sh
 cosign verify-blob --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/rengo/nooma/' \
+  --certificate-identity-regexp '^https://github\.com/rengo/nooma/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 sha256sum --ignore-missing -c checksums.txt
 ```

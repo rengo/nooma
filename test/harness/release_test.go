@@ -309,6 +309,35 @@ func TestRelease_WorkflowRunsOnVersionTagsOnlyWithMinimalPermissions(t *testing.
 	}
 }
 
+// TestRelease_EverythingTheWorkflowRunsIsPinned: the workflow that can
+// publish and sign as this repository runs no action by a movable tag, an
+// exact goreleaser release, and base images by digest.
+func TestRelease_EverythingTheWorkflowRunsIsPinned(t *testing.T) {
+	wf := readRepoFile(t, ".github/workflows/release.yml")
+	uses := regexp.MustCompile(`(?m)^\s*(?:- )?uses: (\S+)(.*)$`).FindAllStringSubmatch(wf, -1)
+	if len(uses) == 0 {
+		t.Fatal("release.yml uses no action")
+	}
+	pinned := regexp.MustCompile(`^[\w.-]+/[\w.-]+@[0-9a-f]{40}$`)
+	for _, u := range uses {
+		if !pinned.MatchString(u[1]) {
+			t.Errorf("%s is not pinned to a full commit SHA", u[1])
+		}
+		if !regexp.MustCompile(`^\s+# v\d+\.\d+\.\d+$`).MatchString(u[2]) {
+			t.Errorf("%s does not name its tag in a comment (# vX.Y.Z)", u[1])
+		}
+	}
+	if !regexp.MustCompile(`(?m)^\s+version: "?v2\.\d+\.\d+"?$`).MatchString(wf) {
+		t.Error("release.yml does not pin goreleaser to an exact v2.x.y release")
+	}
+	from := regexp.MustCompile(`(?m)^FROM (?:--platform=\S+ )?(\S+)`)
+	for _, m := range from.FindAllStringSubmatch(readRepoFile(t, "deploy/docker/Dockerfile.release"), -1) {
+		if !regexp.MustCompile(`@sha256:[0-9a-f]{64}$`).MatchString(m[1]) {
+			t.Errorf("Dockerfile.release's base %s is not pinned by digest", m[1])
+		}
+	}
+}
+
 func keys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

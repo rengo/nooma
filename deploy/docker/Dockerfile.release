@@ -7,11 +7,13 @@
 # test/harness/release_test.go holds the two to it.
 
 # distroless has no shell to create the mount points with, so an empty pair
-# is made here, on the build platform, and copied in.
-FROM --platform=$BUILDPLATFORM busybox:1.37 AS dirs
+# is made here, on the build platform, and copied in. Both bases are pinned
+# to their multi-arch index digest; deploy/docker/Dockerfile shares the
+# runtime one, so bump the two together.
+FROM --platform=$BUILDPLATFORM busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec AS dirs
 RUN mkdir -p /out/data /out/backups
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/nooma /usr/local/bin/nooma
 COPY --from=dirs --chown=65532:65532 /out/data /data

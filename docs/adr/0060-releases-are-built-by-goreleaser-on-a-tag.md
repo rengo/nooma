@@ -43,7 +43,9 @@ and where the image lives.
 1. **A pushed `v*` tag runs `.github/workflows/release.yml`, and nothing else does.** No pull
    request, no merge, no manual dispatch. The workflow's token has exactly `contents: write`,
    `id-token: write` and `packages: write`. The tag goes on a `main` commit that already passed
-   every gate, so the workflow does not re-run them.
+   every gate, so the workflow does not re-run them. Because it can publish and sign as the
+   repository, every action it uses is pinned to a commit, goreleaser to an exact release, and
+   `Dockerfile.release`'s bases to a digest; a moved tag upstream changes nothing here.
 2. **goreleaser builds ADR-0013's seven targets** with `CGO_ENABLED=0 -trimpath -tags
    timetzdata`, `linux/arm` as GOARM=7, stamped `-X main.version=<tag>`: the Makefile's stamp,
    since `git describe` on a tag commit prints the tag.
@@ -62,10 +64,11 @@ and where the image lives.
 ## Consequences
 
 - A user downloads a binary and verifies it without trusting the download page: `cosign
-  verify-blob` on the bundle, pinned to this repository's workflow identity, then `sha256sum -c`
+  verify-blob` on the bundle, pinned to `release.yml` on a `v*` tag, then `sha256sum -c`
   (the commands are in `docs/06-harness.md` §6).
-- The droplet upgrades by pulling, and no longer compiles: the swap note applies to the
-  source build only.
+- The droplet upgrades by pulling (`pull_policy: always`), and no longer compiles: the swap note
+  applies to the source build only. Until the first tag there is nothing to pull, so a host
+  that built from source keeps doing so until then (`docs/08-deploy.md` §5).
 - The pipeline cannot be exercised on a pull request. `test/harness/release_test.go` holds the
   config to this ADR as data (targets, stamp, archives, signature, image tags, trigger,
   permissions); the first real run is the first tag after this merges.

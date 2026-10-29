@@ -73,7 +73,6 @@ dockers_v2:
       org.opencontainers.image.source: https://github.com/rengo/nooma
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
-      org.opencontainers.image.licenses: AGPL-3.0-only
 
 release:
   github:
