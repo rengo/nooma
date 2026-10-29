@@ -75,6 +75,28 @@ docker compose -f deploy/docker/compose.yml logs -f nooma   # "nooma: listening 
 There is no container healthcheck: the image has no shell or HTTP client, and the binary has
 no probe command. `restart: unless-stopped` restarts it if it exits.
 
+### Check the vault: doctor and status
+
+Run them through the container, so they run as the user serve runs as (uid 65532):
+
+```sh
+docker compose -f deploy/docker/compose.yml exec nooma nooma doctor /data/vault    # while Nooma runs
+docker compose -f deploy/docker/compose.yml run --rm nooma doctor /data/vault      # while it is stopped
+```
+
+`nooma status /data/vault` works the same way. Both read the vault without changing the
+database, beside a running serve too (ADR-0059). Doctor's `llm quality` check sends its fixed
+set of 34 prompts to your provider, so each run is 34 paid calls on a cloud model.
+
+**Never run them as root on the host path** (`sudo nooma doctor /srv/nooma/data/vault`). A
+read-only open still creates `nooma.db-wal` and `nooma.db-shm` beside the database when they are
+missing, owned by whoever runs it, and they stay. Owned by root, they can stop the container's
+serve from opening the vault. If it happened, give them back before starting Nooma:
+
+```sh
+sudo chown 65532:65532 /srv/nooma/data/vault/nooma.db-wal /srv/nooma/data/vault/nooma.db-shm
+```
+
 ### Building from source
 
 `compose.build.yml` builds the working tree with `deploy/docker/Dockerfile` instead of pulling,

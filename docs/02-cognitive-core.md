@@ -873,7 +873,7 @@ update the cursor had not passed, so such a command is greeted once more.
        live units lack the model's vector, and starts anyway; `nooma doctor` fails its coverage
        check with the count and the other models present
        ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)). Doctor reads the
-       vault read-only and never migrates or writes it (I55).
+       vault read-only: it never migrates it or writes its database file (I55).
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).

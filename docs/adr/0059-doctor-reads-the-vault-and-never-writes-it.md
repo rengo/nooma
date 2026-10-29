@@ -42,8 +42,13 @@ For the word index:
 
 ## Decision
 
-1. **Doctor opens the vault read-only** (`sqlite.OpenReadOnly`). It never migrates and cannot
-   write the database (I55). It takes no lock and runs beside `serve`.
+1. **Doctor opens the vault read-only** (`sqlite.OpenReadOnly`). It never migrates and never
+   writes the database file (I55). It takes no lock and runs beside `serve`. Read-only is about
+   that file: when `nooma.db-wal` and `nooma.db-shm` are missing, SQLite creates them beside it,
+   owned by whoever runs doctor, and they stay after it exits (measured). On a server, doctor
+   therefore runs as the user serve runs as, inside its container, never as root on the host
+   path ([08-deploy.md](../08-deploy.md)): sidecars owned by root can stop serve, uid 65532,
+   from opening the vault.
 2. **The schema check compares the file's version with the binary's** (`sqlite.SchemaTarget`).
    Equal is ok. Behind is ok and says "serve migrates it to N on start". Ahead fails and says to
    upgrade nooma. Zero fails, as before.

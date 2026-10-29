@@ -394,7 +394,8 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
   `PRAGMA integrity_check`, and copies `nooma.yml` beside it ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)).
   M6's `nooma export` packages a portable bundle instead.
 - **Integrity**: `nooma doctor` opens the vault read-only (`mode=ro`): it never migrates it and
-  cannot write it, and reports the file's schema version against the binary's (behind: serve
+  never writes the database file (SQLite may create the missing `-wal` and `-shm` sidecars,
+  owned by the user who runs it), and reports the file's schema version against the binary's (behind: serve
   migrates it; ahead: upgrade nooma). It runs `PRAGMA integrity_check` and both halves of
   consistency ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)):
   - **units↔embeddings**: the live units holding no vector under the configured model, none at
