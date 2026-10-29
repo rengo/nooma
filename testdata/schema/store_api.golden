@@ -20,7 +20,8 @@ internal/store/sqlite: func (*ConversationRepo) Last(ctx context.Context, id por
 internal/store/sqlite: func (*DecisionLog) Before(ctx context.Context, before *ports.DecisionCursor, actionPrefix string, limit int) ([]ports.DecisionRow, error)
 internal/store/sqlite: func (*DecisionLog) Record(ctx context.Context, d ports.Decision) error
 internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Time, limit int) ([]ports.Decision, error)
-internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error)
+internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context, model string) (int, error)
+internal/store/sqlite: func (*EmbeddingRepo) LiveModels(ctx context.Context) ([]ModelCount, error)
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*PendingQuestionRepo) Confirm(ctx context.Context, id string, at time.Time) error
@@ -104,6 +105,7 @@ internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) IntegrityCheck(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Path() string
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
+internal/store/sqlite: func (*Vault) SearchIndexGaps(ctx context.Context) (SearchIndexGaps, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats
 internal/store/sqlite: func (*VersionError) Error() string
 internal/store/sqlite: func NewConfigRepo(v *Vault) *ConfigRepo
@@ -120,15 +122,19 @@ internal/store/sqlite: func NewTimerRepo(v *Vault) *TimerRepo
 internal/store/sqlite: func NewTriggerRepo(v *Vault) *TriggerRepo
 internal/store/sqlite: func NewUnitRepo(v *Vault) *UnitRepo
 internal/store/sqlite: func Open(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: func OpenReadOnly(ctx context.Context, dbPath string) (*Vault, error)
+internal/store/sqlite: func SchemaTarget() (int, error)
 internal/store/sqlite: func Snapshot(ctx context.Context, dbPath, dest string) error
 internal/store/sqlite: func VerifySnapshot(ctx context.Context, path string) (int, error)
 internal/store/sqlite: type ConfigRepo
 internal/store/sqlite: type ConversationRepo
 internal/store/sqlite: type DecisionLog
 internal/store/sqlite: type EmbeddingRepo
+internal/store/sqlite: type ModelCount
 internal/store/sqlite: type PendingQuestionRepo
 internal/store/sqlite: type RelationRepo
 internal/store/sqlite: type Search
+internal/store/sqlite: type SearchIndexGaps
 internal/store/sqlite: type SelfModelRepo
 internal/store/sqlite: type SignalRepo
 internal/store/sqlite: type StateRepo

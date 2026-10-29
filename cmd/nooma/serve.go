@@ -115,6 +115,7 @@ func runServe(args []string, out, errOut io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("wiring the capture/recall pipeline: %w", err)
 	}
+	warnUnembedded(context.Background(), db, cfg, errOut)
 
 	// The channel, if this vault has one. wireChannel returns (nil, nil)
 	// when Telegram is disabled, so nothing below needs a branch: a nil
@@ -369,4 +370,22 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 		deps.Timers = timers
 	}
 	return deps
+}
+
+// warnUnembedded writes one loud line at boot when live units hold no vector
+// under the configured embedding model: recall can then find them only by
+// their words (I21), which nothing else says while serve runs. It never stops
+// the boot (the client's answer: start and warn), and a vault with no
+// embedding model configured, or a count that fails, says nothing here;
+// nooma doctor reports both.
+func warnUnembedded(ctx context.Context, db *sqlite.Vault, cfg *config.Config, errOut io.Writer) {
+	model := configuredEmbeddingModel(cfg)
+	if model == "" {
+		return
+	}
+	missing, err := sqlite.NewEmbeddingRepo(db).CountLiveWithoutEmbedding(ctx, model)
+	if err != nil || missing == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(errOut, "WARNING: %d live units have no %s vector, so recall finds them only by their words; run nooma doctor for details\n", missing, model)
 }

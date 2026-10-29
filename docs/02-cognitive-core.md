@@ -867,6 +867,13 @@ update the cursor had not passed, so such a command is greeted once more.
        holds embeddings for exactly that one model. A vault holding two models therefore holds
        two `VectorIndex` values — never one index serving both — so there is no shared score
        for two different models' embeddings to be compared through.
+     - **A unit without the configured model's vector is reachable only by its words.** That is
+       a unit never embedded, or one embedded under another model before the configured one
+       changed. Nothing hides it: `nooma serve` writes one `WARNING:` line at boot with how many
+       live units lack the model's vector, and starts anyway; `nooma doctor` fails its coverage
+       check with the count and the other models present
+       ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)). Doctor reads the
+       vault read-only and never migrates or writes it (I55).
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).

@@ -21,6 +21,7 @@ import (
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
+	"github.com/rengo/nooma/internal/store/vaultlock"
 	"github.com/rengo/nooma/testdata/llm"
 )
 
@@ -43,6 +44,7 @@ type doctorCheck struct {
 var doctorChecks = []doctorCheck{
 	{"configuration", checkConfiguration},
 	{"permissions", checkPermissions},
+	{"vault lock", checkVaultLock},
 	{"database integrity", checkIntegrity},
 	{"schema version", checkSchema},
 	{"bind", checkBindExposure},
@@ -50,6 +52,7 @@ var doctorChecks = []doctorCheck{
 	{"llm quality", checkLLMQuality},
 	{"task coverage", checkTaskCoverage},
 	{"vault coverage", checkVaultCoverage},
+	{"search index", checkSearchIndex},
 }
 
 // doctorArgs is what `nooma doctor` was asked.
@@ -192,18 +195,55 @@ func checkIntegrity(vault string, cfg *config.Config) error {
 	})
 }
 
+// checkSchema compares the file's schema version with this binary's. doctor
+// opens the vault read-only, so the version it reads is the file's own, never
+// one doctor just migrated it to (I55): behind is fine (serve migrates it on
+// start), ahead is a vault this binary cannot run.
 func checkSchema(vault string, cfg *config.Config) error {
+	target, err := sqlite.SchemaTarget()
+	if err != nil {
+		return err
+	}
 	return withVault(vault, cfg, func(v *sqlite.Vault) error {
 		version, err := v.SchemaVersion(context.Background())
 		if err != nil {
 			return err
 		}
-		if version <= 0 {
-			return fmt.Errorf("the vault reports schema version %d, which no migration produces", version)
-		}
-		return nil
+		return schemaReport(version, target)
 	})
 }
+
+// schemaReport is checkSchema's decision on the two versions.
+func schemaReport(version, target int) error {
+	switch {
+	case version <= 0:
+		return fmt.Errorf("the vault reports schema version %d, which no migration produces", version)
+	case version > target:
+		return fmt.Errorf("the vault is at schema %d and this binary knows up to %d — upgrade nooma to run it (doctor changed nothing)", version, target)
+	case version < target:
+		return okDetail(fmt.Sprintf("(schema %d; serve migrates it to %d on start)", version, target))
+	}
+	return nil
+}
+
+// checkVaultLock says whether a process holds the vault, which is information
+// and never a failure: doctor reads beside a running serve.
+func checkVaultLock(vault string, _ *config.Config) error {
+	pid, held, err := vaultlock.ReadHolder(vault)
+	switch {
+	case err != nil:
+		return okDetail(fmt.Sprintf("(could not read the lock: %v)", err))
+	case held:
+		return okDetail(fmt.Sprintf("(held by process %d, a running nooma serve)", pid))
+	}
+	return okDetail("(free: no nooma serve holds this vault)")
+}
+
+// okDetail is a success line that still has something to say.
+type okDetail string
+
+func (d okDetail) Error() string { return string(d) }
+func (okDetail) doctorOK()       {}
 
 // checkBindExposure reports ADR-0007's answer without starting a server, which is
 // the point of having it here: the refusal to listen lives in `serve`, but a user
@@ -666,35 +706,107 @@ func checkTaskCoverage(_ string, cfg *config.Config) error {
 	return errors.New(strings.Join(problems, "\n"))
 }
 
-// checkVaultCoverage is design D18b row 2 (spec R6.3) — the runtime half of
-// docs/03-data-model.md's own units<->embeddings<->fts consistency promise
-// (the fts half stays M6's, doc 03's own delta). Unlike row 1, this makes
-// one SQL query rather than reading configuration: it answers "did this
-// vault actually end up with vectors" (effective), not "is something
-// bound" (configured, row 1) or "is the bound provider any good"
-// (fit, D16).
+// checkVaultCoverage is design D18b row 2 (spec R6.3) made model-aware: the
+// units<->embeddings half of docs/03-data-model.md's consistency promise. It
+// counts the live units holding no vector under the configured embedding
+// model — none at all, or only another model's — because recall reads that
+// model's vectors alone (I21): a vault whose model changed holds vectors for
+// every unit and still cannot be reached by meaning. Unlike row 1 it reads
+// the vault (effective), not the configuration (configured, row 1) or the
+// provider (fit, D16).
 func checkVaultCoverage(vault string, cfg *config.Config) error {
+	model := configuredEmbeddingModel(cfg)
+	if model == "" {
+		return okDetail("(no embedding model configured)")
+	}
 	return withVault(vault, cfg, func(v *sqlite.Vault) error {
-		count, err := sqlite.NewEmbeddingRepo(v).CountLiveWithoutEmbedding(context.Background())
+		repo := sqlite.NewEmbeddingRepo(v)
+		missing, err := repo.CountLiveWithoutEmbedding(context.Background(), model)
 		if err != nil {
-			return fmt.Errorf("counting live units without an embedding: %w", err)
+			return err
 		}
-		return vaultCoverageError(count)
+		if missing == 0 {
+			return nil
+		}
+		models, err := repo.LiveModels(context.Background())
+		if err != nil {
+			return err
+		}
+		return vaultCoverageError(model, missing, models)
 	})
 }
 
-// vaultCoverageError is checkVaultCoverage's own decision logic, split out
-// so the report text is testable without a real vault (doctor_test.go) —
-// the same shape checkLLMQuality's qualityGateError already takes. It never
-// sees an archived unit: CountLiveWithoutEmbedding already excludes them
-// (I02's own read-side filter).
-func vaultCoverageError(count int) error {
-	if count == 0 {
+// reindexNotYet is how a FAIL names its fix while `nooma reindex` is not in
+// the binary: honestly, so the user is not sent to a command that does not
+// exist.
+const reindexNotYet = "not in this version yet"
+
+// vaultCoverageError is checkVaultCoverage's decision and wording, testable
+// without a vault. It never sees an archived unit: the counts exclude them
+// (I02's read-side filter). The other models present are named with how many
+// live units hold each.
+func vaultCoverageError(model string, missing int, models []sqlite.ModelCount) error {
+	if missing == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d live units have no embedding; semantic recall cannot reach them", count)
+	text := fmt.Sprintf("%d live units have no %s vector; recall finds them only by their words", missing, model)
+	for _, mc := range models {
+		if mc.Model == model {
+			continue
+		}
+		verb := "hold"
+		if mc.Units == 1 {
+			verb = "holds"
+		}
+		text += fmt.Sprintf("; %d %s a %s vector", mc.Units, verb, mc.Model)
+	}
+	return fmt.Errorf("%s. `nooma reindex` will re-embed them (%s)", text, reindexNotYet)
 }
 
+// checkSearchIndex is the units<->word-index half of the consistency
+// promise: every unit has its entry in units_fts, and no entry names a unit
+// that is not there (sqlite.Vault.SearchIndexGaps).
+func checkSearchIndex(vault string, cfg *config.Config) error {
+	return withVault(vault, cfg, func(v *sqlite.Vault) error {
+		gaps, err := v.SearchIndexGaps(context.Background())
+		if err != nil {
+			return err
+		}
+		return searchIndexError(gaps)
+	})
+}
+
+// searchIndexError is checkSearchIndex's wording.
+func searchIndexError(g sqlite.SearchIndexGaps) error {
+	if g == (sqlite.SearchIndexGaps{}) {
+		return nil
+	}
+	var parts []string
+	if g.Missing > 0 {
+		parts = append(parts, fmt.Sprintf("%d units are missing from the word index, so a word search cannot find them", g.Missing))
+	}
+	if g.Orphaned > 0 {
+		noun := "entries name"
+		if g.Orphaned == 1 {
+			noun = "entry names"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s no unit and can point a search at the wrong one", g.Orphaned, noun))
+	}
+	return fmt.Errorf("%s. `nooma reindex` will rebuild it (%s)", strings.Join(parts, "; "), reindexNotYet)
+}
+
+// configuredEmbeddingModel is the model the embedding task's provider names,
+// "" when no embedding task is bound to a configured provider.
+func configuredEmbeddingModel(cfg *config.Config) string {
+	binding, bound := cfg.Tasks["embedding"]
+	if !bound {
+		return ""
+	}
+	return cfg.Providers[binding.Provider].Model
+}
+
+// withVault opens the vault read-only for one check, so doctor never migrates
+// it and cannot write it (I55).
 func withVault(vault string, cfg *config.Config, fn func(*sqlite.Vault) error) error {
 	dbPath, err := cfg.DatabasePath(vault)
 	if err != nil {
@@ -704,7 +816,7 @@ func withVault(vault string, cfg *config.Config, fn func(*sqlite.Vault) error) e
 		return fmt.Errorf("the database %s is missing", filepath.Base(dbPath))
 	}
 
-	v, err := sqlite.Open(context.Background(), dbPath)
+	v, err := sqlite.OpenReadOnly(context.Background(), dbPath)
 	if err != nil {
 		return err
 	}

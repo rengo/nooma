@@ -225,31 +225,36 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		}
 	})
 
-	// D18b row 2 (spec R6.3, design D18): CountLiveWithoutEmbedding counts
-	// every EnsureUnit'd unit that never received a Put, regardless of
-	// model — a unit embedded under any model is not a gap. The fake has no
-	// notion of unit status (EnsureUnit is a no-op over the real store,
-	// present only for the foreign key; the fake's own EnsureUnit now
-	// tracks the id instead), so this case treats every ensured unit as
-	// live — archived-exclusion is an L3-only case
-	// (embeddingrepo_integration_test.go), because only a real vault's
-	// status column can express it (I02's read-side filter).
-	t.Run("CountLiveWithoutEmbedding counts every ensured unit with no embedding at all", func(t *testing.T) {
+	// D18b row 2 (spec R6.3, design D18), made model-aware (I21):
+	// CountLiveWithoutEmbedding counts every EnsureUnit'd unit holding no
+	// vector under the asked model — none at all, or only another model's.
+	// Recall reads the configured model's vectors alone, so a unit embedded
+	// under another is as unreachable by meaning as one never embedded. The
+	// fake has no notion of unit status, so every ensured unit is live here;
+	// archived-exclusion is an L3-only case (embeddingrepo_integration_test.go).
+	t.Run("CountLiveWithoutEmbedding counts every ensured unit with no vector under the model", func(t *testing.T) {
 		repo := newRepo(t)
 		repo.EnsureUnit(t, "unit-embedded")
+		repo.EnsureUnit(t, "unit-other-model")
 		repo.EnsureUnit(t, "unit-bare")
 		ctx := context.Background()
 
 		if err := repo.Put(ctx, fixtureEmbedding("unit-embedded", "model-a", []float32{1, 0, 0})); err != nil {
 			t.Fatalf("Put: %v", err)
 		}
+		if err := repo.Put(ctx, fixtureEmbedding("unit-other-model", "model-b", []float32{0, 1, 0})); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
 
-		count, err := repo.CountLiveWithoutEmbedding(ctx)
+		count, err := repo.CountLiveWithoutEmbedding(ctx, "model-a")
 		if err != nil {
 			t.Fatalf("CountLiveWithoutEmbedding: %v", err)
 		}
-		if count != 1 {
-			t.Errorf("CountLiveWithoutEmbedding = %d, want 1 (unit-bare only)", count)
+		if count != 2 {
+			t.Errorf("CountLiveWithoutEmbedding(model-a) = %d, want 2 (unit-other-model and unit-bare)", count)
+		}
+		if count, _ := repo.CountLiveWithoutEmbedding(ctx, "model-b"); count != 2 {
+			t.Errorf("CountLiveWithoutEmbedding(model-b) = %d, want 2 (unit-embedded and unit-bare)", count)
 		}
 	})
 
@@ -258,7 +263,7 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 	t.Run("CountLiveWithoutEmbedding is zero when nothing has been ensured", func(t *testing.T) {
 		repo := newRepo(t)
 
-		count, err := repo.CountLiveWithoutEmbedding(context.Background())
+		count, err := repo.CountLiveWithoutEmbedding(context.Background(), "model-a")
 		if err != nil {
 			t.Fatalf("CountLiveWithoutEmbedding: %v", err)
 		}

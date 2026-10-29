@@ -28,7 +28,12 @@ positioning.
 Day one looks like this: `nooma init` creates the vault and a wizard writes your provider
 configuration; `nooma serve` starts the API, the UI, the scheduler and (if enabled) the Telegram
 channel in one process; `nooma doctor` checks the vault, the configuration and that your provider
-returns well-formed JSON; `nooma status` reports on a vault without starting it.
+returns well-formed JSON, without changing the vault: it can run beside `serve`, and it says
+whether a newer binary is needed, whether `serve` will upgrade the vault, which process holds it,
+how many notes have no vector for the configured embedding model and whether the word index
+matches the notes; `nooma status` reports on a vault without starting it. When notes lack the
+embedding model's vector, `serve` says so in one line at start: they are found by their words
+only until they are re-embedded.
 
 ---
 
@@ -427,7 +432,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Timer list and cancel from the UI (`/ui/timers`); answering Today's relation question from the UI | Shipped in `m4f` | doc 02 §4, §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Shipped in M5: signals from every surface (ADR-0052), the relation and goal cadence `learn` pass (ADR-0053, ADR-0055), the summary with undo and release (ADR-0056) | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
-| `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
+| `nooma doctor` without changing the vault: read-only, schema behind or ahead, the lock holder, coverage per embedding model, the word index checked; a boot warning when vectors are missing | Shipped in M6 (B) | ADR-0059; doc 03 |
+| `nooma export`/`import`, `doctor`'s provider, channel and hardware checks, reindex, release builds | Planned: M6 | 05 §M6 |
 | Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
 
 Platform note: Linux and Windows are exercised in CI. `darwin` and ARM targets are build-checked

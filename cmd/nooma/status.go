@@ -123,8 +123,11 @@ func readEnvFile(path string) (map[string]string, error) {
 	return config.ParseEnvFile(f)
 }
 
+// schemaVersion reads the file's own schema version through a read-only
+// connection: sqlite.Open would migrate a vault behind this binary, and status
+// must report a vault as it is (I55's rule, applied here too).
 func schemaVersion(dbPath string) (int, error) {
-	vault, err := sqlite.Open(context.Background(), dbPath)
+	vault, err := sqlite.OpenReadOnly(context.Background(), dbPath)
 	if err != nil {
 		return 0, err
 	}

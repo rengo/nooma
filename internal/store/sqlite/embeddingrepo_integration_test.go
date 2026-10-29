@@ -238,7 +238,7 @@ func TestEmbeddingRepo_CountLiveWithoutEmbeddingExcludesArchived(t *testing.T) {
 		t.Fatalf("archiving unit-archived: %v", err)
 	}
 
-	count, err := h.CountLiveWithoutEmbedding(ctx)
+	count, err := h.CountLiveWithoutEmbedding(ctx, "model-a")
 	if err != nil {
 		t.Fatalf("CountLiveWithoutEmbedding: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestEmbeddingRepo_CountLiveWithoutEmbeddingIsZeroOnAFreshVault(t *testing.T
 	v := openTestVault(t)
 	h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
 
-	count, err := h.CountLiveWithoutEmbedding(context.Background())
+	count, err := h.CountLiveWithoutEmbedding(context.Background(), "model-a")
 	if err != nil {
 		t.Fatalf("CountLiveWithoutEmbedding: %v", err)
 	}
