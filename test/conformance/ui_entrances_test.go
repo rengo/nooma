@@ -29,7 +29,7 @@ import (
 func TestUIEntrances_DepsExposeOnlyDeclaredMethods(t *testing.T) {
 	t.Parallel()
 
-	allowedMethods := map[string]bool{"Today": true, "Browse": true, "Detail": true, "ForText": true, "Capture": true, "ByFacet": true, "Edit": true, "Retire": true, "Page": true, "Preferences": true, "Save": true, "View": true, "Update": true, "Neighbourhood": true, "Confirm": true, "Reject": true, "Undo": true, "Release": true, "Live": true, "Cancel": true}
+	allowedMethods := map[string]bool{"Today": true, "Browse": true, "Detail": true, "ForText": true, "Capture": true, "ByFacet": true, "Edit": true, "Retire": true, "Page": true, "Preferences": true, "Save": true, "View": true, "Update": true, "Neighbourhood": true, "Confirm": true, "Reject": true, "Undo": true, "Release": true, "Live": true, "Cancel": true, "ConfirmQuestion": true, "RejectQuestion": true}
 
 	typ := reflect.TypeOf(ui.Deps{})
 	for i := 0; i < typ.NumField(); i++ {

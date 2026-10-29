@@ -9,6 +9,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/core/focus"
 	"github.com/rengo/nooma/internal/core/prospection"
+	"github.com/rengo/nooma/internal/ports"
 )
 
 // Today is what GET /ui renders once a TodayReader is wired (design m4a
@@ -18,10 +19,21 @@ import (
 // service and this template (§3.1's own ruling that ui imports brain only
 // for its output types).
 templ Today(today brain.Today, serving Serving) {
-	@Page("nooma", todayBody(today, serving))
+	@Page("nooma", todayBody(today, serving, nil))
 }
 
-templ todayBody(today brain.Today, serving Serving) {
+// TodayAnswered is Today after its question was answered from the page, with
+// the answer's notice above it.
+templ TodayAnswered(today brain.Today, serving Serving, notice graphNotice) {
+	@Page("nooma", todayBody(today, serving, &notice))
+}
+
+templ todayBody(today brain.Today, serving Serving, notice *graphNotice) {
+	<div id="today-result" aria-live="polite">
+		if notice != nil {
+			<p data-outcome={ notice.Outcome }>{ notice.Message }</p>
+		}
+	</div>
 	<div data-grid>
 		for _, f := range today.Focuses {
 			<section data-focus={ string(f.Kind) }>
@@ -60,7 +72,7 @@ templ todayBody(today brain.Today, serving Serving) {
 				}
 			</ul>
 			if today.Digest.Question != nil {
-				<p data-question>{ "Question: " + today.Digest.Question.FromContent + " — " + today.Digest.Question.ToContent }</p>
+				@todayQuestion(*today.Digest.Question)
 			}
 			if today.Digest.Goal != "" {
 				<p data-goal>{ today.Digest.Goal }</p>
@@ -88,6 +100,25 @@ templ todayBody(today brain.Today, serving Serving) {
 				<li>{ "Cookie auth: " + formatCookieAuth(serving.CookieAuth) }</li>
 			</ul>
 		</section>
+	</div>
+}
+
+// todayQuestion is the question the next digest asks, answerable here by its
+// id (I09): yes confirms the link, no deletes it, as the chat's answer does.
+templ todayQuestion(q ports.RelationQuestion) {
+	<div data-question-id={ q.ID }>
+		<p data-question>{ "Question: " + q.FromContent + " — " + q.ToContent }</p>
+		<p>Are these two related?</p>
+		<form method="post" action={ templ.URL("/ui/questions/" + q.ID + "/confirm") } hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
+			<button type="submit">
+				@submitLabel("Yes, they are", "Confirming…")
+			</button>
+		</form>
+		<form method="post" action={ templ.URL("/ui/questions/" + q.ID + "/reject") } hx-boost="true" hx-disabled-elt="find button[type=submit]" hx-sync="this:drop">
+			<button type="submit">
+				@submitLabel("No, delete the link", "Deleting…")
+			</button>
+		</form>
 	</div>
 }
 

@@ -84,6 +84,22 @@ func (c countingCuration) Reject(context.Context, string) error {
 	return nil
 }
 
+// countingQuestions is this file's ui.Questions stub on the same counter:
+// both answers are writes and count.
+type countingQuestions struct {
+	calls *int
+}
+
+func (c countingQuestions) ConfirmQuestion(context.Context, string) error {
+	*c.calls++
+	return nil
+}
+
+func (c countingQuestions) RejectQuestion(context.Context, string) error {
+	*c.calls++
+	return nil
+}
+
 // countingTimers is this file's ui.Timers stub: Cancel, the one write,
 // counts; Live is a read and counts nothing.
 type countingTimers struct {
@@ -96,6 +112,11 @@ func (c countingTimers) Cancel(context.Context, string) (brain.ListedTimer, erro
 	*c.calls++
 	return brain.ListedTimer{}, nil
 }
+
+// emptyToday is Today with nothing on it, which a question answer renders.
+type emptyToday struct{}
+
+func (emptyToday) Today(context.Context) (brain.Today, error) { return brain.Today{}, nil }
 
 // centreOnlyGraph redraws any unit as a centre alone: what a curation POST
 // needs to answer.
@@ -156,6 +177,8 @@ var uiCrossOriginBodies = map[string]string{
 	"POST /ui/graph/relations/{id}/confirm": "unit=unit-1",
 	"POST /ui/graph/relations/{id}/reject":  "unit=unit-1",
 	"POST /ui/timers/{id}/cancel":           "",
+	"POST /ui/questions/{id}/confirm":       "",
+	"POST /ui/questions/{id}/reject":        "",
 }
 
 // uiCrossOriginBodyExempt lists the rows that have no valid-body entry, each
@@ -340,7 +363,7 @@ func TestUINonGETLeavesRefuseCrossOrigin(t *testing.T) {
 				return httpapi.Handler(httpapi.Deps{
 					Version: "test",
 					Token:   token,
-					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Learning: countingLearning{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}, Timers: countingTimers{calls: &calls}}),
+					UI:      ui.New(ui.Deps{Capture: countingCapturer{calls: &calls}, Beliefs: countingBeliefs{calls: &calls}, Preferences: countingPreferences{calls: &calls}, Admin: countingAdmin{calls: &calls}, Learning: countingLearning{calls: &calls}, Curation: countingCuration{calls: &calls}, Graph: centreOnlyGraph{}, Questions: countingQuestions{calls: &calls}, Timers: countingTimers{calls: &calls}, Today: emptyToday{}}),
 				})
 			}
 

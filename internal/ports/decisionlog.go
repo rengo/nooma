@@ -240,11 +240,12 @@ const (
 	ActionCaptureRelationCheckInUnmatched DecisionAction = "capture.relation_checkin.unmatched"
 
 	// ActionRelationConfirmed records a relation the user confirmed from
-	// the graph (ADR-0050), written after the raise with the confidence
-	// before and after, as config.updated is.
+	// the graph (ADR-0050) or by a yes to Today's question (I09), written
+	// after the raise with the confidence before and after, as
+	// config.updated is.
 	ActionRelationConfirmed DecisionAction = "relation.confirmed"
 	// ActionRelationRejected is the pre-image row of a relation the user
-	// deletes from the graph, written before the delete (ADR-0016's order):
+	// deletes from the graph or by a no to Today's question, written before the delete (ADR-0016's order):
 	// the whole row as it was, and next as nulls, because the delete leaves
 	// nothing else that remembers it.
 	ActionRelationRejected DecisionAction = "relation.rejected"

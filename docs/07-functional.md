@@ -221,7 +221,8 @@ of a black box.
    it asked, because a model asked to name an id can name a plausible wrong one
    ([doc 02 §5 step 1](02-cognitive-core.md#5-capture)). *Yes* raises the relation's
    confidence. *No* deletes the relation, after recording the rejection. An answer with
-   nothing open to answer changes nothing and is logged.
+   nothing open to answer changes nothing and is logged. The same question can be answered on
+   Today in the browser, before the digest asks it (see [E](#e-the-ui-mirror)).
 6. **Lets a question lapse.** One that goes unanswered through enough digests is marked
    expired, never deleted, and is not asked again.
 7. **Asks its own check-ins.** A task nudge's *engaged* or *declined* resolves the most recent
@@ -293,7 +294,10 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
      (`focus_size`, [§13](02-cognitive-core.md#13-calibration--numbers-vs-mechanisms)). Focus is
      computed on demand and never stored ([doc 02 §3](02-cognitive-core.md#3-focus--computed-never-persisted)).
    - **Pending digest.** What the next digest would carry, including any relation question
-     waiting to be asked, worded from each unit as it is now. Today is a page, so it lists every
+     waiting to be asked, worded from each unit as it is now. That question can be answered right
+     there: **Yes, they are** confirms the link and **No, delete the link** deletes it, exactly as
+     answering the digest would, and Today comes back saying what was done. A question already
+     answered elsewhere is refused and changes nothing. Today is a page, so it lists every
      reminder waiting; a digest that reaches Telegram's message bound sends fewer and says "and N more". Looking at it changes nothing in the vault: **viewing is not
      delivering** ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    - **System.** Last consolidation, the latest energy reading and where it came from, counts of
@@ -420,8 +424,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat: "¿qué temporizadores tengo?" lists the live timers, "cancelá el del horno" cancels the one it names through that list, asks which when it cannot tell | Shipped | doc 02 §8; ADR-0051 |
-| Timer list and cancel from the UI (`/ui/timers`) | Shipped in `m4f` | doc 02 §8; 05 §M3, §M4 |
-| Answering Today's relation question from the UI | Pending: `m4f` | doc 02 §4; 05 §M4 |
+| Timer list and cancel from the UI (`/ui/timers`); answering Today's relation question from the UI | Shipped in `m4f` | doc 02 §4, §8; 05 §M3, §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Shipped in M5: signals from every surface (ADR-0052), the relation and goal cadence `learn` pass (ADR-0053, ADR-0055), the summary with undo and release (ADR-0056) | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
