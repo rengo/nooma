@@ -168,8 +168,8 @@ func exportDestination(vault, dest string) (string, error) {
 }
 
 // refuseEndpointCredentials refuses a provider endpoint carrying a user or
-// password in its URL: nooma.yml goes into the bundle as it is, and a secret
-// belongs in .env, which never does.
+// password, or a query string, in its URL: nooma.yml goes into the bundle as
+// it is, byte for byte, and a secret belongs in .env, which never does.
 func refuseEndpointCredentials(cfg *config.Config) error {
 	names := make([]string, 0, len(cfg.Providers))
 	for name := range cfg.Providers {
@@ -181,8 +181,15 @@ func refuseEndpointCredentials(cfg *config.Config) error {
 		if endpoint == "" {
 			continue
 		}
-		if u, err := url.Parse(endpoint); err == nil && u.User != nil {
+		u, err := url.Parse(endpoint)
+		if err != nil {
+			return fmt.Errorf("provider %s: its endpoint does not parse as a URL: %w", name, err)
+		}
+		if u.User != nil {
 			return fmt.Errorf("provider %s: its endpoint carries credentials in the URL, which would travel in the bundle; move the secret to .env (api_key_env) and export again", name)
+		}
+		if u.RawQuery != "" {
+			return fmt.Errorf("provider %s: its endpoint carries a query string, which can hold a key and would travel in the bundle; remove it, put any secret in .env (api_key_env), and export again", name)
 		}
 	}
 	return nil

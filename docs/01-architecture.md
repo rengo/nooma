@@ -238,6 +238,10 @@ channels:
 Philosophy: reusable providers (one key, N tasks), explicit tasks (nothing hidden in
 defaults), free cloud+local mixing, separated secrets.
 
+The file is read strictly: a key the schema does not have, a key written twice, or a second YAML
+document after `---` is refused when it loads, naming the problem. Comments are free text and are
+never read.
+
 **There is no `schedules:` block, and there used to be.** It documented two cron expressions
 that nothing ever read — Nooma consolidates at 03:00 local and runs its proactive check every
 five minutes, both as constants, and no code here parses a cron expression at all. The keys are

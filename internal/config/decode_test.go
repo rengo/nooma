@@ -302,3 +302,23 @@ func TestDecodeAcceptsAnEmptyDocument(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeRejectsASecondDocument: nooma reads one YAML document. A second
+// was never decoded, so nothing in it was checked, a key that does not exist
+// included, and `nooma export` copies the file as it is: whatever it said
+// would travel in a bundle. A document marker alone, before or after the
+// one document, is not a second document.
+func TestDecodeRejectsASecondDocument(t *testing.T) {
+	_, err := Decode(strings.NewReader("server:\n  bind: 127.0.0.1\n---\napi_key: sk-secret\n"))
+	if err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
+		t.Errorf("Decode of two documents = %v, want a refusal saying nooma reads one", err)
+	}
+	for name, doc := range map[string]string{
+		"a leading marker":  "---\nserver:\n  bind: 127.0.0.1\n",
+		"a trailing marker": "server:\n  bind: 127.0.0.1\n---\n",
+	} {
+		if _, err := Decode(strings.NewReader(doc)); err != nil {
+			t.Errorf("%s: Decode = %v, want one document accepted", name, err)
+		}
+	}
+}

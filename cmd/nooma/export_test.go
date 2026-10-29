@@ -184,6 +184,20 @@ func TestExport_RefusesAndLeavesNoFile(t *testing.T) {
 			writeYML(t, vault, "providers:\n  local:\n    type: ollama\n    model: m\n    endpoint: http://me:hunter2@localhost:11434\n")
 			return filepath.Join(t.TempDir(), "x.noomabundle")
 		}, "credentials"},
+		"an endpoint with a query string": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "providers:\n  cloud:\n    type: openai\n    model: m\n    endpoint: https://api.example.com/v1?key=sk-secret\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "query string"},
+		// The decoder refuses a key the schema has no field for, so a literal
+		// secret under one never reaches the bundle.
+		"an unknown key holding a secret": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "api_key: sk-secret\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "unknown field"},
+		"a second YAML document": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "server:\n  bind: 127.0.0.1\n---\napi_key: sk-secret\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "more than one YAML document"},
 		"a name that is not a .noomabundle": {func(t *testing.T, vault string) string {
 			return filepath.Join(t.TempDir(), "x.zip")
 		}, ".noomabundle"},

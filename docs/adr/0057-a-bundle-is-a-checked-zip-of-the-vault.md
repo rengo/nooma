@@ -45,9 +45,12 @@ The client chose copy only, never merge, and no password on the bundle (2026-10-
    - `embedding_models`, each model with how many embedding rows the database holds under it;
    - `files`: each file's path, size and sha256.
 2. **Never in a bundle**: `.env` (secrets stay with the deployment), `derived/` (recomputable),
-   `logs/` and `nooma.lock`. `nooma.yml` holds only the names of the variables that carry
-   secrets; export refuses a provider endpoint carrying a user or password in its URL, because
-   that file goes in as it is. A link or any non-regular file under `attachments/` is refused,
+   `logs/` and `nooma.lock`. `nooma.yml` goes in byte for byte. Its schema has no field for a
+   literal secret, only the names of the variables that carry one, and the decoder refuses a
+   key it does not know, a repeated key, and a second YAML document when the file loads, so
+   none of those reaches a bundle. What the file can still carry is text nooma never reads: a
+   comment travels with it. Export refuses a provider endpoint carrying a user or password, or
+   a query string, in its URL, since a URL is the one value that can embed a key. A link or any non-regular file under `attachments/` is refused,
    since it could carry a file from outside the vault.
 3. **`nooma export <vault> <file.noomabundle>`** takes no lock and runs beside serve. The
    database is backup's own snapshot (`VACUUM INTO` over a read-only connection) that passed

@@ -53,6 +53,15 @@ func Decode(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("nooma.yml: %w", err)
 	}
 
+	// One document. A second one would never be decoded, so nothing in it
+	// would be checked, a key that does not exist included, and the file
+	// still travels as it is in a bundle (ADR-0057). A bare `---` marker
+	// before or after the document is not a second one.
+	var rest Config
+	if err := dec.Decode(&rest); !errors.Is(err, io.EOF) {
+		return nil, errors.New("nooma.yml: it holds more than one YAML document; nooma reads one, so remove everything after the second `---`")
+	}
+
 	return &cfg, nil
 }
 

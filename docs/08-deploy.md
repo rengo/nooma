@@ -266,6 +266,16 @@ sudo cp /srv/nooma/backups/brain-20261029.noomabundle ~ && sudo chown "$USER" ~/
 sudo rm /srv/nooma/backups/brain-20261029.noomabundle
 ```
 
+`nooma.yml` travels byte for byte. Nooma refuses a key it does not know, so a pasted
+`api_key: sk-…` stops the export instead of going in, and it refuses an endpoint whose URL carries
+a user, a password or a query string. A **comment** is never read and goes in as written: do not
+keep a secret in a comment.
+
+An export that is interrupted (killed, or the host loses power) leaves its `.partial` file and
+a working folder named `.nooma-export-…` in `/backups`. Neither is a bundle; delete both by hand
+(`sudo rm -r /srv/nooma/backups/*.noomabundle.partial /srv/nooma/backups/.nooma-export-*`) and
+export again.
+
 The bundle is the whole brain, unencrypted. Move it over Tailscale (`scp` to a machine on the
 tailnet), not through a shared folder. The daily backup job neither uploads nor prunes it: it
 only handles files named `nooma-*.db` and `nooma-*.yml`.
