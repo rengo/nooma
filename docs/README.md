@@ -37,7 +37,7 @@ against a real migrated vault, on Linux and Windows.
 **M4, the mirror (the complete UI), is in progress.** `m4a` (Today), `m4b` (units, capture and
 correction), `m4c` (focus held by hysteresis), `m4e` (beliefs), `m4e-activity` (activity) and `m4e2` (admin) have shipped and
 are archived. `m4d` (graph, drawn on the server as SVG, with relation curation, ADR-0050) has shipped. `m4f`
-(timer list and cancel, from chat and from `/ui/timers`) has shipped; answering Today's question in place is its last piece. M5 is the learner.
+(timer list and cancel, from chat and from `/ui/timers`, and Today's question answered in place) has shipped. M5 is the learner.
 
 [`07-functional.md`](07-functional.md) carries the per-capability status table, and
 [`05-build-plan.md`](05-build-plan.md) the milestone criteria.

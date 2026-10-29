@@ -109,6 +109,9 @@ func TestUIDeps_NilServicesStayNilInterfaces(t *testing.T) {
 	if deps.Curation != nil {
 		t.Error("Curation: want a nil interface for a nil *brain.CurationService, got non-nil")
 	}
+	if deps.Questions != nil {
+		t.Error("Questions: want a nil interface for a nil *brain.CurationService, got non-nil")
+	}
 	if deps.Timers != nil {
 		t.Error("Timers: want a nil interface for a nil *brain.TimersService, got non-nil")
 	}
@@ -162,6 +165,18 @@ func TestUIDeps_PassesTheCurationServiceThrough(t *testing.T) {
 
 	if deps.Curation != ui.Curator(svc) {
 		t.Errorf("Curation = %v, want the service handed to uiDeps", deps.Curation)
+	}
+}
+
+// TestUIDeps_TheCurationServiceAnswersTodaysQuestion: the graph's curation
+// is also Today's answer, or a yes on Today would answer 503.
+func TestUIDeps_TheCurationServiceAnswersTodaysQuestion(t *testing.T) {
+	svc := brain.NewCurationService(nil, nil, nil, nil, nil, nil, nil)
+
+	deps := uiDeps(nil, nil, nil, nil, nil, nil, nil, nil, nil, svc, nil, nil, ui.Serving{})
+
+	if deps.Questions != ui.Questions(svc) {
+		t.Errorf("Questions = %v, want the curation service handed to uiDeps", deps.Questions)
 	}
 }
 

@@ -358,7 +358,9 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 		deps.Graph = graph
 	}
 	if curation != nil {
+		// The graph's curation and Today's answer are one service (I09, I10).
 		deps.Curation = curation
+		deps.Questions = curation
 	}
 	if learning != nil {
 		deps.Learning = learning

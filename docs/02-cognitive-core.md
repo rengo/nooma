@@ -387,6 +387,13 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
     this system produces. A digest with an open question is sent **even when it carries no
     items**: "an empty digest is not sent" is about there being nothing to say, and a question is
     not nothing to say.
+  - **Answered from Today too**: Today previews the question the next digest asks, with a yes and
+    a no. Each answer carries the question's id, and the relation it is about is read from the
+    question store by that id, never named by the page, as the chat's answer is read from the
+    store and never from the model. Yes confirms the relation, no deletes it, as the graph does:
+    the same signal, the same `relation.*` row naming the question it answered, and every
+    question waiting about that relation closes. An id the store does not hold open (answered,
+    expired, or its relation gone or dormant) is refused, and nothing is written.
   - **When the asking stops**: a question that `prospection.MaxDigestDeferrals` digests have gone
     out on without an answer transitions to `resolution = expired` — a **state transition, never
     a delete** (nothing is deleted in the vault). The count is digests, not elapsed days, read
@@ -2229,8 +2236,8 @@ verdict that emits none teaches it nothing:
 | edits a belief's text | `belief_edit` | negative | belief | UI |
 | saves a belief Nooma wrote unchanged (a claim, §10) | `belief_edit` | positive | belief | UI |
 | retires a belief | `belief_delete` | negative | belief | UI |
-| deletes a relation, or answers "no" to its question | `relation_reject` | negative | relation | graph, chat |
-| confirms a relation, or answers "yes" to its question | `relation_confirm` | positive | relation | graph, chat |
+| deletes a relation, or answers "no" to its question | `relation_reject` | negative | relation | graph, Today, chat |
+| confirms a relation, or answers "yes" to its question | `relation_confirm` | positive | relation | graph, Today, chat |
 | answers a check-in done or engaged, or says a listed item is done (I42) | `nudge_engaged` | positive | trigger | any capture |
 | answers a check-in drop or declined | `nudge_declined` | negative | trigger | any capture |
 | puts a check-in off ("not yet", a bare "no") | `nudge_ack` | neutral | trigger | any capture |
@@ -2413,8 +2420,9 @@ LOAD is cared for (observable), emotions are not interpreted. If forced to choos
   never set. Submitting the values already in force writes nothing, and on a vault with no config
   row submitting a default creates neither the row nor a log entry; a stored value outside what
   the runtime accepts is not in force, so submitting the value the runtime fell back to repairs
-  it and is logged. A relation confirmed from the graph writes `relation.confirmed` after the
-  raise, with the confidence before and after; one deleted from the graph writes
+  it and is logged. A relation confirmed from the graph, or by a yes to Today's question, writes
+  `relation.confirmed` after the raise, with the confidence before and after (and, for an answer,
+  the question's id); one deleted from the graph, or by a no, writes
   `relation.rejected` *before* anything else, carrying the row as it was (type, strength,
   confidence, who created it) with the next values null, because once the relation is deleted
   nothing else remembers it, and a row that cannot be written stops the delete. When the write lands and its row or its learning signal cannot be

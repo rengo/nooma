@@ -252,6 +252,9 @@ func TestGraphConfirm_RaisesConfidenceEmitsTheSignalAndLogsBeforeAndAfter(t *tes
 	if len(rows) != 1 || rows[0].Action != ports.ActionRelationConfirmed {
 		t.Fatalf("decision rows = %+v, want one %s", rows, ports.ActionRelationConfirmed)
 	}
+	if !strings.Contains(rows[0].Rationale, "confirmed by the user from the graph") {
+		t.Errorf("rationale = %q, want it to say the graph confirmed it", rows[0].Rationale)
+	}
 	top, previous, next := decodeCurationRow(t, rows[0])
 	if top["relation_id"] != "r-near" || top["from_unit_id"] != "centre" {
 		t.Errorf("row context does not name the relation: %s", rows[0].Context)
