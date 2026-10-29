@@ -67,8 +67,9 @@ const (
 	ActionCaptureArmedTrigger       DecisionAction = "capture.armed.trigger"
 	ActionCaptureArmedRecurring     DecisionAction = "capture.armed.recurring_trigger"
 	ActionCaptureArmRefused         DecisionAction = "capture.arm.refused"
-	// ActionCaptureTimerCancelled: a chat cancel moved a listed timer
-	// pending -> cancelled (ADR-0051).
+	// ActionCaptureTimerCancelled: a cancel from chat or from /ui/timers
+	// moved a listed timer pending -> cancelled (ADR-0051); its context
+	// names the surface.
 	ActionCaptureTimerCancelled  DecisionAction = "capture.timer.cancelled"
 	ActionCheckTriggerExpired    DecisionAction = "check.trigger.expired"
 	ActionCheckTriggerLapsed     DecisionAction = "check.trigger.lapsed"

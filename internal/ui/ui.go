@@ -94,7 +94,9 @@ type Deps struct {
 	// Graph is /ui/graph's; Curation, its relation confirm and delete.
 	Graph    GraphReader
 	Curation Curator
-	Serving  Serving
+	// Timers is /ui/timers'.
+	Timers  Timers
+	Serving Serving
 	// Now reads the injected clock (ports.Clock.Now); the UI takes its zone from
 	// the instant it returns and nothing else. A func, not ports.Clock, so Deps
 	// stays free of interfaces that are not a brain entrance (I22's gate).
@@ -174,6 +176,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveLearningAct(w, r, learningUndo)
 	case "POST /ui/learning/release":
 		h.serveLearningAct(w, r, learningRelease)
+	case "GET /ui/timers":
+		h.serveTimers(w, r)
+	case "POST /ui/timers/{id}/cancel":
+		h.serveTimerCancel(w, r)
 	default:
 		http.NotFound(w, r)
 	}

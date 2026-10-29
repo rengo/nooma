@@ -162,9 +162,10 @@ func runServe(args []string, out, errOut io.Writer) error {
 	graph := wireGraph(db)
 	curation := wireCuration(db)
 	learning := wireLearning(db)
+	timers := wireTimers(db)
 	var uiHandler *ui.Handler
 	if resolveUIEnabled(*cfg.Server.UI, noUI) {
-		uiHandler = ui.New(uiDeps(today, units, recall, capture, beliefs, activity, preferences, admin, graph, curation, learning, ui.Serving{Bind: addr, CookieAuth: token != ""}))
+		uiHandler = ui.New(uiDeps(today, units, recall, capture, beliefs, activity, preferences, admin, graph, curation, timers, learning, ui.Serving{Bind: addr, CookieAuth: token != ""}))
 	}
 	server := &http.Server{
 		Handler:           httpapi.Handler(httpapi.Deps{Version: buildString(), Capture: capture, Recall: recall, Learning: learning, Token: token, UI: uiHandler}),
@@ -327,7 +328,7 @@ func resolveUIEnabled(serverUI, noUIFlag bool) bool {
 // and capture do, on a vault with no providers configured (wireBrain's own
 // degrade, cmd/nooma/wiring.go) — this function guards all five alike
 // rather than only the ones that need it today.
-func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, activity *brain.ActivityService, preferences *brain.PreferencesService, admin *brain.AdminService, graph *brain.GraphService, curation *brain.CurationService, learning *brain.LearningService, serving ui.Serving) ui.Deps {
+func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.RecallService, capture *brain.CaptureService, beliefs *brain.BeliefsService, activity *brain.ActivityService, preferences *brain.PreferencesService, admin *brain.AdminService, graph *brain.GraphService, curation *brain.CurationService, timers *brain.TimersService, learning *brain.LearningService, serving ui.Serving) ui.Deps {
 	deps := ui.Deps{Serving: serving, Now: systemClock{}.Now}
 	if today != nil {
 		deps.Today = today
@@ -361,6 +362,9 @@ func uiDeps(today *brain.TodayService, units *brain.UnitsService, recall *brain.
 	}
 	if learning != nil {
 		deps.Learning = learning
+	}
+	if timers != nil {
+		deps.Timers = timers
 	}
 	return deps
 }

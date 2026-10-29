@@ -271,8 +271,9 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
    Nooma asks "¿Cuál cancelo?" with the list, and "el 2" answers it
    ([ADR-0051](adr/0051-timers-are-listed-and-cancelled-through-the-shown-list.md)).
 
-**Not yet:** listing and cancelling from the UI is owned by the last slice of M4 (see the
-[status table](#status)).
+7. **Lists and cancels from the UI.** `/ui/timers` lists the same live timers, soonest first,
+   each with a Cancel button. A cancel there is the chat's cancel, logged the same way, and a
+   timer that rang in between is said to be no longer set (see [E](#e-the-ui-mirror)).
 
 ---
 
@@ -372,6 +373,10 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
     **Let Nooma learn again** releases a pin, including days saved in Admin, and Nooma counts
     only what you do from then on. A refusal changes nothing and says so; both acts show up in
     Activity. Before anything is learned, the page says so in one line.
+14. **Lists and cancels timers** (`/ui/timers`). Every timer still set, soonest first, at its
+    time, each with **Cancel**. A cancel is the chat's cancel: the timer stops, never deleted,
+    and Activity shows it; one that already rang is said to be no longer set. With none set,
+    the page says so.
 
 An empty Today, Units or Beliefs page says in one line what will appear there and how, as
 Activity does, rather than rendering nothing; so does a unit page's relations section when the
@@ -415,7 +420,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Activity view (the `decision_log` told as a story, newest first, read-only) | Shipped in `m4e-activity` | 05 §M4; doc 02 §11 |
 | Admin view (a small set of settings, job status) | Shipped in `m4e2` | 05 §M4; doc 02 §11 |
 | Timer list and cancel from chat: "¿qué temporizadores tengo?" lists the live timers, "cancelá el del horno" cancels the one it names through that list, asks which when it cannot tell | Shipped | doc 02 §8; ADR-0051 |
-| Timer list and cancel from the UI; answering a pending question from the UI | Pending: `m4f` | doc 02 §8; 05 §M3, §M4 |
+| Timer list and cancel from the UI (`/ui/timers`) | Shipped in `m4f` | doc 02 §8; 05 §M3, §M4 |
+| Answering Today's relation question from the UI | Pending: `m4f` | doc 02 §4; 05 §M4 |
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Shipped in M5: signals from every surface (ADR-0052), the relation and goal cadence `learn` pass (ADR-0053, ADR-0055), the summary with undo and release (ADR-0056) | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma export`/`import`, full `doctor`, reindex, release builds | Planned: M6 | 05 §M6 |
