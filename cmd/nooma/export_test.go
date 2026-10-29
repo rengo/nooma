@@ -184,6 +184,10 @@ func TestExport_RefusesAndLeavesNoFile(t *testing.T) {
 			writeYML(t, vault, "providers:\n  local:\n    type: ollama\n    model: m\n    endpoint: http://me:hunter2@localhost:11434\n")
 			return filepath.Join(t.TempDir(), "x.noomabundle")
 		}, "credentials"},
+		"an endpoint that does not parse": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "providers:\n  local:\n    type: ollama\n    model: m\n    endpoint: http://host/%zz\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "does not parse as a URL"},
 		"an endpoint with a query string": {func(t *testing.T, vault string) string {
 			writeYML(t, vault, "providers:\n  cloud:\n    type: openai\n    model: m\n    endpoint: https://api.example.com/v1?key=sk-secret\n")
 			return filepath.Join(t.TempDir(), "x.noomabundle")
@@ -196,6 +200,16 @@ func TestExport_RefusesAndLeavesNoFile(t *testing.T) {
 		}, "unknown field"},
 		"a second YAML document": {func(t *testing.T, vault string) string {
 			writeYML(t, vault, "server:\n  bind: 127.0.0.1\n---\napi_key: sk-secret\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "more than one YAML document"},
+		// QA's two: the YAML library stops at an empty or comment-only
+		// document as if the file ended there.
+		"a document behind an empty one": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "server:\n  bind: 127.0.0.1\n---\n---\napi_key: x\n")
+			return filepath.Join(t.TempDir(), "x.noomabundle")
+		}, "more than one YAML document"},
+		"a document behind a comment-only one": {func(t *testing.T, vault string) string {
+			writeYML(t, vault, "server:\n  bind: 127.0.0.1\n---\n# c\n---\napi_key: x\n")
 			return filepath.Join(t.TempDir(), "x.noomabundle")
 		}, "more than one YAML document"},
 		"a name that is not a .noomabundle": {func(t *testing.T, vault string) string {
