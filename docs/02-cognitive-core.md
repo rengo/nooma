@@ -2311,8 +2311,8 @@ the learner does not count it.
   - Each change is one `consolidate.learn.goal_cadence` row ("raised the goal check-in
     interval 21 → 28 days: you ignored 5 of the last 5 goal check-ins") with its evidence.
 - **Transparency**: a natural-language summary of what it learned and why ("I raised the
-  same_topic threshold 0.30→0.35 — you rejected 6 of 8"), queryable and correctable (UI +
-  API). What it learns is never a black box. `brain.LearningService`
+  same_topic threshold 0.30→0.35 — you rejected 6 of 8"), queryable (UI and
+  API) and correctable (UI). What it learns is never a black box. `brain.LearningService`
   ([ADR-0056](adr/0056-an-undo-pins-and-a-release-starts-the-evidence-afresh.md), I53):
   - **The summary** is one sentence per learned value: each relation type's bar, then the goal
     cadence. Each is built from the structured decision rows, never from stored text, with the
@@ -2325,6 +2325,8 @@ the learner does not count it.
     its last change, so the learner counts only what comes after it and waits its cooldown
     (`learning.released`). It also releases an Admin-pinned goal cadence.
   - A refusal writes nothing. Nothing is deleted: no signal, no row, no relation.
+  - `/ui/learning` and `GET /learning` read the summary; undo and release are POSTs of
+    `/ui/learning`, behind the cookie and the cross-origin check like every UI write.
 
 ## 10. The self-model
 

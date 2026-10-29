@@ -193,6 +193,7 @@ var navItems = []navItem{
 	{href: "/ui/beliefs", label: "Beliefs", titles: []string{"nooma — beliefs"}},
 	{href: "/ui/activity", label: "Activity", titles: []string{"nooma — activity"}},
 	{href: "/ui/preferences", label: "Preferences", titles: []string{"nooma — preferences"}},
+	{href: "/ui/learning", label: "Learning", titles: []string{"nooma — learning"}},
 	{href: "/ui/admin", label: "Admin", titles: []string{"nooma — admin"}},
 }
 

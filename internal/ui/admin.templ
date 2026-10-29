@@ -54,7 +54,7 @@ templ adminBody(p adminPage) {
 			}
 		</ol>
 		<h3>Relation thresholds</h3>
-		<p data-hint>These are learned by the nightly learning pass (M5); not editable here.</p>
+		<p data-hint>These are learned by the nightly learning pass; not editable here. Learning says why, and undoes a change.</p>
 		<ul data-thresholds>
 			for _, l := range p.View.Learned {
 				<li data-relation-type={ l.RelationType }>{ l.RelationType }: persist at { formatNumber(l.Persist) }, surface at { formatNumber(l.Surface) }</li>
