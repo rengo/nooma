@@ -2,7 +2,7 @@
 #
 # Nooma's server image (docs/08-deploy.md). Built from the repository root:
 #
-#   docker compose -f deploy/docker/compose.yml up -d --build
+#   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.build.yml up -d --build
 
 FROM golang:1.26-bookworm AS build
 WORKDIR /src

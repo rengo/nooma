@@ -6,7 +6,7 @@ decision is [ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md).
 
 | On the host | What it is |
 |---|---|
-| `/opt/nooma` | the git clone; `deploy/docker/.env` holds the secrets (gitignored) |
+| `/opt/nooma` | the git clone, for the compose files and the backup script; `deploy/docker/.env` holds the secrets (gitignored) |
 | `/srv/nooma/data/vault` | the vault (`/data/vault` in the container) |
 | `/srv/nooma/backups` | the local backups (`/backups` in the container) |
 
@@ -14,7 +14,7 @@ Nooma is never public. It has its own compose project and network, no `VIRTUAL_H
 on the `proxy` network, and its port is published on `127.0.0.1` only. Telegram is long polling,
 so no inbound port is needed.
 
-## 1. Build and start
+## 1. Install and start
 
 ```sh
 sudo git clone https://github.com/rengo/nooma /opt/nooma && cd /opt/nooma
@@ -22,9 +22,12 @@ sudo install -d -o 65532 -g 65532 -m 0700 /srv/nooma/data /srv/nooma/backups
 sudo cp deploy/docker/.env.example deploy/docker/.env && sudo chmod 600 deploy/docker/.env
 ```
 
-The image runs as uid 65532 (distroless `nonroot`), so both directories belong to it. The image
-is built on the host from the clone: `.git` is part of the build context because the version
-stamp is `git describe`, as in the Makefile.
+The image runs as uid 65532 (distroless `nonroot`), so both directories belong to it. It is the
+published release, `ghcr.io/rengo/nooma` ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)),
+for `linux/amd64`, `arm64` and `arm/v7`: `latest` by default, the newest release that is not a
+release candidate, or the one `NOOMA_VERSION` names in `deploy/docker/.env` (`0.5.0`, no `v`).
+Nothing is compiled on the host. To run unreleased `main` instead, see
+[Building from source](#building-from-source).
 
 ### The env file
 
@@ -44,7 +47,7 @@ are not secret and live in `nooma.yml`. The zone is `TZ` in `compose.yml`.
 ### First run: create the vault
 
 ```sh
-docker compose -f deploy/docker/compose.yml build
+docker compose -f deploy/docker/compose.yml pull
 docker compose -f deploy/docker/compose.yml run --rm nooma init /data/vault
 ```
 
@@ -70,9 +73,19 @@ docker compose -f deploy/docker/compose.yml logs -f nooma   # "nooma: listening 
 There is no container healthcheck: the image has no shell or HTTP client, and the binary has
 no probe command. `restart: unless-stopped` restarts it if it exits.
 
-### A 1 GB droplet
+### Building from source
 
-If the build is killed for lack of memory (`signal: killed`), add swap once and build again:
+`compose.build.yml` builds the working tree with `deploy/docker/Dockerfile` instead of pulling,
+as `nooma:local`, so a source build never passes for a release. Add it to every command that
+creates the container:
+
+```sh
+docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.build.yml up -d --build
+```
+
+`.git` is part of the build context because the version stamp is `git describe`, as in the
+Makefile. On a 1 GB droplet, if the build is killed for lack of memory (`signal: killed`), add
+swap once and build again:
 
 ```sh
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
@@ -159,10 +172,18 @@ On a new host, do step 1 without `nooma init`, create the vault directory with
 
 ## 5. Upgrade
 
+Pull the release and recreate the container:
+
 ```sh
 cd /opt/nooma && sudo git pull
-docker compose -f deploy/docker/compose.yml up -d --build
+docker compose -f deploy/docker/compose.yml pull
+docker compose -f deploy/docker/compose.yml up -d
 ```
+
+The `git pull` brings the compose files and backup script of the newest `main`; the binary is
+the image's. With `NOOMA_VERSION` pinned, set it to the new release first. To run unreleased
+`main`, use the source build: `git pull`, then the `up -d --build` of
+[Building from source](#building-from-source).
 
 Migrations run when serve opens the vault. Take a backup first if the release notes mention a
 migration.
