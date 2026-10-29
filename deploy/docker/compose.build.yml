@@ -11,3 +11,5 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
     image: nooma:local
+    # Built here, never pulled.
+    pull_policy: build

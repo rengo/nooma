@@ -27,7 +27,9 @@ published release, `ghcr.io/rengo/nooma` ([ADR-0060](adr/0060-releases-are-built
 for `linux/amd64`, `arm64` and `arm/v7`: `latest` by default, the newest release that is not a
 release candidate, or the one `NOOMA_VERSION` names in `deploy/docker/.env` (`0.5.0`, no `v`).
 Nothing is compiled on the host. To run unreleased `main` instead, see
-[Building from source](#building-from-source).
+[Building from source](#building-from-source). Until the first release is published there is
+no image to pull: build from source, and see
+[Upgrading from a source build](#upgrading-from-a-source-build).
 
 ### The env file
 
@@ -180,10 +182,39 @@ docker compose -f deploy/docker/compose.yml pull
 docker compose -f deploy/docker/compose.yml up -d
 ```
 
-The `git pull` brings the compose files and backup script of the newest `main`; the binary is
-the image's. With `NOOMA_VERSION` pinned, set it to the new release first. To run unreleased
+`pull_policy: always` makes every `up -d` check the registry too, so a skipped `pull` still
+never runs a stale `latest`. The `git pull` brings the compose files and backup script of the
+newest `main`; the binary is the image's. With `NOOMA_VERSION` pinned, set it to the new release first. To run unreleased
 `main`, use the source build: `git pull`, then the `up -d --build` of
 [Building from source](#building-from-source).
 
 Migrations run when serve opens the vault. Take a backup first if the release notes mention a
 migration.
+
+### Upgrading from a source build
+
+A host that ran Nooma before releases existed built `nooma:local` with `up -d --build`. That
+command no longer builds: `compose.yml` has no `build:` section, so it only pulls, and before
+the first release it fails with an error naming `ghcr.io/rengo/nooma` and `denied`
+(`requested access to the resource is denied`) and leaves the old container running. GHCR
+answers an anonymous pull the same way whether the image does not exist yet or its package is
+private, so the error alone does not tell the two apart: the repository's Releases page does.
+Switch in this order:
+
+1. **Until the first release is published**, keep building from source after every
+   `git pull`:
+
+   ```sh
+   docker compose -f deploy/docker/compose.yml -f deploy/docker/compose.build.yml up -d --build
+   ```
+
+2. **After the first `v*` tag**, check that its `release` workflow is green, then make the image
+   pullable once. Either make the package public: on GitHub, the repository's **Packages** →
+   `nooma` → **Package settings** → **Danger Zone** → **Change visibility** → **Public**. Or log
+   the host in, with a classic token that has `read:packages`:
+   `echo <token> | docker login ghcr.io -u <user> --password-stdin`.
+
+3. **Then switch to pulling** (`docker compose -f deploy/docker/compose.yml pull`, then
+   `docker compose -f deploy/docker/compose.yml up -d`). The container is recreated from
+   the release, and the vault and backups are mounts, so nothing in them changes. From then
+   on, upgrade as above. `nooma:local` can be removed with `docker image rm nooma:local`.

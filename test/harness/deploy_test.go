@@ -31,6 +31,7 @@ type composeService struct {
 		Dockerfile string `yaml:"dockerfile"`
 	} `yaml:"build"`
 	Image       string            `yaml:"image"`
+	PullPolicy  string            `yaml:"pull_policy"`
 	Restart     string            `yaml:"restart"`
 	EnvFile     string            `yaml:"env_file"`
 	Environment map[string]string `yaml:"environment"`
@@ -134,6 +135,9 @@ func TestDeploy_ComposePullsTheReleaseAndTheOverrideBuildsFromSource(t *testing.
 	if s.Image != "ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}" {
 		t.Errorf("image = %q, want ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}", s.Image)
 	}
+	if s.PullPolicy != "always" {
+		t.Errorf("pull_policy = %q, want always: an up -d never runs a stale cached release", s.PullPolicy)
+	}
 	if s.Build.Context != "" || s.Build.Dockerfile != "" {
 		t.Errorf("compose.yml builds (%+v); the source build is compose.build.yml's", s.Build)
 	}
@@ -147,6 +151,9 @@ func TestDeploy_ComposePullsTheReleaseAndTheOverrideBuildsFromSource(t *testing.
 	}
 	if o.Build.Context != "../.." || o.Build.Dockerfile != "deploy/docker/Dockerfile" {
 		t.Errorf("build = %+v, want the repository root and deploy/docker/Dockerfile", o.Build)
+	}
+	if o.PullPolicy != "build" {
+		t.Errorf("override pull_policy = %q, want build: nooma:local is never pulled", o.PullPolicy)
 	}
 	if o.Image != "nooma:local" {
 		t.Errorf("override image = %q, want nooma:local", o.Image)

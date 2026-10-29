@@ -15,6 +15,9 @@ name: nooma
 services:
   nooma:
     image: ghcr.io/rengo/nooma:${NOOMA_VERSION:-latest}
+    # Every up -d checks the registry, so a forgotten pull never runs a
+    # stale cached latest.
+    pull_policy: always
     restart: unless-stopped
     # Secrets: the provider key, the Telegram token and the server token.
     env_file: .env
