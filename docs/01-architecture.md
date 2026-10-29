@@ -171,7 +171,7 @@ and its result is answered back into the conversation; a message from anywhere e
 with one log line naming the chat id and not its text. `nooma serve` does not start it yet: delivery
 is M3's next phase, and a poller with nothing to deliver is a poller nobody should be running.
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
-| `nooma export [vault]` | Packages the vault into a portable `.noomabundle` |
+| `nooma export <vault> <file.noomabundle>` | Packages the vault into one verified `.noomabundle`: the database snapshot, `nooma.yml` and attachments, never `.env` (ADR-0057) |
 | `nooma import <bundle>` | Unpacks a bundle into a vault |
 | `nooma version` | Version and build info |
 

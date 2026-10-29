@@ -123,6 +123,11 @@ func TestEmbeddingRepo_CountsLiveUnitsLackingTheConfiguredModel(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(models, want) {
 		t.Errorf("LiveModels = %+v, %v; want %+v (the archived unit's vector not counted)", models, err, want)
 	}
+	rows, err := NewEmbeddingRepo(v).ModelRows(ctx)
+	wantRows := []ModelCount{{Model: "model-a", Units: 1}, {Model: "model-b", Units: 2}}
+	if err != nil || !reflect.DeepEqual(rows, wantRows) {
+		t.Errorf("ModelRows = %+v, %v; want %+v (every row, the archived unit's included)", rows, err, wantRows)
+	}
 }
 
 // TestSearchIndexGaps_FindsUnitsMissingFromTheWordIndexAndRowsForNoUnit: the

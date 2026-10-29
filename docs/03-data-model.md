@@ -342,9 +342,11 @@ END;
 
 - **`units.rowid` is not stable across `VACUUM`** (SQLite may renumber rowids for a table
   without an `INTEGER PRIMARY KEY`, which `units` is not), and `units_fts` is keyed on it
-  (`content_rowid='rowid'`). A vacuum — including `nooma export`'s `VACUUM INTO` — must be
-  followed by `INSERT INTO units_fts(units_fts) VALUES('rebuild')`, or the FTS index can point
-  at the wrong rows. **Measured, not just feared**: `VACUUM` and `VACUUM INTO` were probed
+  (`content_rowid='rowid'`). A vacuum must be followed by
+  `INSERT INTO units_fts(units_fts) VALUES('rebuild')` before the result is used as a vault, or
+  the FTS index can point at the wrong rows. `nooma export` and `nooma backup` only read, so their
+  `VACUUM INTO` snapshot travels as it is, and the rebuild is the restore's: `nooma import` runs it
+  before the vault first opens ([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)). **Measured, not just feared**: `VACUUM` and `VACUUM INTO` were probed
   independently across multiple tools (the Go driver, the `sqlite3` CLI, and Python's `sqlite3`
   module) with rowid gaps present (rows deleted before the vacuum), and every run preserved the
   existing rowids rather than renumbering them. SQLite's own documentation still says a vacuum
@@ -392,7 +394,12 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
   is writing with WAL open. It reads through a read-only connection, so it never migrates or
   writes the vault and runs beside `nooma serve` without the lock; it verifies the copy with
   `PRAGMA integrity_check`, and copies `nooma.yml` beside it ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)).
-  M6's `nooma export` packages a portable bundle instead.
+- **Portable bundle**: `nooma export <vault> <file.noomabundle>` writes the same snapshot,
+  `nooma.yml` and `attachments/` into one zip with a `manifest.json` naming each file's size and
+  sha256, the schema version and the embedding models; never `.env`, `derived/`, `logs/` or the
+  lock. Like backup it takes no lock and never migrates; it re-reads the bundle against its
+  manifest before naming it, and leaves nothing on failure
+  ([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)).
 - **Integrity**: `nooma doctor` opens the vault read-only (`mode=ro`): it never migrates it and
   never writes the database file (SQLite may create the missing `-wal` and `-shm` sidecars,
   owned by the user who runs it), and reports the file's schema version against the binary's (behind: serve
