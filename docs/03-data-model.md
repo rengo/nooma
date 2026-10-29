@@ -365,7 +365,8 @@ END;
   with progress). Because dimension is data rather than schema, reindex is a resumable
   `UPDATE` loop rather than a table rebuild.
 - **Never mix models in a search.** A vault can briefly hold two models mid-reindex, so
-  **every search filters on `model`**. This used to be guaranteed by the schema; it is now a
+  **every search filters on `model`**, and so does the count of what lacks a vector: a unit
+  embedded under another model lacks the configured one. This used to be guaranteed by the schema; it is now a
   rule the code must keep, which is why it belongs in the conformance suite.
 - `incomplete` units have NO embedding (it is generated on promotion).
 - **Hybrid recall**: top-K vector + top-K FTS5, fused with Reciprocal Rank Fusion —
@@ -392,6 +393,15 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
   writes the vault and runs beside `nooma serve` without the lock; it verifies the copy with
   `PRAGMA integrity_check`, and copies `nooma.yml` beside it ([ADR-0049](adr/0049-backup-is-a-built-in-snapshot.md)).
   M6's `nooma export` packages a portable bundle instead.
-- **Integrity**: `nooma doctor` runs `PRAGMA integrity_check` plus the units↔embeddings half of
-  consistency — a count of live units holding no embedding (`nooma doctor`'s vault coverage row).
-  The units↔fts half is not yet checked; it is M6's.
+- **Integrity**: `nooma doctor` opens the vault read-only (`mode=ro`): it never migrates it and
+  never writes the database file (SQLite may create the missing `-wal` and `-shm` sidecars,
+  owned by the user who runs it), and reports the file's schema version against the binary's (behind: serve
+  migrates it; ahead: upgrade nooma). It runs `PRAGMA integrity_check` and both halves of
+  consistency ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)):
+  - **units↔embeddings**: the live units holding no vector under the configured model, none at
+    all or only another model's, with the models live units do hold (`vault coverage`);
+  - **units↔fts**: `units.rowid` joined with `units_fts_docsize` both ways, counting units the
+    word index lost and entries naming no unit (`search index`). A `count(*)` over `units_fts`
+    would prove nothing (an external-content table reads its rows from `units`), and FTS5's own
+    `integrity-check` is a write command a read-only connection refuses. The join does not see
+    an entry indexed with a unit's old text.

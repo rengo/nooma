@@ -29,8 +29,8 @@ import (
 // and none of this is a rewrite of runDoctor's own loop.
 func TestDoctorChecksGainsOneNewEntry(t *testing.T) {
 	want := []string{
-		"configuration", "permissions", "database integrity", "schema version", "bind",
-		"provider keys", "llm quality", "task coverage", "vault coverage",
+		"configuration", "permissions", "vault lock", "database integrity", "schema version", "bind",
+		"provider keys", "llm quality", "task coverage", "vault coverage", "search index",
 	}
 	if len(doctorChecks) != len(want) {
 		t.Fatalf("doctorChecks has %d entries, want %d: %v", len(doctorChecks), len(want), doctorChecks)
@@ -535,20 +535,23 @@ func TestCheckTaskCoverageCatchesAnUnboundEmbeddingTask(t *testing.T) {
 // without a real vault — the same shape checkLLMQuality's qualityGateError
 // already takes.
 func TestVaultCoverageError(t *testing.T) {
-	if err := vaultCoverageError(0); err != nil {
+	if err := vaultCoverageError("model-a", 0, nil); err != nil {
 		t.Errorf("vaultCoverageError(0) = %v, want nil — zero is the healthy answer", err)
 	}
 
-	err := vaultCoverageError(3)
+	err := vaultCoverageError("model-a", 3, nil)
 	if err == nil {
 		t.Fatal("vaultCoverageError(3) = nil, want a FAIL naming the count")
 	}
 	text := err.Error()
-	if !strings.Contains(text, "3 live units have no embedding") {
-		t.Errorf("error %q does not name the count", text)
+	if !strings.Contains(text, "3 live units have no model-a vector") {
+		t.Errorf("error %q does not name the count and the model", text)
 	}
-	if !strings.Contains(text, "semantic recall") {
+	if !strings.Contains(text, "recall finds them only by their words") {
 		t.Errorf("error %q does not say what breaks", text)
+	}
+	if strings.Contains(text, "holds a") || strings.Contains(text, "hold a") {
+		t.Errorf("error %q names other models when none is present", text)
 	}
 }
 

@@ -120,23 +120,60 @@ ORDER BY unit_id`
 
 // CountLiveWithoutEmbedding implements ports.EmbeddingRepo.
 //
-// A LEFT JOIN from units to unit_embeddings, filtered to status = 'pool' —
-// design D18b row 2's own SQL shape, verbatim. unit_id IS NULL is what a
-// missing row on the right side of the join looks like; it is what makes
-// this one query rather than a count-then-count-then-subtract over two
-// round trips.
-func (r *EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context) (int, error) {
+// A LEFT JOIN from units to unit_embeddings on the unit AND the model,
+// filtered to status = 'pool': a live unit with no row under model — none
+// at all, or only another model's — is what a missing right side looks
+// like. One query, not a count-then-subtract.
+func (r *EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context, model string) (int, error) {
 	const q = `
 SELECT COUNT(*)
 FROM units u
-LEFT JOIN unit_embeddings ue ON ue.unit_id = u.id
+LEFT JOIN unit_embeddings ue ON ue.unit_id = u.id AND ue.model = ?
 WHERE u.status = 'pool' AND ue.unit_id IS NULL`
 
 	var count int
-	if err := r.db.QueryRowContext(ctx, q).Scan(&count); err != nil {
-		return 0, fmt.Errorf("counting live units without an embedding: %w", err)
+	if err := r.db.QueryRowContext(ctx, q, model).Scan(&count); err != nil {
+		return 0, fmt.Errorf("counting live units without a %s embedding: %w", model, err)
 	}
 	return count, nil
+}
+
+// ModelCount is how many live units hold a vector under one model.
+type ModelCount struct {
+	Model string
+	Units int
+}
+
+// LiveModels reports, for every model holding a live unit's vector, how
+// many live units it holds, by model name. nooma doctor reads it to say
+// which other models a vault's units were embedded under; it is not a port
+// method, because nothing in brain decides from it.
+func (r *EmbeddingRepo) LiveModels(ctx context.Context) ([]ModelCount, error) {
+	const q = `
+SELECT ue.model, COUNT(*)
+FROM unit_embeddings ue
+JOIN units u ON u.id = ue.unit_id
+WHERE u.status = 'pool'
+GROUP BY ue.model
+ORDER BY ue.model`
+
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("counting live units by embedding model: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]ModelCount, 0)
+	for rows.Next() {
+		var mc ModelCount
+		if err := rows.Scan(&mc.Model, &mc.Units); err != nil {
+			return nil, fmt.Errorf("scanning an embedding model count: %w", err)
+		}
+		out = append(out, mc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("counting live units by embedding model: %w", err)
+	}
+	return out, nil
 }
 
 // encodeVector renders v as dim × float32, little-endian — migration 0002's

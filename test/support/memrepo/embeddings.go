@@ -56,13 +56,13 @@ func (r *Embeddings) EnsureUnit(_ *testing.T, id string) {
 }
 
 // CountLiveWithoutEmbedding implements ports.EmbeddingRepo.
-func (r *Embeddings) CountLiveWithoutEmbedding(_ context.Context) (int, error) {
+func (r *Embeddings) CountLiveWithoutEmbedding(_ context.Context, model string) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	count := 0
 	for id := range r.liveUnits {
-		if _, embedded := r.byUnit[id]; !embedded {
+		if e, embedded := r.byUnit[id]; !embedded || e.Model != model {
 			count++
 		}
 	}
