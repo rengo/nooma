@@ -224,7 +224,7 @@ Prior decisions: **[ADR-0007](adr/0007-http-auth.md)** (auth),
 - **Demo**: reject 6 `same_topic` connections → the threshold rises and the decision_log
   explains it.
 
-**Shipped** (2026-10-28), as a stacked-to-main chain:
+**Shipped** (2026-10-29), as a stacked-to-main chain:
 
 | Link | What | State |
 |---|---|---|
