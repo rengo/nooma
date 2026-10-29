@@ -482,6 +482,28 @@ status check.
 
 What does **not** run on every PR: driver benchmarks. Those run before release.
 
+**The release runs on a tag, never on a PR** ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)).
+`release.yml` fires only on a pushed `v*` tag, with `contents`, `packages` and `id-token` write
+and nothing else, and runs goreleaser (`.goreleaser.yaml`): ADR-0013's seven targets as archives,
+`checksums.txt` signed keyless by cosign, the GitHub Release, and the image
+`ghcr.io/rengo/nooma` for `linux/amd64`, `arm64` and `arm/v7` from
+`deploy/docker/Dockerfile.release`, `:latest` only off a prerelease. No PR can exercise it, so
+`test/harness/release_test.go` reads both files as data on every PR: the goreleaser targets
+equal ADR-0013's matrix and `make cross-compile`'s list, the stamp is the Makefile's, and the
+trigger and permissions are those above. Nothing runs `goreleaser check` locally; the first
+real run is the first tag.
+
+Cutting a release is pushing an annotated tag on a `main` commit (ADR-0015):
+`git tag -a v0.5.0 <sha> -m v0.5.0 && git push origin v0.5.0`. To verify one, download
+`checksums.txt` and `checksums.txt.sigstore.json` beside the archive:
+
+```sh
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/rengo/nooma/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
 A distinction the matrix earns its keep by not blurring: cross-compilation proves the code
 **builds** for a target, never that it **behaves** there. Platform behavior needs a test that names
 the platform, which is why `integration (windows)` and `e2e (windows)` run the L3 and L4 suites on
