@@ -6,7 +6,12 @@
 // vault before any test runs: NOOMA_VAULT names a folder that is not a vault,
 // so a command given none stops at resolution's first step, and HOME (with
 // its Windows and XDG relatives) is a throwaway folder in case anything looks
-// further.
+// further. NOOMA_VAULT is never empty in a test's own process: empty, resolution
+// would walk up the working directory's parents and could find a *.nooma
+// folder there before it reached HOME. The temporary directory moves into the
+// sandbox too, so a child given an empty NOOMA_VAULT (with its own HOME, as
+// e2e's are) climbs through the sandbox first. test/harness's sandbox gate
+// checks every package follows this.
 package sandbox
 
 import (
@@ -31,9 +36,10 @@ func Main(m *testing.M) int {
 	}
 	defer func() { _ = os.RemoveAll(root) }()
 
-	// Go's own caches default to HOME; pin them where they are first, so a
-	// test that runs `go build` neither starts cold nor downloads.
-	pinGoEnv("GOPATH", "GOMODCACHE", "GOCACHE")
+	// Go's own caches and its config file default to HOME; pin them where
+	// they are first, so a test that runs `go build` neither starts cold, nor
+	// downloads, nor reads a different go env.
+	pinGoEnv("GOPATH", "GOMODCACHE", "GOCACHE", "GOENV")
 
 	home, notAVault := filepath.Join(root, "home"), filepath.Join(root, "not-a-vault")
 	dirs := map[string]string{
@@ -46,6 +52,9 @@ func Main(m *testing.M) int {
 		"XDG_CACHE_HOME":  filepath.Join(root, "xdg-cache"),
 		"APPDATA":         filepath.Join(root, "appdata"),
 		"LOCALAPPDATA":    filepath.Join(root, "localappdata"),
+		"TMPDIR":          filepath.Join(root, "tmp"),
+		"TMP":             filepath.Join(root, "tmp"),
+		"TEMP":            filepath.Join(root, "tmp"),
 	}
 	for name, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -56,6 +65,10 @@ func Main(m *testing.M) int {
 			fmt.Fprintln(os.Stderr, "sandbox:", err)
 			return 1
 		}
+	}
+	if os.Getenv("NOOMA_VAULT") == "" {
+		fmt.Fprintln(os.Stderr, "sandbox: NOOMA_VAULT is empty; refusing to run tests that could resolve a real vault")
+		return 1
 	}
 	return m.Run()
 }
