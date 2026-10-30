@@ -112,6 +112,7 @@ order, with no correspondence to anything.
 | [0058](0058-a-unit-holds-one-vector-per-model.md) | A unit holds one vector per model: `unit_embeddings` keyed by `(unit_id, model)` (migration 0016), a write keeps the unit's other models' vectors, a reindex adds beside them (supersedes ADR-0003's amendment in part) | Proposed | M6 |
 | [0059](0059-doctor-reads-the-vault-and-never-writes-it.md) | Doctor reads the vault and never writes it: opened read-only it never migrates, its schema check compares the file with the binary, coverage is counted per configured model, the word index is joined against units, and serve warns at boot when vectors are missing | Proposed | M6 |
 | [0060](0060-releases-are-built-by-goreleaser-on-a-tag.md) | Releases are built by goreleaser on a `v*` tag only: ADR-0013's seven targets, `checksums.txt` signed keyless by cosign, a GitHub Release, and `ghcr.io/rengo/nooma` for three Linux platforms, `:latest` only off a prerelease | Proposed | M6 |
+| [0061](0061-the-model-words-what-the-code-found.md) | The model words what the code found or did, from its facts and the fixed text; a pure check sends it only when it states nothing the facts do not hold, else the fixed text (supersedes ADR-0032 point 4 in part) | Accepted | v1.0 |
 
 ## Template
 
