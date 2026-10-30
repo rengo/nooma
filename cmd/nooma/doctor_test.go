@@ -550,7 +550,7 @@ func TestVaultCoverageError(t *testing.T) {
 	if !strings.Contains(text, "recall finds them only by their words") {
 		t.Errorf("error %q does not say what breaks", text)
 	}
-	if strings.Contains(text, "holds a") || strings.Contains(text, "hold a") {
+	if strings.Contains(text, "other models") {
 		t.Errorf("error %q names other models when none is present", text)
 	}
 }

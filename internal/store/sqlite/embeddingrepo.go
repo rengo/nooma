@@ -27,12 +27,11 @@ var _ ports.EmbeddingRepo = (*EmbeddingRepo)(nil)
 
 // Put implements ports.EmbeddingRepo.
 //
-// ON CONFLICT(unit_id) — the primary key — so a re-embed replaces the unit's
-// row rather than adding a second one. That is what makes ADR-0003's
-// amendment work: reindex is "an ordinary UPDATE loop", resumable and
-// incremental, complete when no rows of the old model remain. model is
-// updated alongside the vector, so a half-finished reindex is readable from
-// the data rather than from a separate progress record.
+// ON CONFLICT(unit_id, model) — the primary key since migration 0016
+// (ADR-0058) — so a write replaces the unit's vector under that model and
+// keeps its vectors under any other. A reindex is then resumable from the
+// data alone: what remains is the live units with no row under the new
+// model.
 //
 // The vector is L2-normalized immediately before encoding — the column
 // comment in migration 0002 promises "L2-normalized on write", and
@@ -52,8 +51,7 @@ func (r *EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error {
 	const q = `
 INSERT INTO unit_embeddings (unit_id, model, dim, embedding, created_at)
 VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(unit_id) DO UPDATE SET
-  model      = excluded.model,
+ON CONFLICT(unit_id, model) DO UPDATE SET
   dim        = excluded.dim,
   embedding  = excluded.embedding,
   created_at = excluded.created_at`

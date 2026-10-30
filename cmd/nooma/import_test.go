@@ -180,10 +180,22 @@ func TestImport_MigratesAnOlderBundleForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Stand the vault at schema target-1 for real: drop what the last
-	// migration adds (0015's column) and say so in user_version.
+	// Stand the vault at schema target-1 for real: undo what the last
+	// migration did (0016 keyed unit_embeddings by unit and model; before it
+	// the key was the unit alone), holding a vector, and say so in
+	// user_version. A new migration changes what "the last one" undoes.
 	vault, _, _ := doctorVault(t, func(db *sqlite.Vault) {
-		sqlitetest.Exec(t, db, `ALTER TABLE config DROP COLUMN goal_stagnation_pinned`)
+		seedUnits(t, db, map[string]string{"u-a": "model-a"}, "u-a")
+		sqlitetest.Exec(t, db, `CREATE TABLE unit_embeddings_v15 (
+  unit_id   TEXT PRIMARY KEY REFERENCES units(id) ON DELETE CASCADE,
+  model     TEXT NOT NULL,
+  dim       INTEGER NOT NULL,
+  embedding BLOB NOT NULL,
+  created_at TEXT NOT NULL)`)
+		sqlitetest.Exec(t, db, `INSERT INTO unit_embeddings_v15 SELECT unit_id, model, dim, embedding, created_at FROM unit_embeddings`)
+		sqlitetest.Exec(t, db, `DROP TABLE unit_embeddings`)
+		sqlitetest.Exec(t, db, `ALTER TABLE unit_embeddings_v15 RENAME TO unit_embeddings`)
+		sqlitetest.Exec(t, db, `CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model)`)
 		sqlitetest.SetUserVersion(t, db, target-1)
 	})
 	b := exportTo(t, vault)
@@ -201,6 +213,10 @@ func TestImport_MigratesAnOlderBundleForward(t *testing.T) {
 	}
 	if want := "schema " + strconv.Itoa(target-1) + " → " + strconv.Itoa(target); !strings.Contains(out.String(), want) {
 		t.Errorf("import output %q lacks %q", out.String(), want)
+	}
+	// The vector came through the older schema and the migration.
+	if idx, err := sqlite.NewEmbeddingRepo(openVault(t, dest)).LoadIndex(context.Background(), "model-a"); err != nil || len(idx.IDs) != 1 || idx.IDs[0] != "u-a" {
+		t.Errorf("the copy's model-a index = %+v, %v; want u-a's vector migrated", idx, err)
 	}
 }
 

@@ -744,21 +744,27 @@ const reindexNotYet = "not in this version yet"
 // vaultCoverageError is checkVaultCoverage's decision and wording, testable
 // without a vault. It never sees an archived unit: the counts exclude them
 // (I02's read-side filter). The other models present are named with how many
-// live units hold each.
+// live units hold a vector under each.
 func vaultCoverageError(model string, missing int, models []sqlite.ModelCount) error {
 	if missing == 0 {
 		return nil
 	}
 	text := fmt.Sprintf("%d live units have no %s vector; recall finds them only by their words", missing, model)
+	// A unit holds one vector per model (ADR-0058), so these count every live
+	// unit with a vector under each other model, not only the ones missing.
+	var others []string
 	for _, mc := range models {
 		if mc.Model == model {
 			continue
 		}
-		verb := "hold"
+		noun := "live units"
 		if mc.Units == 1 {
-			verb = "holds"
+			noun = "live unit"
 		}
-		text += fmt.Sprintf("; %d %s a %s vector", mc.Units, verb, mc.Model)
+		others = append(others, fmt.Sprintf("%s on %d %s", mc.Model, mc.Units, noun))
+	}
+	if len(others) > 0 {
+		text += "; vectors under other models: " + strings.Join(others, ", ")
 	}
 	return fmt.Errorf("%s. `nooma reindex` will re-embed them (%s)", text, reindexNotYet)
 }

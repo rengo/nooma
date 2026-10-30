@@ -867,6 +867,9 @@ update the cursor had not passed, so such a command is greeted once more.
        holds embeddings for exactly that one model. A vault holding two models therefore holds
        two `VectorIndex` values — never one index serving both — so there is no shared score
        for two different models' embeddings to be compared through.
+     - **A unit holds one vector per model.** Embedding it under a new model keeps its vector
+       under the old one, so the index of the model in use never shrinks while another is being
+       filled ([ADR-0058](adr/0058-a-unit-holds-one-vector-per-model.md)).
      - **A unit without the configured model's vector is reachable only by its words.** That is
        a unit never embedded, or one embedded under another model before the configured one
        changed. Nothing hides it: `nooma serve` writes one `WARNING:` line at boot with how many
