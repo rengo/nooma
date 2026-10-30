@@ -275,9 +275,14 @@ const (
 	ActionConfigRemindersFollowed DecisionAction = "config.reminders.followed"
 )
 
-// AllDecisionActions returns a fresh slice holding the seventy-one
-// DecisionAction vocabulary members, in the order the constants above
-// declare them. ActionCaptureTaskClosed is ADR-0040's, listed after
+// ActionCaptureVoiceTranscribed: the capture's text was a voice note's
+// transcript (ADR-0062); its context names the outcome and the unit.
+const ActionCaptureVoiceTranscribed DecisionAction = "capture.voice.transcribed"
+
+// AllDecisionActions returns a fresh slice holding every DecisionAction
+// vocabulary member (eighty-one; repocontract's list holds the count), in
+// the order the constants above declare them. ActionCaptureVoiceTranscribed
+// is ADR-0062's, listed after ActionCaptureTimerCancelled. ActionCaptureTaskClosed is ADR-0040's, listed after
 // ActionCaptureCheckInSnoozed, and ActionCaptureEventClosed ADR-0046's, after it. ActionCheckFocusUnavailable is m4c's, listed after
 // ActionCheckDigestHeld. ActionDeriveBeliefSkipped and
 // ActionDeriveRetiredEmbedFailed are m4e's, listed after
@@ -300,7 +305,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureEmbeddingFailed, ActionCaptureDedupFailed, ActionCaptureChatFailed,
 		ActionCapturePersonRefAmbiguous,
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
-		ActionCaptureArmRefused, ActionCaptureTimerCancelled,
+		ActionCaptureArmRefused, ActionCaptureTimerCancelled, ActionCaptureVoiceTranscribed,
 		ActionCheckTriggerExpired, ActionCheckTriggerLapsed, ActionCheckReminderArmed, ActionCheckReminderMoved,
 		ActionCheckReminderCancelled, ActionCheckReminderRefused, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,

@@ -33,6 +33,9 @@ type ChannelMessage struct {
 	// brain.CaptureInput.Channel and therefore units.source — which is NOT
 	// NULL, so an empty name would fail at the store rather than here.
 	Channel string
+	// Voice says Text is the transcript of a voice note, not typed (ADR-0062):
+	// capture reads it the same way and marks where it came from.
+	Voice bool
 }
 
 // Channel is the port over a conversation surface: something a message can

@@ -91,3 +91,23 @@ type EmbedResponse struct {
 type EmbeddingProvider interface {
 	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
 }
+
+// TranscribeRequest is a call to TranscriptionProvider.Transcribe: one
+// voice note, held in memory and never written anywhere (ADR-0062).
+type TranscribeRequest struct {
+	Audio []byte
+	// Format is the audio's container as a file extension, "ogg" for a
+	// Telegram voice note: what a provider names the upload by.
+	Format string
+}
+
+// TranscribeResponse is the transcript, raw, and the model that wrote it.
+type TranscribeResponse struct {
+	Text  string
+	Model string
+}
+
+// TranscriptionProvider turns speech into text: the audio_transcription task.
+type TranscriptionProvider interface {
+	Transcribe(ctx context.Context, req TranscribeRequest) (TranscribeResponse, error)
+}

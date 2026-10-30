@@ -11,7 +11,9 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -73,6 +75,7 @@ type update struct {
 		MessageID int64    `json:"message_id"`
 		Text      string   `json:"text"`
 		Entities  []entity `json:"entities"`
+		Voice     *voice   `json:"voice"`
 		From      *struct {
 			LanguageCode string `json:"language_code"`
 		} `json:"from"`
@@ -162,4 +165,53 @@ func (c *Client) call(ctx context.Context, method string, q url.Values) (json.Ra
 		return nil, &APIError{Code: code, Description: env.Description, Method: method}
 	}
 	return env.Result, nil
+}
+
+// voice is a voice note's metadata. The audio itself stays on Telegram
+// until download fetches it.
+type voice struct {
+	FileID   string `json:"file_id"`
+	Duration int    `json:"duration"`
+	FileSize int64  `json:"file_size"`
+}
+
+// errVoiceTooLarge is a download past the cap: refused, never truncated.
+var errVoiceTooLarge = errors.New("telegram: the voice note is larger than the cap")
+
+// download fetches a file into memory, at most limit bytes: getFile names
+// its path, and the file host serves it. Nothing touches the disk.
+func (c *Client) download(ctx context.Context, fileID string, limit int64) ([]byte, error) {
+	q := url.Values{}
+	q.Set("file_id", fileID)
+	raw, err := c.call(ctx, "getFile", q)
+	if err != nil {
+		return nil, err
+	}
+	var file struct {
+		FilePath string `json:"file_path"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil || file.FilePath == "" {
+		return nil, fmt.Errorf("telegram: getFile named no file path")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/file/bot"+c.token+"/"+file.FilePath, nil)
+	if err != nil {
+		return nil, sanitize(c.token, fmt.Errorf("telegram: building the download: %w", err))
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, sanitize(c.token, fmt.Errorf("telegram: downloading a file: %w", err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("telegram: downloading a file: status %d", resp.StatusCode)
+	}
+	audio, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, sanitize(c.token, fmt.Errorf("telegram: downloading a file: %w", err))
+	}
+	if int64(len(audio)) > limit {
+		return nil, errVoiceTooLarge
+	}
+	return audio, nil
 }

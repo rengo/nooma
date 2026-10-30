@@ -94,6 +94,11 @@ type Set struct {
 	// Greeting answers Telegram's /start and UnknownCommand any other bot
 	// command, both without the model: a command is not a message to read.
 	Greeting, UnknownCommand string
+	// A voice note (ADR-0062): VoiceHeard takes the transcript and leads a
+	// reply that did nothing actionable; VoiceUnheard answers one that could
+	// not be transcribed, VoiceOff one with no transcription task bound, and
+	// VoiceTooLong, taking the cap in minutes, one past it.
+	VoiceHeard, VoiceUnheard, VoiceOff, VoiceTooLong string
 	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
 	// reminder rings, every time it does (ADR-0031 point 7), rather than its
 	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
@@ -240,6 +245,10 @@ var sets = map[classify.Language]Set{
 
 		Greeting:       "Hi, I am Nooma. I note down what you write to me, remind you of what you ask, and answer what I know.",
 		UnknownCommand: "I do not know that command. To note something down, just write it.",
+		VoiceHeard:     "I heard: “%s”",
+		VoiceUnheard:   "I could not make out the audio; could you type it?",
+		VoiceOff:       "I cannot listen to voice notes here; could you type it?",
+		VoiceTooLong:   "That voice note is too long for me (up to %d minutes); could you type it or send a shorter one?",
 		EveryDay:       "I will remind you every day at %s.",
 		EveryWeek:      "I will remind you every %s at %s.",
 		EveryMonth:     "I will remind you on day %s of every month at %s.",
@@ -331,6 +340,10 @@ var sets = map[classify.Language]Set{
 
 		Greeting:       "Hola, soy Nooma. Anoto lo que me escribas, te aviso de lo que pidas y respondo lo que sé.",
 		UnknownCommand: "No conozco ese comando. Para anotar algo, basta con escribirlo.",
+		VoiceHeard:     "Entendí: «%s»",
+		VoiceUnheard:   "No pude entender el audio; ¿me lo escribís?",
+		VoiceOff:       "Acá no puedo escuchar audios; ¿me lo escribís?",
+		VoiceTooLong:   "Ese audio es muy largo para mí (hasta %d minutos); ¿me lo escribís o mandás uno más corto?",
 		EveryDay:       "Te aviso todos los días a las %s.",
 		EveryWeek:      "Te aviso todos los %s a las %s.",
 		EveryMonth:     "Te aviso el día %s de cada mes a las %s.",

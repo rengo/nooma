@@ -304,6 +304,7 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionCaptureArmedRecurring:           true,
 			ports.ActionCaptureArmRefused:               true,
 			ports.ActionCaptureTimerCancelled:           true,
+			ports.ActionCaptureVoiceTranscribed:         true,
 			ports.ActionCheckTriggerExpired:             true,
 			ports.ActionCheckTriggerLapsed:              true,
 			ports.ActionCheckReminderArmed:              true,

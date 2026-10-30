@@ -113,6 +113,7 @@ order, with no correspondence to anything.
 | [0059](0059-doctor-reads-the-vault-and-never-writes-it.md) | Doctor reads the vault and never writes it: opened read-only it never migrates, its schema check compares the file with the binary, coverage is counted per configured model, the word index is joined against units, and serve warns at boot when vectors are missing | Proposed | M6 |
 | [0060](0060-releases-are-built-by-goreleaser-on-a-tag.md) | Releases are built by goreleaser on a `v*` tag only: ADR-0013's seven targets, `checksums.txt` signed keyless by cosign, a GitHub Release, and `ghcr.io/rengo/nooma` for three Linux platforms, `:latest` only off a prerelease | Proposed | M6 |
 | [0061](0061-the-model-words-what-the-code-found.md) | The model words what the code found or did, from its facts and the fixed text; a pure check sends it only when it states nothing the facts do not hold, else the fixed text (supersedes ADR-0032 point 4 in part) | Accepted | v1.0 |
+| [0062](0062-a-voice-note-is-read-as-its-transcript.md) | A Telegram voice note is heard in the adapter behind the allow-list, transcribed in memory by `audio_transcription` (`gpt-4o-mini-transcribe`) and dropped; the transcript takes the typed path, is echoed only when nothing actionable was read, and writes one `capture.voice.transcribed` row; a note not heard is answered and captures nothing | Proposed | v1 |
 
 ## Template
 

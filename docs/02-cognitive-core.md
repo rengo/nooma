@@ -523,6 +523,21 @@ remembers the commands it answered until the cursor passes them. The cursor and 
 live in the process, as the cursor always has: after a restart, Telegram delivers again every
 update the cursor had not passed, so such a command is greeted once more.
 
+**A Telegram voice note is read exactly as typed text** (I58,
+[ADR-0062](adr/0062-a-voice-note-is-read-as-its-transcript.md)). The allow-list runs first, so a
+stranger's audio is never fetched. The channel downloads the note into memory, the
+`audio_transcription` task transcribes it, and the audio is dropped: it is never written to the
+vault or to disk. The trimmed transcript enters this pipeline as the message's text, on the same
+path, as the same conversation turn, with the same reply. The reply leads with what was heard
+("Entendí: «…»") only when the reading did nothing the user can see acted on: a `conversed` or
+`out_of_scope` outcome, an `asked` one, or a which-timer question. That choice is made over the
+typed outcome, never the reply's words. A voice capture writes one `capture.voice.transcribed`
+row naming its outcome and unit, because `conversation_turns` has no column for where a turn
+came from. The channel answers a note itself, in the sender's language, and captures nothing,
+when no transcription task is bound, when the note is longer than `max_voice_seconds` or larger
+than `max_voice_bytes`, or when it is not heard: an error, a timeout, an empty transcript. Like a
+command, it is answered once.
+
 1. **classify** (LLM, a single call): returns `type` + `normalized_content` +
    `structured_data` + initial weight/λ + fields resolving pending answers +
    prospection's two capture fields, `interrupt_level` (0-1, §7's push/digest split) and
@@ -2481,6 +2496,9 @@ data, never decided by the client request. Robustness rules already learned: nev
 numeric values, bias confidence downward under doubt, zip-bomb guards on office formats, page
 caps.
 
+One modality came forward to v1: a Telegram voice note is transcribed and read as typed text
+(§5, ADR-0062). It is not this door. Nothing is stored but the transcript.
+
 ## 13. Calibration — numbers vs mechanisms
 
 Initial defaults (global config; those marked ⚙ are recalibratable per user by the learning
@@ -2557,6 +2575,8 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `at_once_margin_minutes` (`internal/core/prospection.AtOnceMarginMinutes`) | 7 — the least time that must remain before an asked reminder's instant, or the end of its day, for an at-once arming (at least that much: 7 minutes left arms, 6 refuses); one `proactive_check_interval` (5) plus 2 minutes of slack for a pass that runs late, and `test/conformance` asserts the margin is strictly above the interval because core cannot import the scheduler |
 | `belief_reinforce_gain` (`internal/core/consolidation.BeliefReinforceGain`) | 0.10 — chosen; inherits `strengthen_gain`'s reinforcement-law argument above, no compatibility check attached (a different quantity, no fixed night count ties to it) |
 | `provider_timeout` (`internal/config.DefaultProviderTimeout`; per provider `timeout:` overrides) | 60 s — how long one provider call may take before it fails as a timeout (I32). A local model on modest hardware may need more |
+| `max_voice_seconds` (`internal/channels/telegram.MaxVoiceSeconds`) | 300 — the longest voice note Nooma transcribes (§5, ADR-0062); longer is refused before it is fetched. Chosen: a long thought, not a lecture, and it bounds one transcription's cost |
+| `max_voice_bytes` (`internal/channels/telegram.MaxVoiceBytes`) | 5 MiB — the largest voice note downloaded; a larger one is not heard. Several times five minutes of Telegram's Opus, far inside the Bot API's 20 MB download limit and the transcription API's 25 MB upload limit |
 | Semantic belief merge (`internal/core/consolidation.BeliefMergeCosine`) | 0.85 — the minimum cosine similarity at which two beliefs merge |
 | Perception confidence gate | 0.40 |
 | Consolidation hour (`internal/scheduler.ConsolidationHour`) — **not checked by the calibration gate, and splitting this row did not fix that.** The gate's regex matches `internal/core/…` only and never reaches `internal/scheduler`, so naming the constant here buys nothing. The row said splitting it was M3's job; M3 split it and found the diagnosis was wrong. Making it genuinely checkable means moving the hour into `internal/core`, recorded as a work unit outside M3 (owner ruling 5) | 3 — 03:00 daily |

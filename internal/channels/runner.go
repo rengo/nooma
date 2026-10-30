@@ -243,6 +243,7 @@ func CaptureHandler(capture Capturer, ch ports.Channel, conv *brain.Conversation
 			// than hardcoded here: provenance is the caller's fact.
 			Channel:      msg.Channel,
 			Conversation: msg.Conversation,
+			Voice:        msg.Voice,
 		})
 		if err != nil {
 			return fmt.Errorf("capturing %s: %w", msg.ID, err)
@@ -254,6 +255,9 @@ func CaptureHandler(capture Capturer, ch ports.Channel, conv *brain.Conversation
 			// stop this reaching production; if it ever does, saying
 			// nothing is worse than saying something plain.
 			reply = "Done."
+		}
+		if msg.Voice {
+			reply = voiceReply(result, msg.Text, reply)
 		}
 
 		// Both turns are added even when the reply fails to send: the capture
