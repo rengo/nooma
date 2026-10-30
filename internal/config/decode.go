@@ -37,6 +37,16 @@ func Decode(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("nooma.yml: %w", err)
 	}
 
+	// An editor may save UTF-8 with a byte order mark; the YAML library would
+	// read it as part of the first key.
+	doc = bytes.TrimPrefix(doc, []byte("\ufeff"))
+
+	// Before the library reads anything: it reports an empty first document
+	// as the end of the input, and its own EOF path would accept the file.
+	if secondDocument(doc) {
+		return nil, errors.New("nooma.yml: it holds more than one YAML document, and nooma reads only one: keep your configuration in a single document, removing the extra `---` or `...` lines and anything that is not part of it")
+	}
+
 	var cfg Config
 
 	dec := yaml.NewDecoder(bytes.NewReader(doc), yaml.Strict())
@@ -54,10 +64,6 @@ func Decode(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("nooma.yml: %w", err)
 	}
 
-	if secondDocument(doc) {
-		return nil, errors.New("nooma.yml: it holds more than one YAML document; nooma reads one, so keep the first: remove the `---` or `...` line that ends it and everything after it")
-	}
-
 	return &cfg, nil
 }
 
@@ -69,37 +75,37 @@ func Decode(r io.Reader) (*Config, error) {
 // It reads the text rather than asking the YAML library, because the library
 // stops at an empty or comment-only document as if the input had ended: a
 // document behind one is neither decoded nor parsed (measured, both with the
-// decoder and with its parser). A document marker is a line starting `---`
-// or `...` at column 0; an indented one inside a block scalar is text. Once a
-// marker follows the first document's content, any later line that is not
-// blank or a comment, the marker's own line included, is a second document.
-// A marker before the content, or after it with only blank lines and
-// comments behind it, is not.
+// decoder and with its parser). That holds for an empty FIRST document too,
+// which would hide the real one and leave an empty configuration nothing
+// checked. A document marker is a line starting `---` or `...` at column 0;
+// an indented one inside a block scalar is text.
+//
+// The first `---`, or the first content line, starts the first document. Any
+// later marker ends it, whether or not it held content, and from then on any
+// line that is not blank or a comment, a marker's own content included, is a
+// second document. A comment and a directive may precede the first `---`.
 func secondDocument(doc []byte) bool {
-	content, ended := false, false
+	started, ended := false, false
 	for _, line := range strings.Split(string(doc), "\n") {
 		line = strings.TrimRight(line, "\r")
 		if inline, ok := documentMarker(line); ok {
-			// A marker after content closes the first document.
-			if content {
+			if started {
 				ended = true
 			}
-			if inline {
-				if ended {
-					return true
-				}
-				content = true
+			started = true
+			if inline && ended {
+				return true
 			}
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || (!content && strings.HasPrefix(trimmed, "%")) {
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || (!started && strings.HasPrefix(trimmed, "%")) {
 			continue
 		}
 		if ended {
 			return true
 		}
-		content = true
+		started = true
 	}
 	return false
 }
