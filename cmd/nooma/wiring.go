@@ -290,7 +290,31 @@ func wireChannel(cfg *config.Config, lookup func(string) (string, bool), log io.
 	if !cfg.Channels.Telegram.Enabled {
 		return nil, nil
 	}
-	return telegram.New(cfg.Channels.Telegram, lookup, nil, "", log)
+	ch, err := telegram.New(cfg.Channels.Telegram, lookup, nil, "", log)
+	if err != nil {
+		return nil, err
+	}
+	if t := wireTranscriber(cfg, lookup, log); t != nil {
+		ch.WithTranscriber(t)
+	}
+	return ch, nil
+}
+
+// wireTranscriber resolves the audio_transcription task (ADR-0062), or nil:
+// unbound, voice notes are answered by asking for text. A binding that
+// cannot transcribe is not a reason to refuse to serve, but it is said, so
+// "voice is off" never looks like a choice nobody made.
+func wireTranscriber(cfg *config.Config, lookup func(string) (string, bool), log io.Writer) ports.TranscriptionProvider {
+	binding, bound := cfg.Tasks["audio_transcription"]
+	if !bound {
+		return nil
+	}
+	client, err := buildProvider(cfg.Providers[binding.Provider], lookup)
+	if t, ok := client.(ports.TranscriptionProvider); err == nil && ok {
+		return t
+	}
+	_, _ = fmt.Fprintf(log, "audio_transcription is bound to %q, which cannot transcribe: only an openai provider with its api key set can; voice notes are answered by asking for text\n", binding.Provider)
+	return nil
 }
 
 // wireCheck builds a *brain.CheckService over db. It resolves no provider

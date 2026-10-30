@@ -96,3 +96,42 @@ func TestRunServeStartsTheChannelAndJoinsItFirst(t *testing.T) {
 		t.Error("serve.go does not join the poller at shutdown — a poller left running past the vault's close accepts work nothing can persist")
 	}
 }
+
+// TestWireTranscriber_HearsOnlyThroughAProviderThatCanTranscribe: unbound,
+// voice is off with nothing said; an openai provider with its key hears; an
+// ollama binding or a missing key is off, and serve says why (ADR-0062).
+func TestWireTranscriber_HearsOnlyThroughAProviderThatCanTranscribe(t *testing.T) {
+	providers := map[string]config.Provider{
+		"cloud": {Type: "openai", APIKeyEnv: "OPENAI_API_KEY", Model: "gpt-4o-mini"},
+		"local": {Type: "ollama", Model: "llama3"},
+	}
+	cases := []struct {
+		name, bound string
+		key, hears  bool
+	}{
+		{"unbound", "", true, false},
+		{"openai with its key", "cloud", true, true},
+		{"openai without its key", "cloud", false, false},
+		{"ollama", "local", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{Providers: providers, Tasks: map[string]config.TaskBinding{}}
+			if tc.bound != "" {
+				cfg.Tasks["audio_transcription"] = config.TaskBinding{Provider: tc.bound}
+			}
+			var log bytes.Buffer
+			lookup := func(string) (string, bool) { return "", false }
+			if tc.key {
+				lookup = func(string) (string, bool) { return "sk", true }
+			}
+			got := wireTranscriber(cfg, lookup, &log)
+			if (got != nil) != tc.hears {
+				t.Errorf("transcriber = %v, want hearing %v", got, tc.hears)
+			}
+			if said := log.Len() > 0; said != (tc.bound != "" && !tc.hears) {
+				t.Errorf("log %q: a binding that cannot hear is named, and only then", log.String())
+			}
+		})
+	}
+}
