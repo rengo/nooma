@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -36,13 +37,16 @@ var voiceAudio = []byte("OggS fake opus frames")
 // botAPI is a fake Bot API: one getUpdates batch, getFile, the file
 // download, and sendMessage, every call recorded.
 type botAPI struct {
-	mu       sync.Mutex
-	batch    []string
-	polled   bool
-	getFiles int
-	fetched  int
-	sent     []string
-	file     []byte
+	mu     sync.Mutex
+	batch  []string
+	polled bool
+	// redeliver returns the batch on every poll, as Telegram does while an
+	// earlier update in it is unconfirmed.
+	redeliver bool
+	getFiles  int
+	fetched   int
+	sent      []string
+	file      []byte
 }
 
 func newBotAPI(t *testing.T, updates ...string) (*httptest.Server, *botAPI) {
@@ -63,7 +67,7 @@ func newBotAPI(t *testing.T, updates ...string) (*httptest.Server, *botAPI) {
 			_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
 		default:
 			body := `{"ok":true,"result":[]}`
-			if !b.polled {
+			if !b.polled || b.redeliver {
 				body = `{"ok":true,"result":[` + strings.Join(b.batch, ",") + `]}`
 				b.polled = true
 			}
@@ -75,9 +79,19 @@ func newBotAPI(t *testing.T, updates ...string) (*httptest.Server, *botAPI) {
 }
 
 func voiceUpdate(updateID, chatID int64, seconds int, lang string) string {
+	return sizedVoiceUpdate(updateID, chatID, seconds, 0, lang)
+}
+
+// sizedVoiceUpdate declares the note's file_size, which Telegram may omit
+// (zero leaves it out).
+func sizedVoiceUpdate(updateID, chatID int64, seconds int, size int64, lang string) string {
+	declared := ""
+	if size > 0 {
+		declared = `,"file_size":` + strconv.FormatInt(size, 10)
+	}
 	return `{"update_id":` + strconv.FormatInt(updateID, 10) +
 		`,"message":{"message_id":1,"from":{"language_code":"` + lang + `"},"chat":{"id":` + strconv.FormatInt(chatID, 10) +
-		`},"voice":{"file_id":"voice-` + strconv.FormatInt(updateID, 10) + `","duration":` + strconv.Itoa(seconds) + `,"mime_type":"audio/ogg"}}}`
+		`},"voice":{"file_id":"voice-` + strconv.FormatInt(updateID, 10) + `","duration":` + strconv.Itoa(seconds) + declared + `,"mime_type":"audio/ogg"}}}`
 }
 
 // fakeTranscriber answers every call with text or err, recording the audio.
@@ -169,19 +183,48 @@ func TestI58_VoiceUnconfiguredIsSaidAndNothingIsFetched(t *testing.T) {
 	}
 }
 
-// TestI58_ATooLongVoiceNoteIsRefusedBeforeItIsFetched: past the cap the
-// note is refused politely and never downloaded.
+// TestI58_ATooLongVoiceNoteIsRefusedBeforeItIsFetched: past either cap,
+// the duration or the size Telegram declares, the note is refused politely
+// and never downloaded.
 func TestI58_ATooLongVoiceNoteIsRefusedBeforeItIsFetched(t *testing.T) {
-	srv, api := newBotAPI(t, voiceUpdate(1, 42, telegram.MaxVoiceSeconds+1, "es"))
-	tr := &fakeTranscriber{text: "hola"}
-	if msgs := receive(t, voiceChannel(t, srv.URL, tr)); len(msgs) != 0 {
-		t.Fatalf("admitted %+v past the cap", msgs)
+	for name, update := range map[string]string{
+		"longer than the cap": voiceUpdate(1, 42, telegram.MaxVoiceSeconds+1, "es"),
+		"declared too large":  sizedVoiceUpdate(1, 42, 30, telegram.MaxVoiceBytes+1, "es"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, api := newBotAPI(t, update)
+			tr := &fakeTranscriber{text: "hola"}
+			if msgs := receive(t, voiceChannel(t, srv.URL, tr)); len(msgs) != 0 {
+				t.Fatalf("admitted %+v past the cap", msgs)
+			}
+			if api.getFiles != 0 || api.fetched != 0 || len(tr.calls) != 0 {
+				t.Errorf("fetched or transcribed a note past the cap")
+			}
+			want := fmt.Sprintf(phrase.For(classify.LanguageES).VoiceTooLong, telegram.MaxVoiceSeconds/60)
+			if len(api.sent) != 1 || api.sent[0] != want {
+				t.Errorf("replied %q, want %q", api.sent, want)
+			}
+		})
 	}
-	if api.getFiles != 0 || len(tr.calls) != 0 {
-		t.Errorf("fetched or transcribed a note past the cap")
+}
+
+// TestI58_ARefusedNoteIsAnsweredOnceWhileItIsRedelivered: behind an
+// unconfirmed message Telegram delivers a refused note again on every
+// poll; it is downloaded and answered once, not once per poll.
+func TestI58_ARefusedNoteIsAnsweredOnceWhileItIsRedelivered(t *testing.T) {
+	held := `{"update_id":1,"message":{"message_id":1,"text":"hola","chat":{"id":42}}}`
+	srv, api := newBotAPI(t, held, voiceUpdate(2, 42, 5, "es"))
+	api.redeliver = true
+	tr := &fakeTranscriber{err: errors.New("provider down")}
+	ch := voiceChannel(t, srv.URL, tr)
+	for poll := 1; poll <= 3; poll++ {
+		// Update 1 is never confirmed, so the cursor stays behind the note.
+		if msgs := receive(t, ch); len(msgs) != 1 || msgs[0].ID != "1" {
+			t.Fatalf("poll %d admitted %+v, want only the held text", poll, msgs)
+		}
 	}
-	if len(api.sent) != 1 || !strings.Contains(api.sent[0], strconv.Itoa(telegram.MaxVoiceSeconds/60)) {
-		t.Errorf("replied %q, want the cap named in minutes", api.sent)
+	if len(api.sent) != 1 || api.fetched != 1 || len(tr.calls) != 1 {
+		t.Errorf("over 3 polls: %d replies %q, %d downloads, %d transcriptions; want one of each", len(api.sent), api.sent, api.fetched, len(tr.calls))
 	}
 }
 
