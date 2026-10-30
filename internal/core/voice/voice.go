@@ -88,9 +88,17 @@ type vocabulary struct {
 	forbidden []string
 	// frame is the common words a wording may use besides the draft's, the
 	// message's and the items' own: articles, prepositions, pronouns, the verbs
-	// of an answer. A word outside it sends the draft, and keeps an invented
-	// item out ("también el gimnasio"). The recordings measure what it costs.
+	// of an answer (ADR-0063). A word outside it sends the draft, and keeps an
+	// invented item out ("también el gimnasio"). It holds no negation ("no",
+	// "ni", "nothing") and no singular count noun ("cosa", "thing"): those are
+	// sayable only when the draft or an item says them, so "No encontré nada"
+	// licenses its own and "no tenés dentista" for a found one is not sent.
 	frame []string
+	// none fills an empty recall's {none}. noneFrame is what an empty recall may
+	// add to frame ("por ahora", "todavía"), and claims what it may never say
+	// outside {none}, whatever the message says: each one claims a finding.
+	none              string
+	noneFrame, claims []string
 }
 
 var vocabularies = map[classify.Language]vocabulary{
@@ -99,16 +107,20 @@ var vocabularies = map[classify.Language]vocabulary{
 		onDate:     "on %s %d %s",
 		yearSuffix: " %d",
 		at:         "at %s",
+		none:       "I found nothing",
+		noneFrame:  strings.Fields("sorry yet still now so far"),
+		claims: strings.Fields(`a an one some something thing things have has had there found noted scheduled set
+			yes appointment appointments got`),
 		labels:     map[int]string{-1: "yesterday", 0: "today", 1: "tomorrow", 2: "the day after tomorrow"},
 		noBefore:   []string{"on", "at", "the", "in", "of"},
 		separators: []string{"and", "or", "then"},
 		forbidden: strings.Fields(`today tomorrow yesterday tonight morning afternoon evening night noon midnight
 			week weeks weekend month months year years hour hours minute minutes
 			two three four five six seven eight nine ten eleven twelve fifteen twenty thirty`),
-		frame: strings.Fields(`the a an of to in on at for with by from about and or but if not no yes also only
-			just you your have has had is are was were be will there here it its this that these those thing things
-			nothing anything something found noted scheduled set first then after before later all done okay ok
-			i my me we got s t re ve ll d m appointment appointments what is coming up`),
+		frame: strings.Fields(`the a an of to in on at for with by from about and or but if yes also you your have has had is are
+			was were be will there here it its this that these those things something found noted scheduled set
+			first then after before later all done okay ok i my me we got s re ve ll d m appointments what is
+			coming up remember look topic`),
 	},
 	classify.LanguageES: {
 		weekdays:   [7]string{"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"},
@@ -116,18 +128,23 @@ var vocabularies = map[classify.Language]vocabulary{
 		yearSuffix: " de %d",
 		at:         "a las %s",
 		atOne:      "a la %s",
+		none:       "no encontré nada",
+		noneFrame:  strings.Fields("ahora todavia aun perdon"),
+		claims: strings.Fields(`un una uno unos unas algo cosa cosas hay tenes tienes tiene tengo tenias anotado anotada
+			anotados agendado agendada programado programada encontre anote pendiente pendientes turno turnos
+			cita citas si ya listo`),
 		labels:     map[int]string{-1: "ayer", 0: "hoy", 1: "mañana", 2: "pasado mañana"},
 		noBefore:   []string{"el", "la", "los", "las", "lo", "a", "al", "de", "del", "en"},
 		separators: []string{"y", "e", "o", "u"},
 		forbidden: strings.Fields(`hoy manana ayer anteayer anoche pasado tarde noche mediodia madrugada semana semanas
 			finde proximo proxima siguiente mes meses ano anos hora horas minuto minutos
 			dos tres cuatro cinco seis siete ocho nueve diez once doce quince veinte treinta`),
-		frame: strings.Fields(`el la los las lo un una unos unas de del a al en con sin por para sobre entre y e o u ni
-			que como pero si no ya tambien solo te ti tu tus vos sos tenes tienes tiene tengo tenias hay es son esta
-			estan estas sera queda quedan encontre anote anotado anotada anotados nada algo eso esto este estos ese
-			esa esas esos primero primera despues antes luego entonces cosa cosas pendiente pendientes aca aqui ahi
-			agenda agendado agendada programado programada turno turnos cita citas listo dale bien me mi mis nos le
-			les su sus todo todos toda mas espera esperan aviso`),
+		frame: strings.Fields(`el la los las lo un una unos unas de del a al en con por para sobre entre y e o u que como pero si
+			ya tambien te ti tu tus vos sos tenes tienes tiene tengo tenias hay es son esta estan estas sera
+			queda quedan encontre anote anotado anotada anotados algo eso esto este estos ese esa esas esos
+			primero primera despues antes luego entonces cosas pendiente pendientes aca aqui ahi agenda agendado
+			agendada programado programada turnos citas listo dale bien me mi mis nos le les su sus todo todos
+			toda mas espera esperan aviso recorda acordate toca vas ir che mira tema acerca`),
 	},
 }
 

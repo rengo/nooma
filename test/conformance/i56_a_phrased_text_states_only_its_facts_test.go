@@ -47,7 +47,7 @@ func TestI56_NoWordingCanGiveAnItemAnotherItemsDay(t *testing.T) {
 	const draft = "Encontré 2 cosas:\n• Dentista — mar 3 nov, 10:00\n• Reunión con Ana — jue 5 nov, 15:30"
 
 	got, why := voice.Check(facts, draft, "{1.when} tenés el {1}, y {2.when} la {2}.")
-	if want := "Mañana a las 10:00 tenés el dentista, y el jueves 5 de noviembre a las 15:30 la reunión con Ana."; got != want || why != voice.Accepted {
+	if want := "Mañana a las 10:00 tenés el Dentista, y el jueves 5 de noviembre a las 15:30 la Reunión con Ana."; got != want || why != voice.Accepted {
 		t.Errorf("an honest wording was answered %q (%q), want %q", got, why, want)
 	}
 
@@ -58,9 +58,27 @@ func TestI56_NoWordingCanGiveAnItemAnotherItemsDay(t *testing.T) {
 		"El {1} {1.when} y la {2} {2.when}, y el gimnasio {2.when}.",                   // a borrowed day
 		"El {1} {1.when} y la {2} el jueves a las 15:30; también el gimnasio el 5/11.", // a day written
 		"{1.when} el {1}. {2.when} vas al gimnasio y después a la {2}.",                // an invented item, no number
+		"No tenés {1} {1.when}, ni {2} {2.when}.",                                      // a negation
+		"Tenés una cosa: {1} {1.when}, y {2} {2.when}.",                                // one, for two items
 	} {
 		if got, why := voice.Check(facts, draft, wrong); got != draft || why == voice.Accepted {
 			t.Errorf("%q was sent (%q, %q); the draft must be", wrong, got, why)
+		}
+	}
+}
+
+// TestI56_AnEmptyRecallSaysItFoundNothing: an empty recall's {none} is the only
+// way to say what was found, so no wording of it can claim a finding (QA on #435).
+func TestI56_AnEmptyRecallSaysItFoundNothing(t *testing.T) {
+	facts := voice.Facts{Intent: voice.RecallNone, Language: classify.LanguageES, Now: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC),
+		Message: "¿tengo algo con el dentista?"}
+	const draft = "No encontré nada."
+	if got, why := voice.Check(facts, draft, "Mirá, {none} sobre el dentista."); got != "Mirá, no encontré nada sobre el dentista." || why != voice.Accepted {
+		t.Errorf("an honest empty answer was %q (%q)", got, why)
+	}
+	for _, wrong := range []string{"Encontré algo sobre eso.", "Sí, {none}, pero tenés algo con el dentista.", "{none}, pero hay una cosa pendiente."} {
+		if got, _ := voice.Check(facts, draft, wrong); got != draft {
+			t.Errorf("%q was sent as %q; the draft must be", wrong, got)
 		}
 	}
 }

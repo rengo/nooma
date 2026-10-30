@@ -59,7 +59,7 @@ func check(f Facts, draft, out string) (string, Rejection) {
 	case strings.Count(out, "?") > strings.Count(draft, "?"):
 		return "", RejectQuestion
 	}
-	slots, rest, ok := parseSlots(out, len(f.Items))
+	slots, rest, ok := parseSlots(f, out)
 	switch {
 	case !ok:
 		return "", RejectSlot

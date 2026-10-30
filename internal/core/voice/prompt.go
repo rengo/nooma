@@ -10,7 +10,7 @@ import (
 // instructions frame each intent for the model.
 var instructions = map[Intent]string{
 	RecallFound: "The user asked something and the code found the items below. Answer their message with them.",
-	RecallNone:  "The user asked something and the code found nothing. Say so honestly and briefly, and suggest nothing.",
+	RecallNone:  "The user asked something and the code found nothing. Say so through {none}, once, briefly, and suggest nothing.",
 }
 
 // BuildPrompt asks the model to word draft from f. It is pure. The rules come
@@ -25,6 +25,7 @@ func BuildPrompt(f Facts, draft string) string {
 	b.WriteString("    {1} is item 1's own words, {1.when} its day and time with their own preposition, {count} how many items there are.\n")
 	b.WriteString("  Write each item's slots once each, {n} and {n.when} side by side in either order, with nothing of another item between them,\n")
 	b.WriteString("    and part two items with a comma, \"y\"/\"and\" or a new sentence. Put no article or preposition right before a {n.when}.\n")
+	b.WriteString("  When an item's words start with a bare noun, put its article before the slot (\"el {1}\", \"la {1}\").\n")
 	b.WriteString("  Add no item, place, person or detail of your own: use plain words, and the words of the draft and the message.\n")
 	b.WriteString("  One or two short sentences. With three or more items, one short line per item.\n")
 	b.WriteString("  No emojis, no markdown, no greeting, no sign-off, no remarks or offers of your own.\n")
@@ -51,6 +52,9 @@ func BuildPrompt(f Facts, draft string) string {
 	}
 	if len(f.Items) > 0 {
 		fmt.Fprintf(&b, "  {count} = %d\n", len(f.Items))
+	}
+	if f.Intent == RecallNone {
+		fmt.Fprintf(&b, "  {none} = %q\n", vocabularyFor(f.Language).none)
 	}
 	if len(f.Keep) > 0 {
 		b.WriteString("\nKeep\n")

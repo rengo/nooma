@@ -13,7 +13,8 @@ import (
 )
 
 // slot is one placeholder in a wording: item n's words ({n}), its day and time
-// ({n.when}), or the number of items ({count}, item -1), at out[start:end].
+// ({n.when}), the number of items ({count}, item -1), or an empty recall's
+// finding of nothing ({none}, item -2), at out[start:end].
 type slot struct {
 	item       int
 	when       bool
@@ -28,11 +29,15 @@ const placeholder = "§"
 // parseSlots finds the slots of out, and out with each one replaced by
 // placeholder. ok is false for an unknown slot, an item that does not exist, or
 // a stray brace.
-func parseSlots(out string, items int) (slots []slot, rest string, ok bool) {
+func parseSlots(f Facts, out string) (slots []slot, rest string, ok bool) {
+	items := len(f.Items)
 	for _, m := range slotPattern.FindAllStringSubmatchIndex(out, -1) {
 		name := out[m[2]:m[3]]
 		s := slot{item: -1, start: m[0], end: m[1]}
-		if name != "count" || items == 0 {
+		switch {
+		case name == "none":
+			s.item = -2
+		case name != "count" || items == 0:
 			num, when := strings.CutSuffix(name, ".when")
 			n, err := strconv.Atoi(num)
 			if err != nil || n < 1 || n > items {
@@ -49,7 +54,9 @@ func parseSlots(out string, items int) (slots []slot, rest string, ok bool) {
 // words reads what rest, a wording outside its slots, says in its own words: a
 // number, a date, or a day, month, time or number word is RejectFact; a word
 // that is neither a common word of the language nor one the draft, the message
-// or an item's text holds is RejectWord.
+// or an item's text holds is RejectWord. An empty recall says what was found
+// through {none} alone: a word that claims a
+// finding ("algo", "hay", "encontré") is refused even from the message.
 func (v vocabulary) words(f Facts, draft, rest string) Rejection {
 	set := phrase.For(f.Language)
 	dated := map[string]bool{}
@@ -58,12 +65,20 @@ func (v vocabulary) words(f Facts, draft, rest string) Rejection {
 		dated[fold(w)] = true
 	}
 	allowed := map[string]bool{}
-	texts := []string{draft, f.Message}
+	texts, frame := []string{draft, f.Message}, v.frame
+	if f.Intent == RecallNone {
+		frame = slices.Concat(v.frame, v.noneFrame)
+	}
 	for _, it := range f.Items {
 		texts = append(texts, it.Text)
 	}
-	for _, w := range append(wordsOf(strings.Join(texts, " ")), v.frame...) {
+	for _, w := range append(wordsOf(strings.Join(texts, " ")), frame...) {
 		allowed[fold(w)] = true
+	}
+	if f.Intent == RecallNone {
+		for _, w := range v.claims {
+			allowed[w] = false
+		}
 	}
 	if strings.ContainsFunc(rest, isDigit) {
 		return RejectFact
@@ -101,7 +116,11 @@ func placed(f Facts, v vocabulary, out string, slots []slot) bool {
 		}
 		order = append(order, s)
 	}
-	if seen[[2]int{-1, 0}] > 1 {
+	nones := 0
+	if f.Intent == RecallNone {
+		nones = 1
+	}
+	if seen[[2]int{-1, 0}] > 1 || seen[[2]int{-2, 0}] != nones {
 		return false
 	}
 	for i, it := range f.Items {
@@ -147,8 +166,7 @@ func lastWord(text string) string {
 }
 
 // fill puts each slot's words in out: the item's text, its day and time as the
-// code renders them, and the count, capitalised at a sentence's start and
-// lower-cased elsewhere.
+// code renders them, and the count, capitalised at a sentence's start.
 func fill(f Facts, out string, slots []slot) string {
 	var b strings.Builder
 	last := 0
@@ -156,6 +174,8 @@ func fill(f Facts, out string, slots []slot) string {
 		b.WriteString(out[last:s.start])
 		var text string
 		switch {
+		case s.item == -2:
+			text = vocabularyFor(f.Language).none
 		case s.item < 0:
 			text = strconv.Itoa(len(f.Items))
 		case s.when:
@@ -163,7 +183,7 @@ func fill(f Facts, out string, slots []slot) string {
 		default:
 			text = f.Items[s.item].Text
 		}
-		b.WriteString(caseFor(text, atStart(b.String())))
+		b.WriteString(caseFor(text, atStart(b.String()), f.Message))
 		last = s.end
 	}
 	b.WriteString(out[last:])
@@ -183,18 +203,23 @@ func lastRune(s string) rune {
 	return r
 }
 
-// caseFor is text with its first letter upper at a sentence's start, else lower
-// unless the text opens with an acronym.
-func caseFor(text string, start bool) string {
-	rs := []rune(text)
+// caseFor is text with its first letter upper at a sentence's start. Elsewhere
+// it is lower only when the user's own message writes that first word in lower
+// case ("cuando tengo turno…"): lower-casing on a guess could turn a name the
+// user wrote ("Pedro") into a common word, while a capital keeps it as stored.
+func caseFor(text string, start bool, message string) string {
+	r, n := utf8.DecodeRuneInString(text)
 	switch {
-	case len(rs) == 0:
+	case n == 0:
+		return text
 	case start:
-		rs[0] = unicode.ToUpper(rs[0])
-	case len(rs) == 1 || !unicode.IsUpper(rs[1]):
-		rs[0] = unicode.ToLower(rs[0])
+		return string(unicode.ToUpper(r)) + text[n:]
 	}
-	return string(rs)
+	first := strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) })
+	if len(first) > 0 && slices.Contains(strings.FieldsFunc(message, func(r rune) bool { return !unicode.IsLetter(r) }), strings.ToLower(first[0])) {
+		return string(unicode.ToLower(r)) + text[n:]
+	}
+	return text
 }
 
 // when is item it's day and time as {n.when} says them, with their own
