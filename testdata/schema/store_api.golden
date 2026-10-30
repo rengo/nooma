@@ -1,5 +1,6 @@
 # nooma store API golden — regenerate with `make store-api-golden`.
 # Adding a line here is a deliberate widening of the store surface. Read it as such.
+internal/store/sqlite/sqlitetest: func Exec(t testing.TB, v *sqlite.Vault, query string, args ...any)
 internal/store/sqlite/sqlitetest: func SeedEnergy(t testing.TB, v *sqlite.Vault, id string, at time.Time, energy float64)
 internal/store/sqlite/sqlitetest: func SeedQuietHoursEnd(t testing.TB, v *sqlite.Vault, end string)
 internal/store/sqlite/sqlitetest: func SeedReminderLeads(t testing.TB, v *sqlite.Vault, leads string)
@@ -105,6 +106,7 @@ internal/store/sqlite: func (*Vault) Check(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Close() error
 internal/store/sqlite: func (*Vault) IntegrityCheck(ctx context.Context) error
 internal/store/sqlite: func (*Vault) Path() string
+internal/store/sqlite: func (*Vault) RebuildSearchIndex(ctx context.Context) error
 internal/store/sqlite: func (*Vault) SchemaVersion(ctx context.Context) (int, error)
 internal/store/sqlite: func (*Vault) SearchIndexGaps(ctx context.Context) (SearchIndexGaps, error)
 internal/store/sqlite: func (*Vault) Stats() sql.DBStats

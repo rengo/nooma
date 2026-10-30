@@ -218,3 +218,22 @@ func TestVerify_AcceptsNamesNearTheDeviceNames(t *testing.T) {
 		}
 	}
 }
+
+// TestExtract_RefusesAnUnsafeNameWithoutVerify: Extract checks each name
+// itself, so a caller that skipped Verify still cannot write outside dir.
+func TestExtract_RefusesAnUnsafeNameWithoutVerify(t *testing.T) {
+	for _, name := range []string{"../outside.txt", "attachments/CON", "/etc/x"} {
+		entries, listed := base()
+		entries = append(entries, rawEntry{name: name, body: []byte("x")})
+		p := rawBundle(t, entries, append(listed, listedFile(name, "x")), nil)
+		root := t.TempDir()
+		dir := filepath.Join(root, "inside")
+		m := bundle.Manifest{BundleFormat: 1, Files: append(listed, listedFile(name, "x"))}
+		if err := bundle.Extract(p, m, dir); err == nil {
+			t.Errorf("Extract of %q succeeded", name)
+		}
+		if _, err := os.Stat(filepath.Join(root, "outside.txt")); !os.IsNotExist(err) {
+			t.Errorf("Extract of %q wrote outside its directory", name)
+		}
+	}
+}

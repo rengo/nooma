@@ -283,3 +283,82 @@ export again.
 The bundle is the whole brain, unencrypted. Move it over Tailscale (`scp` to a machine on the
 tailnet), not through a shared folder. The daily backup job neither uploads nor prunes it: it
 only handles files named `nooma-*.db` and `nooma-*.yml`.
+
+## 7. Move a brain between machines
+
+A brain moves as one bundle: `nooma export` on one machine, `nooma import` on the other
+([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)). Import makes a **new** vault
+and never writes over one, so the vault that receives a brain is always an empty directory.
+The copy comes with **Telegram off**: two copies polling one bot token steal each other's
+messages, so it stays off until you turn it on in the one copy that should answer. `.env`
+never travels; each machine keeps its own keys.
+
+**From the notebook to the server.** On the notebook, with nooma installed:
+
+```sh
+nooma export ~/brains/pablo.nooma ~/pablo.noomabundle
+scp ~/pablo.noomabundle <host>:   # over Tailscale
+```
+
+On the server, hand the file to the container's user, stop Nooma, move the current vault aside
+(nothing is deleted), import into the empty place, and start:
+
+```sh
+sudo install -o 65532 -g 65532 -m 600 ~/pablo.noomabundle /srv/nooma/backups/
+cd /opt/nooma
+docker compose -f deploy/docker/compose.yml stop nooma
+sudo mv /srv/nooma/data/vault /srv/nooma/data/vault-before-import
+docker compose -f deploy/docker/compose.yml run --rm nooma import /backups/pablo.noomabundle /data/vault
+```
+
+Import runs in the container, as uid 65532, so the new vault is owned as serve needs it. It
+refuses before writing anything when the bundle is damaged, newer than this release (upgrade
+first, section 5), or larger than the free space. An older bundle is migrated forward.
+
+**Before starting, give the copy this server's settings.** The bundle's `nooma.yml` is the
+notebook's: its `server:` block binds loopback with no token, so the server would listen on
+nothing the tailnet reaches, and its `providers:` and `tasks:` are the notebook's. Open
+`/srv/nooma/data/vault/nooma.yml` (`sudoedit`) and, from
+`/srv/nooma/data/vault-before-import/nooma.yml`:
+
+- **replace or add** its `server:`, `providers:` and `tasks:` blocks. A notebook vault with no
+  providers configured has only the `# providers:` and `# tasks:` comments, so there is nothing
+  to replace: add the server's blocks;
+- under `channels.telegram`, take this server's `bot_token_env` and `allowed_chat_ids`, and leave
+  `enabled: false` as imported until you turn it on below.
+
+`vault-before-import/.env` does not come along, and in the container it need not: the secrets
+reach serve from `deploy/docker/.env`. A server running nooma without Docker keeps its secrets
+in the vault's `.env`, and must copy it by hand
+(`sudo cp -p /srv/nooma/data/vault-before-import/.env /srv/nooma/data/vault/`).
+
+Then start and check the bind:
+
+```sh
+docker compose -f deploy/docker/compose.yml start nooma
+docker compose -f deploy/docker/compose.yml logs nooma | grep listening   # "nooma: listening on 0.0.0.0:7777"
+```
+
+A bind other than `0.0.0.0:7777`, or a refusal to start, means the `server:` block is still the
+notebook's. To answer on Telegram from the server, make sure the notebook's copy has it off, then
+set `enabled: true` under `channels.telegram` in `/srv/nooma/data/vault/nooma.yml` and
+`docker compose -f deploy/docker/compose.yml restart nooma`. Keep `vault-before-import` until
+the new vault has run for a while; then remove it or keep it, it is yours.
+
+**From the server to the notebook.** Export on the server (section 6), copy the file out, and
+on the notebook:
+
+```sh
+nooma import ~/pablo-20261029.noomabundle ~/brains/pablo-copy.nooma
+```
+
+The copy has Telegram off, and leave it so while the server answers. Its `nooma.yml` is the
+server's: `server:` binds `0.0.0.0` and names the auth token, and `providers:` and `tasks:` are
+the server's. Before `nooma serve`, set `server:` to the notebook's (`bind: 127.0.0.1`, or keep
+the token and put it in `.env`), and `providers:`/`tasks:` to what the notebook uses. It has no
+`.env`: add one beside its `nooma.yml` with the provider key if the copy should capture and
+recall.
+
+An import that is interrupted (killed, or the host loses power) leaves a hidden working folder
+named `.nooma-import-…` beside the target, and no vault. Delete it by hand
+(`sudo rm -r /srv/nooma/data/.nooma-import-*` on the server) and import again.

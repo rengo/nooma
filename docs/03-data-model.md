@@ -398,7 +398,10 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
   `nooma.yml` and `attachments/` into one zip with a `manifest.json` naming each file's size and
   sha256, the schema version and the embedding models; never `.env`, `derived/`, `logs/` or the
   lock. Like backup it takes no lock and never migrates; it re-reads the bundle against its
-  manifest before naming it, and leaves nothing on failure
+  manifest before naming it, and leaves nothing on failure. `nooma import <bundle> <dir>` makes
+  a new vault from one, only into a directory that is missing or empty: it checks the bundle
+  again as it unpacks, refuses a newer schema, migrates an older one, rebuilds the word index,
+  and turns Telegram off in the copy
   ([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)).
 - **Integrity**: `nooma doctor` opens the vault read-only (`mode=ro`): it never migrates it and
   never writes the database file (SQLite may create the missing `-wal` and `-shm` sidecars,

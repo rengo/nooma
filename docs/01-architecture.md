@@ -172,7 +172,7 @@ with one log line naming the chat id and not its text. `nooma serve` does not st
 is M3's next phase, and a poller with nothing to deliver is a poller nobody should be running.
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
 | `nooma export <vault> <file.noomabundle>` | Packages the vault into one verified `.noomabundle`: the database snapshot, `nooma.yml` and attachments, never `.env` (ADR-0057) |
-| `nooma import <bundle>` | Unpacks a bundle into a vault |
+| `nooma import <file.noomabundle> <vault-dir>` | Makes a new vault from a bundle, never over an existing one; migrates an older bundle forward and turns Telegram off in the copy (ADR-0057) |
 | `nooma version` | Version and build info |
 
 `nooma doctor` is a key piece of the experience: it is what makes the binary feel cared for

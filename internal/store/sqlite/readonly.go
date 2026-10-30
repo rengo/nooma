@@ -78,3 +78,15 @@ WHERE u.rowid IS NULL`).Scan(&g.Orphaned); err != nil {
 	}
 	return g, nil
 }
+
+// RebuildSearchIndex rebuilds the word index from units, FTS5's own
+// 'rebuild' command. A vacuum may renumber units' rowids, which the index is
+// keyed on (docs/03-data-model.md §"Search"), so a vault made from a
+// VACUUM INTO snapshot, as nooma import makes one, rebuilds it before it is
+// first used.
+func (v *Vault) RebuildSearchIndex(ctx context.Context) error {
+	if _, err := v.db.ExecContext(ctx, `INSERT INTO units_fts(units_fts) VALUES('rebuild')`); err != nil {
+		return fmt.Errorf("rebuilding the word index of %s: %w", v.path, err)
+	}
+	return nil
+}

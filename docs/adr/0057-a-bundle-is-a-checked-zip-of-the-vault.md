@@ -4,7 +4,7 @@
 - **Date**: 2026-10-29
 - **Supersedes**: —
 - **Superseded by**: —
-- **Enables**: M6 (`nooma export`, link C1; `nooma import`, link C2, extends this ADR)
+- **Enables**: M6 (`nooma export`, link C1; `nooma import`, link C2)
 
 ## Context
 
@@ -81,7 +81,34 @@ The client chose copy only, never merge, and no password on the bundle (2026-10-
 5. **The snapshot travels as it is.** Doc 03 requires a rebuild of the word index after a
    vacuum, because `units.rowid` may be renumbered. Export only reads, so the rebuild is
    import's, before the vault first opens (C2).
-6. **The bundle complements backup and replaces nothing.** Backup stays the daily rotation the
+6. **`nooma import <file.noomabundle> <vault-dir>` makes a new vault, and only that.** Copy
+   only, never merge (the client, 2026-10-29). Everything that can refuse refuses before
+   anything is written:
+   - a target that exists and is not empty (an empty directory, as `install -d` makes, is
+     fine), so import never writes over a vault;
+   - a bundle `Verify` rejects, a newer `bundle_format` among them;
+   - a `schema_version` newer than this binary's, naming the nooma version that wrote it;
+   - too little free space for the declared files plus a margin (10%, at least 16 MiB). A
+     platform that cannot report free space is warned about, and the import goes on.
+
+   The bundle then unpacks into a working folder beside the target, every file checked again
+   against its sha256 as it is written. The database must pass `integrity_check` at the schema
+   the manifest states. `sqlite.Open` migrates an older bundle forward, and the word index is
+   rebuilt, as doc 03 requires after a vacuum. The vault's `attachments/`, `derived/` and
+   `logs/` folders are created. Only then is the folder renamed into place; any failure removes
+   it and leaves no vault.
+7. **An imported copy has Telegram off.** `channels.telegram.enabled: true` becomes `false`,
+   and the command says why: two copies polling one bot token steal each other's messages.
+   The value is replaced where it stands in the text, so every comment and line of
+   `nooma.yml` stays as it was, and the result is decoded strictly before the vault exists. If
+   the value's position cannot be confirmed in the text, the file is re-serialized instead,
+   and the command says its layout may have moved (a tagged `!!bool true` does, because the
+   YAML library reports its column one early; measured). Turning Telegram back on is a deliberate
+   act in the one copy that should answer.
+   Beyond that one edit, `nooma.yml` travels as the source machine's configuration: its
+   `server:` bind and token, its `providers:` and `tasks:`. Adapting them to the machine that
+   receives the brain is the operator's job, before the copy is started (docs/08 §7).
+8. **The bundle complements backup and replaces nothing.** Backup stays the daily rotation the
    server's rclone job uploads, and its file names stay what that job matches.
 
 ## Consequences
@@ -100,7 +127,9 @@ The client chose copy only, never merge, and no password on the bundle (2026-10-
 - Unicode normalization is not folded: macOS may store `é` decomposed (NFD) where another
   system stores it composed (NFC), so two names that look identical can still be two entries.
   A bundle written on one system and imported on macOS could, in that rare case, write two
-  files that macOS shows as one. Known, and not handled.
+  files that macOS shows as one. Known, and not handled. Nor is full Unicode case folding:
+  upper then lower keeps `ß` and `SS` apart, which a filesystem applying full folding might
+  merge.
 - The manifest guards against corruption, not tampering: whoever can rewrite the zip can rewrite
   its manifest.
 - On a server the export file is written as the container's user, so moving it off the host

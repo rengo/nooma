@@ -258,7 +258,9 @@ Prior decisions: **[ADR-0004](adr/0004-license.md)** (license),
 |---|---|---|
 | F | The release pipeline: a `v*` tag builds ADR-0013's seven targets, a cosign-signed `checksums.txt`, the GitHub Release and `ghcr.io/rengo/nooma` for three Linux platforms; the server pulls the image ([ADR-0060](adr/0060-releases-are-built-by-goreleaser-on-a-tag.md)) | Shipped (#421, first release v0.5.0) |
 | B | `nooma doctor` reads the vault read-only and never migrates it (I55); its schema check reports behind or ahead; the lock holder is reported; coverage counts the live units lacking the configured model's vector; the word index is checked against units; serve warns at boot ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)) | Shipped (#425) |
-| C1 | `nooma export`: a `.noomabundle` zip of the database snapshot, `nooma.yml` and attachments with a manifest of sizes and sha256s, never `.env`; written beside serve, re-read against its manifest, nothing left on failure (I54, [ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)) | In review |
+| C1 | `nooma export`: a `.noomabundle` zip of the database snapshot, `nooma.yml` and attachments with a manifest of sizes and sha256s, never `.env`; written beside serve, re-read against its manifest, nothing left on failure (I54, [ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)) | Shipped (#426) |
+| C2a | `bundle.Verify` refuses a hostile bundle: a link or directory, names equal once case is folded, Windows-reserved names, an oversized manifest, an entry larger than declared | Shipped (#427) |
+| C2b | `nooma import`: a new vault from a bundle, never over an existing one; refusals before any write (not empty, a newer format or schema, too little space), checked again as it unpacks, an older bundle migrated, the word index rebuilt, Telegram off in the copy | In review |
 
 ## After v1
 
