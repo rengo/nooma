@@ -283,3 +283,49 @@ export again.
 The bundle is the whole brain, unencrypted. Move it over Tailscale (`scp` to a machine on the
 tailnet), not through a shared folder. The daily backup job neither uploads nor prunes it: it
 only handles files named `nooma-*.db` and `nooma-*.yml`.
+
+## 7. Move a brain between machines
+
+A brain moves as one bundle: `nooma export` on one machine, `nooma import` on the other
+([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)). Import makes a **new** vault
+and never writes over one, so the vault that receives a brain is always an empty directory.
+The copy comes with **Telegram off**: two copies polling one bot token steal each other's
+messages, so it stays off until you turn it on in the one copy that should answer. `.env`
+never travels; each machine keeps its own keys.
+
+**From the notebook to the server.** On the notebook, with nooma installed:
+
+```sh
+nooma export ~/brains/pablo.nooma ~/pablo.noomabundle
+scp ~/pablo.noomabundle <host>:   # over Tailscale
+```
+
+On the server, hand the file to the container's user, stop Nooma, move the current vault aside
+(nothing is deleted), import into the empty place, and start:
+
+```sh
+sudo install -o 65532 -g 65532 -m 600 ~/pablo.noomabundle /srv/nooma/backups/
+cd /opt/nooma
+docker compose -f deploy/docker/compose.yml stop nooma
+sudo mv /srv/nooma/data/vault /srv/nooma/data/vault-before-import
+docker compose -f deploy/docker/compose.yml run --rm nooma import /backups/pablo.noomabundle /data/vault
+docker compose -f deploy/docker/compose.yml start nooma
+```
+
+Import runs in the container, as uid 65532, so the new vault is owned as serve needs it. It
+refuses before writing anything when the bundle is damaged, newer than this release (upgrade
+first, section 5), or larger than the free space. An older bundle is migrated forward. To
+answer on Telegram from the server, make sure the notebook's copy has it off, then set
+`enabled: true` under `channels.telegram` in `/srv/nooma/data/vault/nooma.yml` and
+`docker compose -f deploy/docker/compose.yml restart nooma`. Keep `vault-before-import` until
+the new vault has run for a while; then remove it or keep it, it is yours.
+
+**From the server to the notebook.** Export on the server (section 6), copy the file out, and
+on the notebook:
+
+```sh
+nooma import ~/pablo-20261029.noomabundle ~/brains/pablo-copy.nooma
+```
+
+The copy has Telegram off, and leave it so while the server answers. It has no `.env`: add one
+beside its `nooma.yml` with the provider key if the copy should capture and recall.

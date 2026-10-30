@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -300,6 +301,67 @@ func checkEntry(e *zip.File, f File) error {
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != f.SHA256 {
 		return fmt.Errorf("bundle: %s does not match its sha256 in the manifest", f.Path)
+	}
+	return nil
+}
+
+// Extract writes every file m lists from the bundle at p into dir, at its
+// path, owner-only, and checks each one's size and sha256 again as it writes
+// it: a bundle replaced between Verify and Extract is caught, not unpacked.
+// It never replaces a file already in dir. On an error it may leave part of
+// what it wrote; the caller extracts into a directory of its own and removes
+// it (nooma import).
+func Extract(p string, m Manifest, dir string) error {
+	z, err := zip.OpenReader(p)
+	if err != nil {
+		return fmt.Errorf("bundle: %s is not a readable zip: %w", p, err)
+	}
+	defer func() { _ = z.Close() }()
+	entries := map[string]*zip.File{}
+	for _, e := range z.File {
+		entries[e.Name] = e
+	}
+	for _, f := range m.Files {
+		if err := checkName(f.Path); err != nil {
+			return err
+		}
+		e, ok := entries[f.Path]
+		if !ok {
+			return fmt.Errorf("bundle: %s is listed and missing", f.Path)
+		}
+		if err := extractFile(e, f, filepath.Join(dir, filepath.FromSlash(f.Path))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractFile(e *zip.File, f File, dest string) error {
+	if !e.Mode().IsRegular() || f.Size < 0 || e.UncompressedSize64 != uint64(f.Size) {
+		return fmt.Errorf("bundle: %s does not match its manifest entry", f.Path)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		return fmt.Errorf("bundle: unpacking %s: %w", f.Path, err)
+	}
+	rc, err := e.Open()
+	if err != nil {
+		return fmt.Errorf("bundle: reading %s: %w", f.Path, err)
+	}
+	defer func() { _ = rc.Close() }()
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("bundle: unpacking %s: %w", f.Path, err)
+	}
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(out, h), io.LimitReader(rc, f.Size+1))
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("bundle: unpacking %s: %w", f.Path, err)
+	}
+	if n != f.Size || hex.EncodeToString(h.Sum(nil)) != f.SHA256 {
+		return fmt.Errorf("bundle: %s did not unpack to the bytes its manifest names", f.Path)
 	}
 	return nil
 }

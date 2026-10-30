@@ -169,3 +169,28 @@ func TestSearchIndexGaps_FindsUnitsMissingFromTheWordIndexAndRowsForNoUnit(t *te
 		t.Errorf("read-only SearchIndexGaps = %+v, %v; want the same", gaps, err)
 	}
 }
+
+// TestRebuildSearchIndex_ClosesEveryGap: after a vacuum the word index may
+// point at the wrong rows (doc 03), so import rebuilds it; the rebuild leaves
+// it mirroring units exactly.
+func TestRebuildSearchIndex_ClosesEveryGap(t *testing.T) {
+	v := openTestVault(t)
+	h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
+	ctx := context.Background()
+	for _, id := range []string{"u-1", "u-2"} {
+		h.EnsureUnit(t, id)
+	}
+	if _, err := v.db.ExecContext(ctx,
+		`INSERT INTO units_fts(units_fts, rowid, content) SELECT 'delete', rowid, content FROM units WHERE id = 'u-2'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.db.ExecContext(ctx, `INSERT INTO units_fts(rowid, content) VALUES (9999, 'nobody')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.RebuildSearchIndex(ctx); err != nil {
+		t.Fatalf("RebuildSearchIndex: %v", err)
+	}
+	if gaps, err := v.SearchIndexGaps(ctx); err != nil || gaps != (SearchIndexGaps{}) {
+		t.Errorf("SearchIndexGaps after the rebuild = %+v, %v; want none", gaps, err)
+	}
+}

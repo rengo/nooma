@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -247,5 +248,60 @@ func TestWrite_RefusesAnUnsafeOrRepeatedName(t *testing.T) {
 				t.Errorf("Write accepted %v", files)
 			}
 		})
+	}
+}
+
+// TestExtract_WritesEveryListedFileOwnerOnly: a verified bundle unpacks into
+// a directory, each file at its path, owner-only, with exactly its bytes.
+func TestExtract_WritesEveryListedFileOwnerOnly(t *testing.T) {
+	path, _ := writeBundle(t, t.TempDir(), sample)
+	m, err := bundle.Verify(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := bundle.Extract(path, m, dir); err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	for _, f := range sample {
+		p := filepath.Join(dir, filepath.FromSlash(f[0]))
+		b, err := os.ReadFile(p)
+		if err != nil || string(b) != f[1] {
+			t.Errorf("%s = %q, %v; want %q", f[0], b, err, f[1])
+		}
+		if info, err := os.Stat(p); err == nil && info.Mode().Perm()&0o077 != 0 && runtime.GOOS != "windows" {
+			t.Errorf("%s is %v, want owner-only", f[0], info.Mode().Perm())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, bundle.ManifestName)); !os.IsNotExist(err) {
+		t.Errorf("the manifest was unpacked too: %v", err)
+	}
+}
+
+// TestExtract_RechecksWhatItWritesAndOverwritesNothing: a manifest that does
+// not match what Extract reads (the bundle swapped after Verify) fails, and a
+// file already in the directory is never replaced.
+func TestExtract_RechecksWhatItWritesAndOverwritesNothing(t *testing.T) {
+	path, _ := writeBundle(t, t.TempDir(), sample)
+	m, err := bundle.Verify(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := m
+	wrong.Files = append([]bundle.File(nil), m.Files...)
+	wrong.Files[1].SHA256 = sum("something else")
+	if err := bundle.Extract(path, wrong, t.TempDir()); err == nil || !strings.Contains(err.Error(), "nooma.yml") {
+		t.Errorf("Extract with a stale manifest = %v, want a refusal naming nooma.yml", err)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "nooma.yml"), []byte("mine"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := bundle.Extract(path, m, dir); err == nil {
+		t.Error("Extract replaced a file already there")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "nooma.yml")); string(b) != "mine" {
+		t.Errorf("nooma.yml = %q, want it untouched", b)
 	}
 }

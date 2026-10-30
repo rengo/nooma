@@ -39,7 +39,7 @@ func Decode(r io.Reader) (*Config, error) {
 
 	// An editor may save UTF-8 with a byte order mark; the YAML library would
 	// read it as part of the first key.
-	doc = bytes.TrimPrefix(doc, []byte("\ufeff"))
+	doc = bytes.TrimPrefix(doc, []byte(byteOrderMark))
 
 	// Before the library reads anything: it reports an empty first document
 	// as the end of the input, and its own EOF path would accept the file.

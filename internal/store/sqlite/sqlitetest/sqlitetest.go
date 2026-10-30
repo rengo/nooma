@@ -13,13 +13,13 @@ package sqlitetest
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/url"
 	"testing"
 	"time"
 
-	_ "github.com/ncruces/go-sqlite3/driver" // registers the "sqlite3" driver this package opens
+	"github.com/ncruces/go-sqlite3/driver"
+	"github.com/ncruces/go-sqlite3/ext/fts5"
 
 	"github.com/rengo/nooma/internal/ports"
 	"github.com/rengo/nooma/internal/store/sqlite"
@@ -66,7 +66,9 @@ func exec(t testing.TB, v *sqlite.Vault, who, query string, args ...any) {
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "foreign_keys(on)")
 	q.Set("_txlock", "immediate")
-	raw, err := sql.Open("sqlite3", "file:"+v.Path()+"?"+q.Encode())
+	// FTS5 registered, as on every connection the store opens: a statement
+	// that re-checks the schema (ALTER TABLE) reads units_fts's triggers.
+	raw, err := driver.Open("file:"+v.Path()+"?"+q.Encode(), fts5.Register)
 	if err != nil {
 		t.Fatalf("sqlitetest.%s: open: %v", who, err)
 	}
@@ -81,4 +83,11 @@ func exec(t testing.TB, v *sqlite.Vault, who, query string, args ...any) {
 func SetUserVersion(t testing.TB, v *sqlite.Vault, version int) {
 	t.Helper()
 	exec(t, v, "SetUserVersion", fmt.Sprintf("PRAGMA user_version = %d", version))
+}
+
+// Exec runs query against v on a connection of its own, for a test that must
+// stand a vault in a state no repository writes: an older schema, say.
+func Exec(t testing.TB, v *sqlite.Vault, query string, args ...any) {
+	t.Helper()
+	exec(t, v, "Exec", query, args...)
 }
