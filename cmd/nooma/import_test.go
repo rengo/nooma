@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -344,5 +346,81 @@ func TestRunImport_TakesTheBundleAndTheTarget(t *testing.T) {
 	}
 	if err := runImport([]string{b}, io.Discard, io.Discard); err == nil {
 		t.Error("nooma import with one argument succeeded")
+	}
+}
+
+// TestImport_KeepsItsFreeSpaceMargin: the declared files fit exactly, and
+// still no: import needs the margin too, and exactly the margin is enough.
+func TestImport_KeepsItsFreeSpaceMargin(t *testing.T) {
+	b := exportTo(t, roundTripVault(t))
+	m, err := bundle.Verify(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var declared uint64
+	for _, f := range m.Files {
+		declared += uint64(f.Size)
+	}
+	need := declared + max(importSpaceMarginFloor, declared*importSpaceMarginShare/100)
+	for _, c := range []struct {
+		free uint64
+		ok   bool
+	}{{declared, false}, {need - 1, false}, {need, true}} {
+		target := filepath.Join(t.TempDir(), "copy.nooma")
+		_, err := importVault(context.Background(), b, target, io.Discard, func(string) (uint64, bool) { return c.free, true })
+		if (err == nil) != c.ok {
+			t.Errorf("with %d bytes free (declared %d, needed %d): import = %v, want ok %v", c.free, declared, need, err, c.ok)
+		}
+	}
+}
+
+// TestImport_ChecksFreeSpaceBeforeCreatingAnything: a target whose parents do
+// not exist yet is measured on the nearest folder that does, and a refusal
+// creates none of them.
+func TestImport_ChecksFreeSpaceBeforeCreatingAnything(t *testing.T) {
+	b := exportTo(t, roundTripVault(t))
+	root := t.TempDir()
+	target := filepath.Join(root, "new", "deeper", "copy.nooma")
+	var asked string
+	tiny := func(dir string) (uint64, bool) { asked = dir; return 1, true }
+	if _, err := importVault(context.Background(), b, target, io.Discard, tiny); err == nil {
+		t.Fatal("import with no space succeeded")
+	}
+	if asked != root {
+		t.Errorf("free space was asked of %q, want %q, the nearest folder that exists", asked, root)
+	}
+	if fileExists(filepath.Join(root, "new")) {
+		t.Error("a refused import created the target's parents")
+	}
+}
+
+// TestImport_RestoresTheEmptyTargetWhenTheLastMoveFails: an empty target is
+// removed so the vault can take its place; if that move then fails, the
+// empty directory is put back as it was.
+func TestImport_RestoresTheEmptyTargetWhenTheLastMoveFails(t *testing.T) {
+	b := exportTo(t, roundTripVault(t))
+	target := filepath.Join(t.TempDir(), "copy.nooma")
+	// 0775 on purpose: a usual umask (022) would strip the group's write from
+	// a plain Mkdir, so only putting the mode back keeps it.
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	failing := func(string, string) error { return errors.New("the disk went away") }
+	_, err := importVaultWith(context.Background(), b, target, io.Discard, plenty, failing)
+	if err == nil || !strings.Contains(err.Error(), "the disk went away") {
+		t.Fatalf("import = %v, want the move's failure", err)
+	}
+	info, err := os.Stat(target)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("the empty target is gone after a failed move: %v", err)
+	}
+	if entries, _ := os.ReadDir(target); len(entries) != 0 {
+		t.Errorf("the restored target holds %v, want it empty", entries)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o775 {
+		t.Errorf("the restored target is %v, want 0775 as it was", info.Mode().Perm())
 	}
 }

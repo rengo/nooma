@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	yaml "github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 )
 
@@ -38,6 +39,12 @@ const telegramEnabledPath = "$.channels.telegram.enabled"
 // so. The result is decoded strictly, as nooma loads it, before it is
 // returned.
 func DisableTelegram(doc []byte) ([]byte, TelegramEdit, error) {
+	return disableTelegram(doc, replaceToken)
+}
+
+// disableTelegram is DisableTelegram with the in-place edit given, so its
+// fallback and its strict re-decode can be driven by a test.
+func disableTelegram(doc []byte, replace func(doc []byte, line, column int, value, with string) ([]byte, bool)) ([]byte, TelegramEdit, error) {
 	cfg, err := Decode(bytes.NewReader(doc))
 	if err != nil {
 		return nil, 0, err
@@ -62,8 +69,8 @@ func DisableTelegram(doc []byte) ([]byte, TelegramEdit, error) {
 
 	var out []byte
 	how := TelegramTurnedOff
-	tk := node.GetToken()
-	if edited, ok := replaceToken(clean, tk.Position.Line, tk.Position.Column, tk.Value, "false"); ok {
+	tk := scalarOf(node).GetToken()
+	if edited, ok := replace(clean, tk.Position.Line, tk.Position.Column, tk.Value, "false"); ok {
 		// A byte order mark, if any, stays in front.
 		out = append(bytes.Clone(doc[:len(doc)-len(clean)]), edited...)
 	} else {
@@ -81,6 +88,21 @@ func DisableTelegram(doc []byte) ([]byte, TelegramEdit, error) {
 		return nil, 0, fmt.Errorf("nooma.yml: Telegram is still on after the edit")
 	}
 	return out, how, nil
+}
+
+// scalarOf is the value behind any tags and anchors on node: in
+// `enabled: !!bool true` the token to replace is `true`, not `!!bool`.
+func scalarOf(node ast.Node) ast.Node {
+	for {
+		switch n := node.(type) {
+		case *ast.TagNode:
+			node = n.Value
+		case *ast.AnchorNode:
+			node = n.Value
+		default:
+			return node
+		}
+	}
 }
 
 // replaceToken replaces the text value at line and column (both 1-based, the

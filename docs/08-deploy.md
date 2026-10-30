@@ -309,14 +309,27 @@ cd /opt/nooma
 docker compose -f deploy/docker/compose.yml stop nooma
 sudo mv /srv/nooma/data/vault /srv/nooma/data/vault-before-import
 docker compose -f deploy/docker/compose.yml run --rm nooma import /backups/pablo.noomabundle /data/vault
-docker compose -f deploy/docker/compose.yml start nooma
 ```
 
 Import runs in the container, as uid 65532, so the new vault is owned as serve needs it. It
 refuses before writing anything when the bundle is damaged, newer than this release (upgrade
-first, section 5), or larger than the free space. An older bundle is migrated forward. To
-answer on Telegram from the server, make sure the notebook's copy has it off, then set
-`enabled: true` under `channels.telegram` in `/srv/nooma/data/vault/nooma.yml` and
+first, section 5), or larger than the free space. An older bundle is migrated forward.
+
+**Before starting, give the copy this server's settings.** The bundle's `nooma.yml` is the
+notebook's: its `server:` block binds loopback with no token, so the server would listen on
+nothing the tailnet reaches, and its `providers:` and `tasks:` are the notebook's. Open
+`/srv/nooma/data/vault/nooma.yml` (`sudoedit`) and replace its `server:`, `providers:` and
+`tasks:` blocks with the ones in `/srv/nooma/data/vault-before-import/nooma.yml`. Leave
+`channels:` as imported, Telegram off. Then start and check the bind:
+
+```sh
+docker compose -f deploy/docker/compose.yml start nooma
+docker compose -f deploy/docker/compose.yml logs nooma | grep listening   # "nooma: listening on 0.0.0.0:7777"
+```
+
+A bind other than `0.0.0.0:7777`, or a refusal to start, means the `server:` block is still the
+notebook's. To answer on Telegram from the server, make sure the notebook's copy has it off, then
+set `enabled: true` under `channels.telegram` in `/srv/nooma/data/vault/nooma.yml` and
 `docker compose -f deploy/docker/compose.yml restart nooma`. Keep `vault-before-import` until
 the new vault has run for a while; then remove it or keep it, it is yours.
 
@@ -327,5 +340,13 @@ on the notebook:
 nooma import ~/pablo-20261029.noomabundle ~/brains/pablo-copy.nooma
 ```
 
-The copy has Telegram off, and leave it so while the server answers. It has no `.env`: add one
-beside its `nooma.yml` with the provider key if the copy should capture and recall.
+The copy has Telegram off, and leave it so while the server answers. Its `nooma.yml` is the
+server's: `server:` binds `0.0.0.0` and names the auth token, and `providers:` and `tasks:` are
+the server's. Before `nooma serve`, set `server:` to the notebook's (`bind: 127.0.0.1`, or keep
+the token and put it in `.env`), and `providers:`/`tasks:` to what the notebook uses. It has no
+`.env`: add one beside its `nooma.yml` with the provider key if the copy should capture and
+recall.
+
+An import that is interrupted (killed, or the host loses power) leaves a hidden working folder
+named `.nooma-import-…` beside the target, and no vault. Delete it by hand
+(`sudo rm -r /srv/nooma/data/.nooma-import-*` on the server) and import again.

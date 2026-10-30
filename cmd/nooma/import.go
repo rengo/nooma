@@ -71,11 +71,17 @@ func runImport(args []string, out, errOut io.Writer) error {
 // strictly. Only then is the folder renamed into place; any failure removes
 // it, and no vault is left.
 func importVault(ctx context.Context, bundlePath, target string, out io.Writer, free func(string) (uint64, bool)) (imported, error) {
+	return importVaultWith(ctx, bundlePath, target, out, free, os.Rename)
+}
+
+// importVaultWith is importVault with the final move given, so a test can
+// make it fail.
+func importVaultWith(ctx context.Context, bundlePath, target string, out io.Writer, free func(string) (uint64, bool), rename func(string, string) error) (imported, error) {
 	target, err := filepath.Abs(target)
 	if err != nil {
 		return imported{}, err
 	}
-	targetExists, err := freshTarget(target)
+	targetMode, targetExists, err := freshTarget(target)
 	if err != nil {
 		return imported{}, err
 	}
@@ -92,12 +98,13 @@ func importVault(ctx context.Context, bundlePath, target string, out io.Writer, 
 			m.SchemaVersion, schema, m.NoomaVersion)
 	}
 
+	// Measured before anything is created: on the nearest folder that exists.
 	parent := filepath.Dir(target)
+	if err := checkFreeSpace(m, nearestExisting(parent), out, free); err != nil {
+		return imported{}, err
+	}
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return imported{}, fmt.Errorf("creating %s: %w", parent, err)
-	}
-	if err := checkFreeSpace(m, parent, out, free); err != nil {
-		return imported{}, err
 	}
 
 	work, err := os.MkdirTemp(parent, ".nooma-import-*")
@@ -124,7 +131,13 @@ func importVault(ctx context.Context, bundlePath, target string, out io.Writer, 
 			return imported{}, fmt.Errorf("replacing the empty directory %s: %w", target, err)
 		}
 	}
-	if err := os.Rename(work, target); err != nil {
+	if err := rename(work, target); err != nil {
+		if targetExists {
+			// Put back the empty directory this import removed.
+			if merr := os.Mkdir(target, targetMode); merr == nil {
+				_ = os.Chmod(target, targetMode)
+			}
+		}
 		return imported{}, fmt.Errorf("moving the vault into %s: %w", target, err)
 	}
 	committed = true
@@ -134,26 +147,40 @@ func importVault(ctx context.Context, bundlePath, target string, out io.Writer, 
 }
 
 // freshTarget refuses a target import must not write into, and reports
-// whether it exists (an empty directory).
-func freshTarget(target string) (bool, error) {
+// whether it exists (an empty directory) and with which permissions.
+func freshTarget(target string) (os.FileMode, bool, error) {
 	info, err := os.Lstat(target)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return 0, false, nil
 	}
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	if !info.IsDir() {
-		return false, fmt.Errorf("%s exists and is not a directory; import makes a new vault", target)
+		return 0, false, fmt.Errorf("%s exists and is not a directory; import makes a new vault", target)
 	}
 	entries, err := os.ReadDir(target)
 	if err != nil {
-		return false, err
+		return 0, false, err
 	}
 	if len(entries) > 0 {
-		return false, fmt.Errorf("%s exists and is not empty; import never writes over a vault, so choose a new directory (or move this one aside)", target)
+		return 0, false, fmt.Errorf("%s exists and is not empty; import never writes over a vault, so choose a new directory (or move this one aside)", target)
 	}
-	return true, nil
+	return info.Mode().Perm(), true, nil
+}
+
+// nearestExisting is dir, or its closest ancestor that exists.
+func nearestExisting(dir string) string {
+	for {
+		if _, err := os.Stat(dir); err == nil {
+			return dir
+		}
+		up := filepath.Dir(dir)
+		if up == dir {
+			return dir
+		}
+		dir = up
+	}
 }
 
 // checkFreeSpace refuses when the bundle's files and a margin do not fit in

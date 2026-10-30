@@ -19,6 +19,11 @@ func TestDisableTelegram_TurnsItOffChangingNothingElse(t *testing.T) {
 			"channels: {telegram: {bot_token_env: \"TOKEN_Ñ\", enabled: true}}\n",
 			"channels: {telegram: {bot_token_env: \"TOKEN_Ñ\", enabled: false}}\n",
 		},
+		// The anchor is kept; the value behind it changes.
+		"an anchored value": {
+			"channels:\n  telegram:\n    enabled: &on true\n",
+			"channels:\n  telegram:\n    enabled: &on false\n",
+		},
 		"Windows line endings, capitalised": {
 			"channels:\r\n  telegram:\r\n    enabled: True\r\n",
 			"channels:\r\n  telegram:\r\n    enabled: false\r\n",
@@ -80,5 +85,50 @@ func TestReplaceToken_ChangesNothingWhereTheValueIsNot(t *testing.T) {
 		if _, ok := replaceToken(doc, at[0], at[1], "true", "false"); ok {
 			t.Errorf("replaceToken at line %d column %d replaced text that is not the value", at[0], at[1])
 		}
+	}
+}
+
+// TestDisableTelegram_RewritesWhenTheValueCannotBeLocated: when the in-place
+// edit cannot confirm the value's position, the file is re-serialized with
+// the channel off, decoded strictly, and the result says it was rewritten.
+func TestDisableTelegram_RewritesWhenTheValueCannotBeLocated(t *testing.T) {
+	notFound := func([]byte, int, int, string, string) ([]byte, bool) { return nil, false }
+	out, how, err := disableTelegram([]byte("channels:\n  telegram:\n    enabled: true # on\n    bot_token_env: T\n"), notFound)
+	if err != nil || how != TelegramRewritten {
+		t.Fatalf("disableTelegram = %v, %v; want a rewrite", how, err)
+	}
+	cfg, err := Decode(strings.NewReader(string(out)))
+	if err != nil || cfg.Channels.Telegram.Enabled || cfg.Channels.Telegram.BotTokenEnv != "T" {
+		t.Errorf("the rewrite decodes to %+v, %v; want the channel off and the rest kept", cfg, err)
+	}
+}
+
+// TestDisableTelegram_RefusesAnEditThatDoesNotDecode: whatever the edit
+// produced is decoded strictly before it is returned, so a wrong edit is an
+// error, never a broken nooma.yml in the copy.
+func TestDisableTelegram_RefusesAnEditThatDoesNotDecode(t *testing.T) {
+	for name, replace := range map[string]func([]byte, int, int, string, string) ([]byte, bool){
+		"an edit that breaks the file": func([]byte, int, int, string, string) ([]byte, bool) {
+			return []byte("channels:\n  telegram:\n    enabled: false true\n"), true
+		},
+		"an edit that leaves the channel on": func(doc []byte, _, _ int, _, _ string) ([]byte, bool) { return doc, true },
+	} {
+		if _, _, err := disableTelegram([]byte("channels:\n  telegram:\n    enabled: true\n"), replace); err == nil {
+			t.Errorf("%s: disableTelegram returned no error", name)
+		}
+	}
+}
+
+// TestDisableTelegram_ATaggedValueTakesTheRewrite: the YAML library reports
+// a tagged value (`!!bool true`) one column early, so the in-place edit
+// cannot confirm it and the file is re-serialized; the result is still
+// strictly decoded with the channel off, and says it was rewritten.
+func TestDisableTelegram_ATaggedValueTakesTheRewrite(t *testing.T) {
+	out, how, err := DisableTelegram([]byte("channels:\n  telegram:\n    enabled: !!bool true\n"))
+	if err != nil || how != TelegramRewritten {
+		t.Fatalf("DisableTelegram = %q, %v, %v; want a rewrite", out, how, err)
+	}
+	if cfg, err := Decode(strings.NewReader(string(out))); err != nil || cfg.Channels.Telegram.Enabled {
+		t.Errorf("the rewrite decodes to %+v, %v; want the channel off", cfg, err)
 	}
 }

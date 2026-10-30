@@ -102,8 +102,12 @@ The client chose copy only, never merge, and no password on the bundle (2026-10-
    The value is replaced where it stands in the text, so every comment and line of
    `nooma.yml` stays as it was, and the result is decoded strictly before the vault exists. If
    the value's position cannot be confirmed in the text, the file is re-serialized instead,
-   and the command says its layout may have moved. Turning Telegram back on is a deliberate
+   and the command says its layout may have moved (a tagged `!!bool true` does, because the
+   YAML library reports its column one early; measured). Turning Telegram back on is a deliberate
    act in the one copy that should answer.
+   Beyond that one edit, `nooma.yml` travels as the source machine's configuration: its
+   `server:` bind and token, its `providers:` and `tasks:`. Adapting them to the machine that
+   receives the brain is the operator's job, before the copy is started (docs/08 §7).
 8. **The bundle complements backup and replaces nothing.** Backup stays the daily rotation the
    server's rclone job uploads, and its file names stay what that job matches.
 
