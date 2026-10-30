@@ -40,6 +40,9 @@ type CaptureInput struct {
 	// no ReferentID, the message is read in its recent conversation
 	// (ADR-0036); empty for a capture from anywhere but a chat.
 	Conversation ports.ConversationID
+	// Voice says Text is a voice note's transcript (ADR-0062): it is read
+	// exactly as typed text, and the trail records where it came from.
+	Voice bool
 }
 
 // CaptureOutcome is the closed vocabulary of every way a capture can end —

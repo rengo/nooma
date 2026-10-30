@@ -275,6 +275,10 @@ const (
 	ActionConfigRemindersFollowed DecisionAction = "config.reminders.followed"
 )
 
+// ActionCaptureVoiceTranscribed: the capture's text was a voice note's
+// transcript (ADR-0062); its context names the outcome and the unit.
+const ActionCaptureVoiceTranscribed DecisionAction = "capture.voice.transcribed"
+
 // AllDecisionActions returns a fresh slice holding the seventy-one
 // DecisionAction vocabulary members, in the order the constants above
 // declare them. ActionCaptureTaskClosed is ADR-0040's, listed after
@@ -300,7 +304,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionCaptureEmbeddingFailed, ActionCaptureDedupFailed, ActionCaptureChatFailed,
 		ActionCapturePersonRefAmbiguous,
 		ActionCaptureArmedTimer, ActionCaptureArmedTrigger, ActionCaptureArmedRecurring,
-		ActionCaptureArmRefused, ActionCaptureTimerCancelled,
+		ActionCaptureArmRefused, ActionCaptureTimerCancelled, ActionCaptureVoiceTranscribed,
 		ActionCheckTriggerExpired, ActionCheckTriggerLapsed, ActionCheckReminderArmed, ActionCheckReminderMoved,
 		ActionCheckReminderCancelled, ActionCheckReminderRefused, ActionCheckTimerFired, ActionCheckTimerCancelled,
 		ActionCheckConflictSkipped, ActionCheckTriggerFired,

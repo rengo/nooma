@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -132,7 +133,35 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (CaptureR
 	now := s.clock.Now()
 	result, err := s.run.at(ctx, in, now)
 	result.At = now
+	if err == nil && in.Voice {
+		s.run.recordVoice(ctx, result, now)
+	}
 	return result, err
+}
+
+// recordVoice writes that a capture's text was a voice note's transcript
+// (ADR-0062), naming its outcome and, when one was kept, its unit. The
+// capture already stands, so a row that cannot be written is warned about
+// rather than failing it: failing would redeliver the note and duplicate the
+// unit.
+func (r captureRunner) recordVoice(ctx context.Context, result CaptureResult, now time.Time) {
+	contextJSON, err := json.Marshal(struct {
+		Source  string `json:"source"`
+		Outcome string `json:"outcome"`
+		UnitID  string `json:"unit_id,omitempty"`
+	}{"voice", string(result.Outcome), result.UnitID})
+	if err == nil {
+		err = r.log.Record(ctx, ports.Decision{
+			ID:         r.ids.New(),
+			Action:     ports.ActionCaptureVoiceTranscribed,
+			Rationale:  fmt.Sprintf("the message was a voice note, transcribed and read as typed text (%s)", result.Outcome),
+			Context:    contextJSON,
+			OccurredAt: now,
+		})
+	}
+	if err != nil {
+		slog.Warn("a voice capture's trail row could not be written; the capture stands", "error", err)
+	}
 }
 
 // captureRunner does the actual work of one capture, over every port

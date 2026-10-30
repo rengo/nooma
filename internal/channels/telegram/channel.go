@@ -27,6 +27,8 @@ type Channel struct {
 	client  *Client
 	allowed map[int64]bool
 	log     io.Writer
+	// transcriber hears voice notes; nil answers them by asking for text.
+	transcriber ports.TranscriptionProvider
 
 	mu sync.Mutex
 	// logMu guards every write to log. A polling loop and a shutdown path
@@ -152,12 +154,27 @@ func (c *Channel) Receive(ctx context.Context) ([]ports.ChannelMessage, error) {
 			continue
 		}
 
+		// A voice note is heard here, past the allow-list, and goes on as
+		// its transcript (ADR-0062).
+		text := u.Message.Text
+		if v := u.Message.Voice; v != nil {
+			heard, ok, err := c.hear(ctx, u.UpdateID, u.Message.Chat.ID, v, lang)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+			text = heard
+		}
+
 		c.hold(u.UpdateID)
 		admitted = append(admitted, ports.ChannelMessage{
 			ID:           strconv.FormatInt(u.UpdateID, 10),
 			Conversation: ports.ConversationID(strconv.FormatInt(u.Message.Chat.ID, 10)),
-			Text:         u.Message.Text,
+			Text:         text,
 			Channel:      Name,
+			Voice:        u.Message.Voice != nil,
 		})
 	}
 	return admitted, nil
