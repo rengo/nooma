@@ -13,6 +13,7 @@
 package voice
 
 import (
+	"strings"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
@@ -61,7 +62,8 @@ type Facts struct {
 	// Now is the operation's one instant; its zone is the user's.
 	Now time.Time
 	// Message is the user's own message, for its register and the shape of
-	// its question. It is never a fact: a number in it is not licensed.
+	// its question. It is never a fact: a number in it is not one, though its
+	// words may be said back.
 	Message string
 	Items   []Item
 	// Keep are literals the wording must carry exactly, such as an undo
@@ -69,26 +71,63 @@ type Facts struct {
 	Keep []string
 }
 
-// vocabulary is what a language needs to word a date.
+// vocabulary is what a language needs to fill a {n.when} and to read the words
+// around the slots. Every list is of what Nooma itself says, never of what a
+// user writes (ADR-0033 rules out reading intent from word lists).
 type vocabulary struct {
 	weekdays   [7]string // full, singular, indexed by time.Weekday
-	longDate   string    // weekday, day, month name
+	onDate     string    // a day: weekday, day of the month, month name
 	yearSuffix string    // a year other than now's
+	at, atOne  string    // a time; atOne for one o'clock where it differs
 	labels     map[int]string
+	// noBefore may not come right before a {n.when}, which has its own
+	// preposition; separators part two items.
+	noBefore, separators []string
+	// forbidden are the day, time and number words a wording may only say
+	// through a slot (besides digits and day and month names).
+	forbidden []string
+	// frame is the common words a wording may use besides the draft's, the
+	// message's and the items' own: articles, prepositions, pronouns, the verbs
+	// of an answer. A word outside it sends the draft, and keeps an invented
+	// item out ("también el gimnasio"). The recordings measure what it costs.
+	frame []string
 }
 
 var vocabularies = map[classify.Language]vocabulary{
 	classify.LanguageEN: {
 		weekdays:   phrase.For(classify.LanguageEN).WeekdayNames,
-		longDate:   "%s %d %s",
+		onDate:     "on %s %d %s",
 		yearSuffix: " %d",
+		at:         "at %s",
 		labels:     map[int]string{-1: "yesterday", 0: "today", 1: "tomorrow", 2: "the day after tomorrow"},
+		noBefore:   []string{"on", "at", "the", "in", "of"},
+		separators: []string{"and", "or", "then"},
+		forbidden: strings.Fields(`today tomorrow yesterday tonight morning afternoon evening night noon midnight
+			week weeks weekend month months year years hour hours minute minutes
+			two three four five six seven eight nine ten eleven twelve fifteen twenty thirty`),
+		frame: strings.Fields(`the a an of to in on at for with by from about and or but if not no yes also only
+			just you your have has had is are was were be will there here it its this that these those thing things
+			nothing anything something found noted scheduled set first then after before later all done okay ok
+			i my me we got s t re ve ll d m appointment appointments what is coming up`),
 	},
 	classify.LanguageES: {
 		weekdays:   [7]string{"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"},
-		longDate:   "%s %d de %s",
+		onDate:     "el %s %d de %s",
 		yearSuffix: " de %d",
+		at:         "a las %s",
+		atOne:      "a la %s",
 		labels:     map[int]string{-1: "ayer", 0: "hoy", 1: "mañana", 2: "pasado mañana"},
+		noBefore:   []string{"el", "la", "los", "las", "lo", "a", "al", "de", "del", "en"},
+		separators: []string{"y", "e", "o", "u"},
+		forbidden: strings.Fields(`hoy manana ayer anteayer anoche pasado tarde noche mediodia madrugada semana semanas
+			finde proximo proxima siguiente mes meses ano anos hora horas minuto minutos
+			dos tres cuatro cinco seis siete ocho nueve diez once doce quince veinte treinta`),
+		frame: strings.Fields(`el la los las lo un una unos unas de del a al en con sin por para sobre entre y e o u ni
+			que como pero si no ya tambien solo te ti tu tus vos sos tenes tienes tiene tengo tenias hay es son esta
+			estan estas sera queda quedan encontre anote anotado anotada anotados nada algo eso esto este estos ese
+			esa esas esos primero primera despues antes luego entonces cosa cosas pendiente pendientes aca aqui ahi
+			agenda agendado agendada programado programada turno turnos cita citas listo dale bien me mi mis nos le
+			les su sus todo todos toda mas espera esperan aviso`),
 	},
 }
 
