@@ -77,8 +77,9 @@ docker compose -f deploy/docker/compose.yml logs -f nooma   # "nooma: listening 
 A Telegram voice note is transcribed and read as typed text, and the audio is never kept
 ([ADR-0062](adr/0062-a-voice-note-is-read-as-its-transcript.md)). It needs the
 `audio_transcription` task bound to an `openai` provider; until then Nooma answers a voice note
-by asking for it typed. Add one line under `tasks:` in `/srv/nooma/data/vault/nooma.yml`,
-naming the provider your `chat` task already uses (the wizard calls it `openai_chat`):
+by asking for it typed. `nooma init`'s Cloud path binds it. A vault created before that needs one
+line under `tasks:` in `/srv/nooma/data/vault/nooma.yml`, naming the provider your `chat` task
+already uses (the wizard calls it `openai_chat`):
 
 ```yaml
 tasks:

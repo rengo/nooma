@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/rengo/nooma/internal/config"
@@ -311,14 +312,22 @@ func renderProviders(choices []providerChoice, bindings map[string]string) strin
 		fmt.Fprintf(&b, "    model: %s\n", c.Model)
 	}
 
+	// Every task the binary runs, then any optional one a path bound
+	// (audio_transcription on the Cloud path).
+	tasks := tasksTheBinaryRuns()
+	for _, task := range sortedTaskNames(bindings) {
+		if !slices.Contains(tasks, task) {
+			tasks = append(tasks, task)
+		}
+	}
 	maxLen := 0
-	for _, task := range tasksTheBinaryRuns() {
+	for _, task := range tasks {
 		if len(task) > maxLen {
 			maxLen = len(task)
 		}
 	}
 	b.WriteString("\ntasks:\n")
-	for _, task := range tasksTheBinaryRuns() {
+	for _, task := range tasks {
 		fmt.Fprintf(&b, "  %-*s { provider: %s }\n", maxLen+1, task+":", bindings[task])
 	}
 	return b.String()
@@ -411,7 +420,21 @@ func cloudPath(reader *bufio.Reader, out io.Writer) ([]providerChoice, map[strin
 		{Name: "openai_chat", Type: "openai", Model: "gpt-4o-mini", APIKeyEnv: keyEnv},
 		{Name: "openai_embed", Type: "openai", Model: "text-embedding-3-small", APIKeyEnv: keyEnv},
 	}
-	return choices, bindTasks("openai_embed", "openai_chat")
+	bindings := bindTasks("openai_embed", "openai_chat")
+	// The chat provider hears voice notes too (ADR-0062): openai transcribes
+	// with its own model, whatever this entry's model names.
+	bindings["audio_transcription"] = "openai_chat"
+	return choices, bindings
+}
+
+// sortedTaskNames is bindings' task names, sorted, so the YAML is stable.
+func sortedTaskNames(bindings map[string]string) []string {
+	names := make([]string, 0, len(bindings))
+	for task := range bindings {
+		names = append(names, task)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // ollamaPath needs no further prompt. ADR-0002 discards the embedded
