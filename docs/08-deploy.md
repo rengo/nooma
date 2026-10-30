@@ -318,9 +318,21 @@ first, section 5), or larger than the free space. An older bundle is migrated fo
 **Before starting, give the copy this server's settings.** The bundle's `nooma.yml` is the
 notebook's: its `server:` block binds loopback with no token, so the server would listen on
 nothing the tailnet reaches, and its `providers:` and `tasks:` are the notebook's. Open
-`/srv/nooma/data/vault/nooma.yml` (`sudoedit`) and replace its `server:`, `providers:` and
-`tasks:` blocks with the ones in `/srv/nooma/data/vault-before-import/nooma.yml`. Leave
-`channels:` as imported, Telegram off. Then start and check the bind:
+`/srv/nooma/data/vault/nooma.yml` (`sudoedit`) and, from
+`/srv/nooma/data/vault-before-import/nooma.yml`:
+
+- **replace or add** its `server:`, `providers:` and `tasks:` blocks. A notebook vault with no
+  providers configured has only the `# providers:` and `# tasks:` comments, so there is nothing
+  to replace: add the server's blocks;
+- under `channels.telegram`, take this server's `bot_token_env` and `allowed_chat_ids`, and leave
+  `enabled: false` as imported until you turn it on below.
+
+`vault-before-import/.env` does not come along, and in the container it need not: the secrets
+reach serve from `deploy/docker/.env`. A server running nooma without Docker keeps its secrets
+in the vault's `.env`, and must copy it by hand
+(`sudo cp -p /srv/nooma/data/vault-before-import/.env /srv/nooma/data/vault/`).
+
+Then start and check the bind:
 
 ```sh
 docker compose -f deploy/docker/compose.yml start nooma

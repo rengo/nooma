@@ -424,3 +424,24 @@ func TestImport_RestoresTheEmptyTargetWhenTheLastMoveFails(t *testing.T) {
 		t.Errorf("the restored target is %v, want 0775 as it was", info.Mode().Perm())
 	}
 }
+
+// TestCheckFreeSpace_TheShareOutgrowsTheFloor: for a large bundle the margin
+// is 10% of it, not 16 MiB: free space covering the files and the floor alone
+// is refused.
+func TestCheckFreeSpace_TheShareOutgrowsTheFloor(t *testing.T) {
+	const declared = 4 << 30 // 4 GiB, declared only: no file is written
+	m := bundle.Manifest{Files: []bundle.File{{Path: "nooma.db", Size: declared}}}
+	share := uint64(declared) * importSpaceMarginShare / 100
+	if share <= importSpaceMarginFloor {
+		t.Fatalf("fixture: 10%% of %d is %d, not above the %d floor", declared, share, importSpaceMarginFloor)
+	}
+	for _, c := range []struct {
+		free uint64
+		ok   bool
+	}{{declared + importSpaceMarginFloor, false}, {declared + share - 1, false}, {declared + share, true}} {
+		err := checkFreeSpace(m, t.TempDir(), io.Discard, func(string) (uint64, bool) { return c.free, true })
+		if (err == nil) != c.ok {
+			t.Errorf("with %d bytes free for %d declared: checkFreeSpace = %v, want ok %v", c.free, declared, err, c.ok)
+		}
+	}
+}

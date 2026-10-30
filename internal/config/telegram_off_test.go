@@ -19,11 +19,6 @@ func TestDisableTelegram_TurnsItOffChangingNothingElse(t *testing.T) {
 			"channels: {telegram: {bot_token_env: \"TOKEN_Ñ\", enabled: true}}\n",
 			"channels: {telegram: {bot_token_env: \"TOKEN_Ñ\", enabled: false}}\n",
 		},
-		// The anchor is kept; the value behind it changes.
-		"an anchored value": {
-			"channels:\n  telegram:\n    enabled: &on true\n",
-			"channels:\n  telegram:\n    enabled: &on false\n",
-		},
 		"Windows line endings, capitalised": {
 			"channels:\r\n  telegram:\r\n    enabled: True\r\n",
 			"channels:\r\n  telegram:\r\n    enabled: false\r\n",
@@ -130,5 +125,49 @@ func TestDisableTelegram_ATaggedValueTakesTheRewrite(t *testing.T) {
 	}
 	if cfg, err := Decode(strings.NewReader(string(out))); err != nil || cfg.Channels.Telegram.Enabled {
 		t.Errorf("the rewrite decodes to %+v, %v; want the channel off", cfg, err)
+	}
+}
+
+// TestDisableTelegram_AnAnchorOrAliasIsNeverEditedInPlace: an anchor on
+// enabled may be reused by another setting, which an edit in place would
+// flip too. Anchored or aliased, enabled takes the rewrite: alone, it is
+// turned off; reused, the other setting would lose its value, so it is
+// refused naming the anchor; an alias to another key's anchor is replaced by
+// false, and that key keeps its value.
+func TestDisableTelegram_AnAnchorOrAliasIsNeverEditedInPlace(t *testing.T) {
+	out, how, err := DisableTelegram([]byte("channels:\n  telegram:\n    enabled: &on true\n"))
+	if err != nil || how != TelegramRewritten {
+		t.Errorf("an anchor alone: %q, %v, %v; want a rewrite", out, how, err)
+	} else if cfg, err := Decode(strings.NewReader(string(out))); err != nil || cfg.Channels.Telegram.Enabled {
+		t.Errorf("an anchor alone decodes to %+v, %v; want the channel off", cfg, err)
+	}
+
+	reused := "channels:\n  telegram:\n    enabled: &on true\nserver:\n  ui: *on\n"
+	if cfg, err := Decode(strings.NewReader(reused)); err != nil || cfg.Server.UI == nil || !*cfg.Server.UI {
+		t.Fatalf("the reused-anchor fixture decodes to %+v, %v; want server.ui true through the alias", cfg, err)
+	}
+	if _, _, err := DisableTelegram([]byte(reused)); err == nil || !strings.Contains(err.Error(), "&on") {
+		t.Errorf("a reused anchor: DisableTelegram = %v, want a refusal naming &on", err)
+	}
+
+	alias := "server:\n  ui: &on true\nchannels:\n  telegram:\n    enabled: *on\n"
+	out, how, err = DisableTelegram([]byte(alias))
+	if err != nil || how != TelegramRewritten {
+		t.Fatalf("an alias: %q, %v, %v; want a rewrite", out, how, err)
+	}
+	cfg, err := Decode(strings.NewReader(string(out)))
+	if err != nil || cfg.Channels.Telegram.Enabled || cfg.Server.UI == nil || !*cfg.Server.UI {
+		t.Errorf("an alias rewrite decodes to %+v, %v; want the channel off and server.ui still true", cfg, err)
+	}
+}
+
+// TestDisableTelegram_AFailedAliasEditNamesTheAlias: if the edit of an alias
+// ever produced a file that does not load, the refusal says which alias.
+func TestDisableTelegram_AFailedAliasEditNamesTheAlias(t *testing.T) {
+	broken := func([]byte, int, int, string, string) ([]byte, bool) { return nil, false }
+	_, _, err := disableTelegramWith([]byte("server:\n  ui: &on true\nchannels:\n  telegram:\n    enabled: *on\n"), broken,
+		func([]byte) []byte { return []byte("channels:\n  telegram:\n    enabled: *nowhere\n") })
+	if err == nil || !strings.Contains(err.Error(), "*on") {
+		t.Errorf("disableTelegramWith = %v, want a refusal naming the alias *on", err)
 	}
 }

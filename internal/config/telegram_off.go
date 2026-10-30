@@ -33,18 +33,28 @@ const telegramEnabledPath = "$.channels.telegram.enabled"
 
 // DisableTelegram returns doc, a nooma.yml, with channels.telegram.enabled
 // false (ADR-0057: an imported copy must not poll the bot its original polls,
-// or the two steal each other's messages). The value is replaced where it
-// stands in the text, so comments and formatting survive; only if its
-// position cannot be confirmed is the file re-serialized, and the result says
-// so. The result is decoded strictly, as nooma loads it, before it is
-// returned.
+// or the two steal each other's messages). A plain value is replaced where it
+// stands in the text, so comments and formatting survive. A value carrying an
+// anchor, or that is an alias, is never edited in place, since another
+// setting may share it; the file is re-serialized instead, as it is when the
+// plain value's position cannot be confirmed, and the result says so. The
+// result is decoded strictly, as nooma loads it, before it is returned.
 func DisableTelegram(doc []byte) ([]byte, TelegramEdit, error) {
-	return disableTelegram(doc, replaceToken)
+	return disableTelegramWith(doc, replaceToken, keepRewrite)
 }
+
+// keepRewrite is the identity on a re-serialized file.
+func keepRewrite(b []byte) []byte { return b }
 
 // disableTelegram is DisableTelegram with the in-place edit given, so its
 // fallback and its strict re-decode can be driven by a test.
 func disableTelegram(doc []byte, replace func(doc []byte, line, column int, value, with string) ([]byte, bool)) ([]byte, TelegramEdit, error) {
+	return disableTelegramWith(doc, replace, keepRewrite)
+}
+
+// disableTelegramWith is disableTelegram with what follows a re-serialization
+// given too, so a test can make the rewrite produce a file that does not load.
+func disableTelegramWith(doc []byte, replace func(doc []byte, line, column int, value, with string) ([]byte, bool), afterRewrite func([]byte) []byte) ([]byte, TelegramEdit, error) {
 	cfg, err := Decode(bytes.NewReader(doc))
 	if err != nil {
 		return nil, 0, err
@@ -67,40 +77,52 @@ func disableTelegram(doc []byte, replace func(doc []byte, line, column int, valu
 		return nil, 0, fmt.Errorf("nooma.yml: finding %s: %w", telegramEnabledPath, err)
 	}
 
+	scalar, anchor, alias := valueOf(node)
 	var out []byte
 	how := TelegramTurnedOff
-	tk := scalarOf(node).GetToken()
-	if edited, ok := replace(clean, tk.Position.Line, tk.Position.Column, tk.Value, "false"); ok {
-		// A byte order mark, if any, stays in front.
-		out = append(bytes.Clone(doc[:len(doc)-len(clean)]), edited...)
-	} else {
+	if anchor == "" && alias == "" {
+		tk := scalar.GetToken()
+		if edited, ok := replace(clean, tk.Position.Line, tk.Position.Column, tk.Value, "false"); ok {
+			// A byte order mark, if any, stays in front.
+			out = append(bytes.Clone(doc[:len(doc)-len(clean)]), edited...)
+		}
+	}
+	if out == nil {
 		if err := path.ReplaceWithReader(file, strings.NewReader("false")); err != nil {
 			return nil, 0, fmt.Errorf("nooma.yml: turning Telegram off: %w", err)
 		}
-		out, how = []byte(file.String()), TelegramRewritten
+		out, how = afterRewrite([]byte(file.String())), TelegramRewritten
 	}
 
 	check, err := Decode(bytes.NewReader(out))
-	if err != nil {
+	switch {
+	case err != nil && anchor != "":
+		return nil, 0, fmt.Errorf("nooma.yml: channels.telegram.enabled carries the anchor &%s, which another setting reuses, so turning Telegram off would take that setting's value away too; give enabled a plain value in the source's nooma.yml and export again (%w)", anchor, err)
+	case err != nil && alias != "":
+		return nil, 0, fmt.Errorf("nooma.yml: channels.telegram.enabled is the alias *%s, and turning Telegram off did not leave a file that loads; give enabled a plain value in the source's nooma.yml and export again (%w)", alias, err)
+	case err != nil:
 		return nil, 0, fmt.Errorf("nooma.yml after turning Telegram off: %w", err)
-	}
-	if check.Channels.Telegram.Enabled {
+	case check.Channels.Telegram.Enabled:
 		return nil, 0, fmt.Errorf("nooma.yml: Telegram is still on after the edit")
 	}
 	return out, how, nil
 }
 
-// scalarOf is the value behind any tags and anchors on node: in
-// `enabled: !!bool true` the token to replace is `true`, not `!!bool`.
-func scalarOf(node ast.Node) ast.Node {
+// valueOf is the scalar behind any tags on node, with the anchor it carries
+// or the alias it is, if any: in `enabled: !!bool true` the token is `true`,
+// not `!!bool`.
+func valueOf(node ast.Node) (scalar ast.Node, anchor, alias string) {
 	for {
 		switch n := node.(type) {
 		case *ast.TagNode:
 			node = n.Value
 		case *ast.AnchorNode:
+			anchor = strings.TrimPrefix(n.Name.String(), "&")
 			node = n.Value
+		case *ast.AliasNode:
+			return node, anchor, strings.TrimPrefix(n.Value.String(), "*")
 		default:
-			return node
+			return node, anchor, alias
 		}
 	}
 }
