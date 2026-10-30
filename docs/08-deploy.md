@@ -72,6 +72,30 @@ docker compose -f deploy/docker/compose.yml up -d
 docker compose -f deploy/docker/compose.yml logs -f nooma   # "nooma: listening on 0.0.0.0:7777"
 ```
 
+### Voice notes
+
+A Telegram voice note is transcribed and read as typed text, and the audio is never kept
+([ADR-0062](adr/0062-a-voice-note-is-read-as-its-transcript.md)). It needs the
+`audio_transcription` task bound to an `openai` provider; until then Nooma answers a voice note
+by asking for it typed. `nooma init`'s Cloud path binds it. A vault created before that needs one
+line under `tasks:` in `/srv/nooma/data/vault/nooma.yml`, naming the provider your `chat` task
+already uses (the wizard calls it `openai_chat`):
+
+```yaml
+tasks:
+  # ...the tasks already there...
+  audio_transcription: { provider: openai_chat }
+```
+
+It uses the same `OPENAI_API_KEY`, and transcribes with `gpt-4o-mini-transcribe` whatever that
+provider's `model` says. Restart with `docker compose -f deploy/docker/compose.yml restart nooma`. A binding serve cannot use is named in `logs nooma` at start
+("audio_transcription is bound to …"). Notes longer than five minutes are refused.
+
+Voice needs OpenAI itself. An `openai` provider with a custom `endpoint` (an OpenAI-compatible
+server) gets the upload at `<endpoint>/v1/audio/transcriptions`, which such a server may not
+serve: then every note is answered "No pude entender el audio", and nothing says why at start.
+The reason is in `logs nooma`, one line per note.
+
 There is no container healthcheck: the image has no shell or HTTP client, and the binary has
 no probe command. `restart: unless-stopped` restarts it if it exits.
 

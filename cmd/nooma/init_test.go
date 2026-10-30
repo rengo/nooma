@@ -315,3 +315,29 @@ func TestEnvSkeletonAlwaysOffersTheBotToken(t *testing.T) {
 		}
 	}
 }
+
+// TestWizardCloudPathBindsVoiceNotes (ADR-0062): the Cloud path binds
+// audio_transcription to its chat provider, so a fresh vault hears voice
+// notes, and the binding is one serve can transcribe with; the Ollama path
+// leaves it unbound, so serve says nothing and voice is answered as off.
+func TestWizardCloudPathBindsVoiceNotes(t *testing.T) {
+	for in, want := range map[string]string{"1\n\n": "openai_chat", "2\n": ""} {
+		choices, bindings := promptProviderSetup(strings.NewReader(in), &strings.Builder{})
+		cfg, err := config.Decode(strings.NewReader(defaultConfig(renderProviders(choices, bindings))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.ApplyDefaults()
+		if err := cfg.Validate(t.TempDir(), func(string) (string, bool) { return "", false }); err != nil {
+			t.Fatalf("input %q: %v", in, err)
+		}
+		if got := cfg.Tasks["audio_transcription"].Provider; got != want {
+			t.Errorf("input %q: audio_transcription binds %q, want %q", in, got, want)
+		}
+		var log strings.Builder
+		heard := wireTranscriber(cfg, func(string) (string, bool) { return "sk", true }, &log) != nil
+		if heard != (want != "") || log.Len() != 0 {
+			t.Errorf("input %q: hears %v, log %q", in, heard, log.String())
+		}
+	}
+}

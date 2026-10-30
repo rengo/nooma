@@ -48,7 +48,9 @@ is on the 15th.
 1. **Takes it in from any surface.** From a terminal, `nooma capture "<text>"` talks to a
    running `nooma serve` over HTTP. The same text can arrive through `POST /capture`, a Telegram
    message, or the `/ui/capture` form. All of them run the same pipeline
-   ([doc 02 §5](02-cognitive-core.md#5-capture)).
+   ([doc 02 §5](02-cognitive-core.md#5-capture)). A Telegram voice note is transcribed and read
+   as if you had typed it; the audio is not kept, and the reply repeats what it heard only
+   when it did nothing with it (ADR-0062).
 2. **Classifies it with one provider call.** The message becomes one or more units, each with a
    type (`task`, `event`, `mental_load`, `knowledge`, …), normalized text, dates resolved against
    your local day ("Friday", "the 14th"), and an initial weight. The dentist visit gets an
@@ -436,7 +438,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | `nooma export`: the vault into one `.noomabundle` (database, `nooma.yml`, attachments, a manifest of checksums; never `.env`), written beside serve and verified before it is named | Shipped in M6 (C1) | ADR-0057; doc 03 |
 | `nooma import`: a new vault from a `.noomabundle`, never over an existing one, checked again as it unpacks, an older bundle migrated forward, Telegram off in the copy | Shipped in M6 (C2) | ADR-0057; doc 03 |
 | `doctor`'s provider, channel and hardware checks, reindex | Planned: M6 | 05 §M6 |
-| Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
+| A Telegram voice note transcribed (`audio_transcription`, an `openai` provider) and read as typed text; the audio never kept; asked for typed when unbound, too long or not heard | Shipped before v1 | doc 02 §5; ADR-0062; [08](08-deploy.md) |
+| Tracking UI, multi-format perception, voice beyond Telegram's notes, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
 
 Platform note: Linux and Windows are exercised in CI. `darwin` and ARM targets are build-checked
 only ([ADR-0013](adr/0013-cross-compile-targets.md)).

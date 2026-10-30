@@ -262,10 +262,11 @@ Prior decisions: **[ADR-0004](adr/0004-license.md)** (license),
 | C2a | `bundle.Verify` refuses a hostile bundle: a link or directory, names equal once case is folded, Windows-reserved names, an oversized manifest, an entry larger than declared | Shipped (#427) |
 | C2b | `nooma import`: a new vault from a bundle, never over an existing one; refusals before any write (not empty, a newer format or schema, too little space), checked again as it unpacks, an older bundle migrated, the word index rebuilt, Telegram off in the copy | Shipped (#428, released in v0.6.0) |
 | D1 | One vector per unit per model: migration 0016 keys `unit_embeddings` by `(unit_id, model)`, keeping every row; a write under one model keeps the unit's other vectors ([ADR-0058](adr/0058-a-unit-holds-one-vector-per-model.md), I21) | In review |
+| V | A Telegram voice note transcribed by `audio_transcription` and read as typed text, the audio never kept; moved before v1 by the client on 2026-10-30 ([ADR-0062](adr/0062-a-voice-note-is-read-as-its-transcript.md), I58) | In review |
 
 ## After v1
 
-Multi-format perception + measurements + tracking UI (v2) → voice transcription →
-multi-tenant mode → extra channels. None of this constrains the v1 design: the seams are
+Multi-format perception + measurements + tracking UI (v2) → voice beyond Telegram's voice
+notes, which moved before v1 (M6 row V) → multi-tenant mode → extra channels. None of this constrains the v1 design: the seams are
 already there (perception door with shape-based routing, `measurements` in the schema,
 channel = adapter).
