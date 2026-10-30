@@ -28,6 +28,11 @@ const Format = 1
 // ManifestName is the manifest's entry name.
 const ManifestName = "manifest.json"
 
+// maxManifestBytes bounds how much of a manifest Verify reads: a few hundred
+// files' entries fit in a few kilobytes, and an unbounded read is the cheapest
+// zip bomb there is.
+const maxManifestBytes = 1 << 20
+
 // Required are the entries every bundle holds.
 var required = []string{"nooma.db", "nooma.yml"}
 
@@ -129,19 +134,48 @@ func addFile(zw *zip.Writer, s Source) (File, error) {
 }
 
 // checkName refuses a name a reader could not unpack safely: empty, absolute,
-// with a backslash, or leaving the bundle through "..".
+// with a backslash, leaving the bundle through "..", or one Windows cannot
+// hold, so a bundle made anywhere imports everywhere.
 func checkName(name string) error {
 	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, `\`) ||
 		path.Clean(name) != name || name == ".." || strings.HasPrefix(name, "../") {
 		return fmt.Errorf("bundle: %q is not a path inside the bundle", name)
 	}
+	for _, seg := range strings.Split(name, "/") {
+		if windowsReserved(seg) {
+			return fmt.Errorf("bundle: %q is a name Windows cannot hold", name)
+		}
+	}
 	return nil
+}
+
+// windowsReserved reports a path segment Windows refuses or rewrites: a
+// device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with any extension), a
+// trailing dot or space, a character it reserves, or a control character.
+func windowsReserved(seg string) bool {
+	if strings.HasSuffix(seg, ".") || strings.HasSuffix(seg, " ") || strings.ContainsAny(seg, `<>:"|?*`) {
+		return true
+	}
+	for _, r := range seg {
+		if r < 0x20 {
+			return true
+		}
+	}
+	stem, _, _ := strings.Cut(strings.ToUpper(seg), ".")
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	return len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9'
 }
 
 // Verify re-reads the bundle at p and returns its manifest only when the zip
 // and the manifest agree exactly: a format this binary knows, the required
 // files present, every listed file present once with its size and sha256,
-// every name safe to unpack, and no entry the manifest does not list.
+// every name safe to unpack on any system, every entry a regular file, no two
+// names equal once case is folded, and no entry the manifest does not list.
+// It is what import trusts before writing anything, so it reads a bounded
+// manifest and never decompresses an entry past its declared size.
 func Verify(p string) (Manifest, error) {
 	z, err := zip.OpenReader(p)
 	if err != nil {
@@ -150,11 +184,22 @@ func Verify(p string) (Manifest, error) {
 	defer func() { _ = z.Close() }()
 
 	entries := map[string]*zip.File{}
+	folded := map[string]string{}
+	var errs []error
 	for _, e := range z.File {
 		if _, dup := entries[e.Name]; dup {
 			return Manifest{}, fmt.Errorf("bundle: %q appears twice", e.Name)
 		}
 		entries[e.Name] = e
+		if !e.Mode().IsRegular() {
+			errs = append(errs, fmt.Errorf("bundle: %q is not a regular file (%s)", e.Name, e.Mode().Type()))
+		}
+		// Two names a case-insensitive filesystem would make one file.
+		key := strings.ToLower(e.Name)
+		if other, ok := folded[key]; ok {
+			errs = append(errs, fmt.Errorf("bundle: %q and %q differ only by case", other, e.Name))
+		}
+		folded[key] = e.Name
 	}
 	me, ok := entries[ManifestName]
 	if !ok {
@@ -169,7 +214,6 @@ func Verify(p string) (Manifest, error) {
 	}
 
 	listed := map[string]bool{ManifestName: true}
-	var errs []error
 	for _, f := range m.Files {
 		if err := checkName(f.Path); err != nil {
 			errs = append(errs, err)
@@ -207,22 +251,37 @@ func readManifest(e *zip.File) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("bundle: reading %s: %w", ManifestName, err)
 	}
 	defer func() { _ = rc.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(rc, maxManifestBytes+1))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("bundle: reading %s: %w", ManifestName, err)
+	}
+	if len(raw) > maxManifestBytes {
+		return Manifest{}, fmt.Errorf("bundle: %s is larger than %d bytes; refusing to read it", ManifestName, maxManifestBytes)
+	}
 	var m Manifest
-	if err := json.NewDecoder(rc).Decode(&m); err != nil {
+	if err := json.Unmarshal(raw, &m); err != nil {
 		return Manifest{}, fmt.Errorf("bundle: %s does not decode: %w", ManifestName, err)
 	}
 	return m, nil
 }
 
-// checkEntry streams e and compares its size and sha256 with f.
+// checkEntry streams e and compares its size and sha256 with f. The zip's own
+// header must declare the manifest's size, and no more than that size and one
+// byte is ever decompressed: an entry that inflates past it is refused at
+// that byte, not after.
 func checkEntry(e *zip.File, f File) error {
+	if f.Size < 0 || e.UncompressedSize64 != uint64(f.Size) {
+		return fmt.Errorf("bundle: %s declares %d bytes in the zip, the manifest says %d", f.Path, e.UncompressedSize64, f.Size)
+	}
 	rc, err := e.Open()
 	if err != nil {
 		return fmt.Errorf("bundle: reading %s: %w", f.Path, err)
 	}
 	defer func() { _ = rc.Close() }()
 	h := sha256.New()
-	n, err := io.Copy(h, rc)
+	// The zip reader itself stops at the header's size, which must be the
+	// manifest's; the limit holds that bound even if it ever did not.
+	n, err := io.Copy(h, io.LimitReader(rc, f.Size+1))
 	if err != nil {
 		return fmt.Errorf("bundle: reading %s: %w", f.Path, err)
 	}

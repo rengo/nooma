@@ -61,9 +61,20 @@ The client chose copy only, never merge, and no password on the bundle (2026-10-
    exist, and must not be inside the vault.
 4. **A bundle is accepted only when it matches its manifest exactly** (`bundle.Verify`): a
    format this binary reads, `nooma.db` and `nooma.yml` present, every listed file present once
-   with its size and sha256, every name a clean relative path, and no entry the manifest does
-   not list. Export runs this check on what it wrote; import (C2) will run it before writing
-   anything.
+   with its size and sha256, and no entry the manifest does not list. A bundle may come from
+   anywhere, so the check also refuses what a reader must not unpack:
+   - a name that is not a clean relative path, or appears twice;
+   - an entry that is not a regular file: a directory, a link, a device;
+   - two names a case-insensitive filesystem would make one (`Photo.txt`, `photo.txt`);
+   - a name Windows cannot hold: a device name (`CON`, `aux.txt`, `COM1`…), a trailing dot or
+     space, one of `<>:"|?*`, a control character. Export refuses these too, so a bundle made
+     anywhere imports everywhere;
+   - a manifest over 1 MiB, read no further than that;
+   - an entry whose zip header disagrees with the manifest's size. No entry is decompressed past
+     its declared size: the zip reader stops at the header's size, and Verify limits the read
+     to it as well.
+
+   Export runs this check on what it wrote; import (C2) runs it before writing anything.
 5. **The snapshot travels as it is.** Doc 03 requires a rebuild of the word index after a
    vacuum, because `units.rowid` may be renumbered. Export only reads, so the rebuild is
    import's, before the vault first opens (C2).
