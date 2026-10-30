@@ -176,6 +176,30 @@ ORDER BY ue.model`
 	return out, nil
 }
 
+// ModelRows reports how many embedding rows the vault holds under each
+// model, every unit status included, by model name: what a bundle of this
+// database carries (nooma export's manifest). Not a port method, LiveModels'
+// reason.
+func (r *EmbeddingRepo) ModelRows(ctx context.Context) ([]ModelCount, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT model, COUNT(*) FROM unit_embeddings GROUP BY model ORDER BY model`)
+	if err != nil {
+		return nil, fmt.Errorf("counting embedding rows by model: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]ModelCount, 0)
+	for rows.Next() {
+		var mc ModelCount
+		if err := rows.Scan(&mc.Model, &mc.Units); err != nil {
+			return nil, fmt.Errorf("scanning an embedding row count: %w", err)
+		}
+		out = append(out, mc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("counting embedding rows by model: %w", err)
+	}
+	return out, nil
+}
+
 // encodeVector renders v as dim × float32, little-endian — migration 0002's
 // stated BLOB encoding.
 func encodeVector(v []float32) []byte {

@@ -171,7 +171,7 @@ and its result is answered back into the conversation; a message from anywhere e
 with one log line naming the chat id and not its text. `nooma serve` does not start it yet: delivery
 is M3's next phase, and a poller with nothing to deliver is a poller nobody should be running.
 | `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
-| `nooma export [vault]` | Packages the vault into a portable `.noomabundle` |
+| `nooma export <vault> <file.noomabundle>` | Packages the vault into one verified `.noomabundle`: the database snapshot, `nooma.yml` and attachments, never `.env` (ADR-0057) |
 | `nooma import <bundle>` | Unpacks a bundle into a vault |
 | `nooma version` | Version and build info |
 
@@ -237,6 +237,10 @@ channels:
 
 Philosophy: reusable providers (one key, N tasks), explicit tasks (nothing hidden in
 defaults), free cloud+local mixing, separated secrets.
+
+The file is read strictly: a key the schema does not have, a key written twice, or a second YAML
+document after `---` is refused when it loads, naming the problem. Comments are free text and are
+never read.
 
 **There is no `schedules:` block, and there used to be.** It documented two cron expressions
 that nothing ever read — Nooma consolidates at 03:00 local and runs its proactive check every

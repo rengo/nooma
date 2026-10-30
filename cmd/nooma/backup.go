@@ -108,7 +108,7 @@ func backupVault(ctx context.Context, vaultArg, dest string, keep int, now time.
 	}
 	// Backups, and the --keep that deletes them, stay out of the vault
 	// folder: nothing this command removes may ever sit inside a vault.
-	if rel, err := filepath.Rel(vault, dest); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if insideVault(vault, dest) {
 		return "", fmt.Errorf("%s is inside the vault %s; write backups somewhere else", dest, vault)
 	}
 	if err := os.MkdirAll(dest, 0o700); err != nil {
@@ -155,6 +155,12 @@ func backupVault(ctx context.Context, vaultArg, dest string, keep int, now time.
 		}
 	}
 	return finalDB, nil
+}
+
+// insideVault reports whether p is the vault folder or lies within it.
+func insideVault(vault, p string) bool {
+	rel, err := filepath.Rel(vault, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func refuseAttachments(vault string) error {

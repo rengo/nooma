@@ -433,7 +433,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | The learner: signals from all surfaces, the `learn` pass, a correctable summary of what was learned | Shipped in M5: signals from every surface (ADR-0052), the relation and goal cadence `learn` pass (ADR-0053, ADR-0055), the summary with undo and release (ADR-0056) | doc 02 §9; 05 §M5 |
 | `nooma backup`: a verified snapshot taken while serve runs, pruned with `--keep`; a Docker deployment with a daily encrypted upload via rclone | Shipped ahead of M6 | ADR-0049; [08](08-deploy.md) |
 | `nooma doctor` without changing the vault: read-only, schema behind or ahead, the lock holder, coverage per embedding model, the word index checked; a boot warning when vectors are missing | Shipped in M6 (B) | ADR-0059; doc 03 |
-| `nooma export`/`import`, `doctor`'s provider, channel and hardware checks, reindex, release builds | Planned: M6 | 05 §M6 |
+| `nooma export`: the vault into one `.noomabundle` (database, `nooma.yml`, attachments, a manifest of checksums; never `.env`), written beside serve and verified before it is named | Shipped in M6 (C1) | ADR-0057; doc 03 |
+| `nooma import`, `doctor`'s provider, channel and hardware checks, reindex | Planned: M6 | 05 §M6 |
 | Tracking UI, multi-format perception, voice, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
 
 Platform note: Linux and Windows are exercised in CI. `darwin` and ARM targets are build-checked

@@ -240,3 +240,42 @@ Switch in this order:
    `docker compose -f deploy/docker/compose.yml up -d`). The container is recreated from
    the release, and the vault and backups are mounts, so nothing in them changes. From then
    on, upgrade as above. `nooma:local` can be removed with `docker image rm nooma:local`.
+
+## 6. Export the whole brain
+
+`nooma export` writes the vault into one `.noomabundle` file: the database, `nooma.yml` and the
+attachments, with a manifest of checksums that is checked again before the file gets its name
+([ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)). It never carries `.env`, so the
+secrets stay on this host. Like doctor, run it through the container, as the user serve runs as,
+and write it into `/backups`, the mounted folder (`/srv/nooma/backups` on the host):
+
+```sh
+docker compose -f deploy/docker/compose.yml exec nooma nooma export /data/vault /backups/brain-20261029.noomabundle   # while Nooma runs
+docker compose -f deploy/docker/compose.yml run --rm nooma export /data/vault /backups/brain-20261029.noomabundle     # while it is stopped
+```
+
+Never run it as root on the host path: it reads the vault the way doctor does, and the same
+root-owned `-wal` and `-shm` files could stop serve from opening it
+([Check the vault](#check-the-vault-doctor-and-status)).
+
+The file belongs to uid 65532 and only it can read it, so copy it out with `sudo`, then remove
+the copy left in `/backups`:
+
+```sh
+sudo cp /srv/nooma/backups/brain-20261029.noomabundle ~ && sudo chown "$USER" ~/brain-20261029.noomabundle
+sudo rm /srv/nooma/backups/brain-20261029.noomabundle
+```
+
+`nooma.yml` travels byte for byte. Nooma refuses a key it does not know, so a pasted
+`api_key: sk-…` stops the export instead of going in, and it refuses an endpoint whose URL carries
+a user, a password or a query string. A **comment** is never read and goes in as written: do not
+keep a secret in a comment.
+
+An export that is interrupted (killed, or the host loses power) leaves its `.partial` file and
+a working folder named `.nooma-export-…` in `/backups`. Neither is a bundle; delete both by hand
+(`sudo rm -r /srv/nooma/backups/*.noomabundle.partial /srv/nooma/backups/.nooma-export-*`) and
+export again.
+
+The bundle is the whole brain, unencrypted. Move it over Tailscale (`scp` to a machine on the
+tailnet), not through a shared folder. The daily backup job neither uploads nor prunes it: it
+only handles files named `nooma-*.db` and `nooma-*.yml`.

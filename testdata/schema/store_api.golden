@@ -23,6 +23,7 @@ internal/store/sqlite: func (*DecisionLog) Since(ctx context.Context, t time.Tim
 internal/store/sqlite: func (*EmbeddingRepo) CountLiveWithoutEmbedding(ctx context.Context, model string) (int, error)
 internal/store/sqlite: func (*EmbeddingRepo) LiveModels(ctx context.Context) ([]ModelCount, error)
 internal/store/sqlite: func (*EmbeddingRepo) LoadIndex(ctx context.Context, model string) (recall.VectorIndex, error)
+internal/store/sqlite: func (*EmbeddingRepo) ModelRows(ctx context.Context) ([]ModelCount, error)
 internal/store/sqlite: func (*EmbeddingRepo) Put(ctx context.Context, e ports.Embedding) error
 internal/store/sqlite: func (*PendingQuestionRepo) Confirm(ctx context.Context, id string, at time.Time) error
 internal/store/sqlite: func (*PendingQuestionRepo) Create(ctx context.Context, q ports.PendingQuestion) error

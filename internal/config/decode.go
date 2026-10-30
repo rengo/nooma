@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	yaml "github.com/goccy/go-yaml"
 )
@@ -36,6 +37,16 @@ func Decode(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("nooma.yml: %w", err)
 	}
 
+	// An editor may save UTF-8 with a byte order mark; the YAML library would
+	// read it as part of the first key.
+	doc = bytes.TrimPrefix(doc, []byte("\ufeff"))
+
+	// Before the library reads anything: it reports an empty first document
+	// as the end of the input, and its own EOF path would accept the file.
+	if secondDocument(doc) {
+		return nil, errors.New("nooma.yml: it holds more than one YAML document, and nooma reads only one: keep your configuration in a single document, removing the extra `---` or `...` lines and anything that is not part of it")
+	}
+
 	var cfg Config
 
 	dec := yaml.NewDecoder(bytes.NewReader(doc), yaml.Strict())
@@ -54,6 +65,61 @@ func Decode(r io.Reader) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// secondDocument reports whether doc holds anything past its first YAML
+// document. A second document is never decoded, so nothing in it is checked,
+// a key that does not exist included, while the file still travels as it is
+// in a bundle (ADR-0057).
+//
+// It reads the text rather than asking the YAML library, because the library
+// stops at an empty or comment-only document as if the input had ended: a
+// document behind one is neither decoded nor parsed (measured, both with the
+// decoder and with its parser). That holds for an empty FIRST document too,
+// which would hide the real one and leave an empty configuration nothing
+// checked. A document marker is a line starting `---` or `...` at column 0;
+// an indented one inside a block scalar is text.
+//
+// The first `---`, or the first content line, starts the first document. Any
+// later marker ends it, whether or not it held content, and from then on any
+// line that is not blank or a comment, a marker's own content included, is a
+// second document. A comment and a directive may precede the first `---`.
+func secondDocument(doc []byte) bool {
+	started, ended := false, false
+	for _, line := range strings.Split(string(doc), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if inline, ok := documentMarker(line); ok {
+			if started {
+				ended = true
+			}
+			started = true
+			if inline && ended {
+				return true
+			}
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || (!started && strings.HasPrefix(trimmed, "%")) {
+			continue
+		}
+		if ended {
+			return true
+		}
+		started = true
+	}
+	return false
+}
+
+// documentMarker reports whether line is a document marker (`---` or `...` at
+// column 0) and whether it carries content after it on the same line.
+func documentMarker(line string) (inline, ok bool) {
+	for _, m := range []string{"---", "..."} {
+		if line == m || strings.HasPrefix(line, m+" ") || strings.HasPrefix(line, m+"\t") {
+			rest := strings.TrimSpace(line[len(m):])
+			return rest != "" && !strings.HasPrefix(rest, "#"), true
+		}
+	}
+	return false, false
 }
 
 // retiredKey is a top-level key that a nooma.yml may still carry because an

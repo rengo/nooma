@@ -1,0 +1,95 @@
+# ADR-0057 — A bundle is a checked zip of the vault
+
+- **Status**: Proposed
+- **Date**: 2026-10-29
+- **Supersedes**: —
+- **Superseded by**: —
+- **Enables**: M6 (`nooma export`, link C1; `nooma import`, link C2, extends this ADR)
+
+## Context
+
+The client runs a production vault on a server and a development vault on a notebook, and wants
+to move a brain between machines. `nooma backup` ([ADR-0049](0049-backup-is-a-built-in-snapshot.md))
+already writes a verified snapshot and `nooma.yml`, so a move is possible today by hand: copy two
+files, place them, fix their owner, start. Three things are missing for a stranger to do it
+safely:
+
+- **One file to move.** Two loose files, the second easy to forget, and attachments not carried
+  at all (backup refuses a vault that has any).
+- **Integrity that travels.** A backup is verified where it is written; nothing checks it after it
+  crossed a network or a USB stick.
+- **A restore that cannot go wrong.** A restore is a procedure, and the import that replaces it
+  (C2) needs something it can check before it writes anything.
+
+The client chose copy only, never merge, and no password on the bundle (2026-10-29).
+
+## Options evaluated
+
+| Option | Tradeoff |
+|---|---|
+| Keep backup's two files, document the move | No new code; no attachments, no check after transport, a manual restore |
+| A JSON export of every table | Readable by other tools, but ~20 tables to round-trip losslessly across every future migration, forever; SQLite already opens with `sqlite3` |
+| **A zip: the snapshot, `nooma.yml`, attachments, and a manifest of sha256s** | One file, checked on both ends, opened by every OS's own archive tool; the database stays the one format the binary already migrates |
+| A tar.gz | Equivalent content; Windows does not open it natively |
+| Encrypt the bundle | Rejected by the client; transport encryption stays outside the binary, as ADR-0049 keeps it |
+
+## Decision
+
+1. **A `.noomabundle` is a zip** holding `nooma.db`, `nooma.yml`, every regular file under
+   `attachments/`, and `manifest.json`:
+   - `bundle_format` (`1`), an integer that moves only when the layout changes, never with the
+     schema or the binary;
+   - `nooma_version`, the binary that wrote it, and `schema_version`, the database's
+     `user_version`;
+   - `created_at`, UTC;
+   - `embedding_models`, each model with how many embedding rows the database holds under it;
+   - `files`: each file's path, size and sha256.
+2. **Never in a bundle**: `.env` (secrets stay with the deployment), `derived/` (recomputable),
+   `logs/` and `nooma.lock`. `nooma.yml` goes in byte for byte. Its schema has no field for a
+   literal secret, only the names of the variables that carry one, and the decoder refuses a
+   key it does not know, a repeated key, and a second YAML document when the file loads, so
+   none of those reaches a bundle. What the file can still carry is text nooma never reads: a
+   comment travels with it. Export refuses a provider endpoint carrying a user or password, or
+   a query string, in its URL, since a URL is the one value that can embed a key. A link or any non-regular file under `attachments/` is refused,
+   since it could carry a file from outside the vault.
+3. **`nooma export <vault> <file.noomabundle>`** takes no lock and runs beside serve. The
+   database is backup's own snapshot (`VACUUM INTO` over a read-only connection) that passed
+   `integrity_check`. Export never migrates the vault, and a vault behind the binary is bundled
+   at its own schema. The bundle is written as `<file>.partial`, re-read and checked against its
+   manifest, and only then renamed. On any failure the command exits non-zero and leaves no
+   bundle, no `.partial` and no working folder. The name must end in `.noomabundle`, must not
+   exist, and must not be inside the vault.
+4. **A bundle is accepted only when it matches its manifest exactly** (`bundle.Verify`): a
+   format this binary reads, `nooma.db` and `nooma.yml` present, every listed file present once
+   with its size and sha256, every name a clean relative path, and no entry the manifest does
+   not list. Export runs this check on what it wrote; import (C2) will run it before writing
+   anything.
+5. **The snapshot travels as it is.** Doc 03 requires a rebuild of the word index after a
+   vacuum, because `units.rowid` may be renumbered. Export only reads, so the rebuild is
+   import's, before the vault first opens (C2).
+6. **The bundle complements backup and replaces nothing.** Backup stays the daily rotation the
+   server's rclone job uploads, and its file names stay what that job matches.
+
+## Consequences
+
+### What it enables
+
+- A brain moves as one file whose every byte is checked again where it lands.
+- Attachments travel, which backup still refuses.
+- C2's import has a contract to refuse against before it writes a vault.
+
+### What it costs
+
+- A second copy format beside backup's, and one more command.
+- The bundle is plaintext: it holds the whole brain, and protecting it in transit is the user's
+  job, as with a backup.
+- The manifest guards against corruption, not tampering: whoever can rewrite the zip can rewrite
+  its manifest.
+- On a server the export file is written as the container's user, so moving it off the host
+  takes `sudo` (docs/08).
+
+### Reversal criteria
+
+Evidence that bundles are wanted by other tools (a JSON export beside the snapshot), that
+tampering in transit is a real risk (a signed manifest), or that backup and bundle should be
+one format (backup writing bundles, with the rclone job's names changed in the same step).

@@ -302,3 +302,62 @@ func TestDecodeAcceptsAnEmptyDocument(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeRejectsASecondDocument: nooma reads one YAML document. A second
+// was never decoded, so nothing in it was checked, a key that does not exist
+// included, and `nooma export` copies the file as it is: whatever it said
+// would travel in a bundle. The YAML library stops at an empty or
+// comment-only document as if the input had ended, so a document behind one
+// was neither decoded nor seen: the refusal reads the text, not the library.
+// A marker alone, before the one document or after it with only blank lines
+// and comments behind it, is not a second document.
+func TestDecodeRejectsASecondDocument(t *testing.T) {
+	for name, doc := range map[string]string{
+		"a second document":                           "server:\n  bind: 127.0.0.1\n---\napi_key: sk-secret\n",
+		"behind an empty document":                    "server:\n  bind: 127.0.0.1\n---\n---\napi_key: sk-secret\n",
+		"behind a comment-only document":              "server:\n  bind: 127.0.0.1\n---\n# c\n---\napi_key: sk-secret\n",
+		"after an end marker":                         "server:\n  bind: 127.0.0.1\n...\n---\napi_key: sk-secret\n",
+		"after an end marker, no start marker":        "server:\n  bind: 127.0.0.1\n...\napi_key: sk-secret\n",
+		"on the marker's own line":                    "server:\n  bind: 127.0.0.1\n--- sk-secret\n",
+		"after a first document on its marker's line": "--- {server: {bind: 127.0.0.1}}\n---\napi_key: sk-secret\n",
+		// An empty or comment-only FIRST document hid the real one: the file
+		// decoded into an empty config, with nothing in it checked.
+		"behind an empty first document":       "---\n---\nserver:\n  bind: 127.0.0.1\n",
+		"behind a comment-only first document": "---\n# c\n---\nserver:\n  bind: 127.0.0.1\n",
+		"with Windows line endings":            "server:\r\n  bind: 127.0.0.1\r\n---\r\napi_key: sk-secret\r\n",
+	} {
+		_, err := Decode(strings.NewReader(doc))
+		if err == nil || !strings.Contains(err.Error(), "more than one YAML document") ||
+			!strings.Contains(err.Error(), "keep your configuration in a single document, removing the extra `---` or `...` lines") {
+			t.Errorf("%s: Decode = %v, want a refusal saying nooma reads one and what to remove", name, err)
+		}
+	}
+	for name, doc := range map[string]string{
+		"a leading marker":                "---\nserver:\n  bind: 127.0.0.1\n",
+		"a trailing marker":               "server:\n  bind: 127.0.0.1\n---\n",
+		"a trailing end marker":           "server:\n  bind: 127.0.0.1\n...\n",
+		"a trailing marker and a comment": "server:\n  bind: 127.0.0.1\n---\n# old settings\n\n",
+		"both markers":                    "---\nserver:\n  bind: 127.0.0.1\n...\n",
+		"a marker-like line in a block":   "providers:\n  p:\n    type: ollama\n    model: |\n      ---\n      x\n",
+		"a comment then one marker":       "# my vault\n---\nserver:\n  bind: 127.0.0.1\n",
+		"a directive then a marker":       "%YAML 1.2\n---\nserver:\n  bind: 127.0.0.1\n",
+		"an empty file":                   "",
+		"comments only":                   "# nothing set yet\n",
+	} {
+		if _, err := Decode(strings.NewReader(doc)); err != nil {
+			t.Errorf("%s: Decode = %v, want one document accepted", name, err)
+		}
+	}
+}
+
+// TestDecodeReadsAFileThatStartsWithAByteOrderMark: an editor that saves UTF-8
+// with a BOM must not make the first key unreadable.
+func TestDecodeReadsAFileThatStartsWithAByteOrderMark(t *testing.T) {
+	cfg, err := Decode(strings.NewReader("\ufeffserver:\n  bind: 127.0.0.1\n"))
+	if err != nil {
+		t.Fatalf("Decode of a file with a BOM = %v, want it read", err)
+	}
+	if cfg.Server.Bind == nil || *cfg.Server.Bind != "127.0.0.1" {
+		t.Errorf("server.bind = %v, want 127.0.0.1", cfg.Server.Bind)
+	}
+}
