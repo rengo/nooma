@@ -159,6 +159,17 @@ where it still proves something real.**
 - **L4** compiles the binary and walks the user path: `nooma init`, `nooma serve`, a capture
   via API, a recall, `nooma doctor`, `nooma export`.
 
+**No test reaches a real vault.** A command given no vault resolves one: `NOOMA_VAULT`, then the
+working directory and its parents, then `~/.nooma`. On 2026-10-30 a test ran `nooma reindex`
+with no vault, resolution found the maintainer's real one, and the command migrated and
+rewrote it. So every package whose tests run commands as the binary would (`cmd/nooma`,
+`test/e2e`) starts in `test/support/sandbox`'s `TestMain`. It sets `HOME` (with `USERPROFILE`,
+the XDG and Windows app-data variables) to a throwaway folder, and `NOOMA_VAULT` to a folder that
+is not a vault, so a command given none stops at resolution's first step. A test that needs a vault
+names one or sets `NOOMA_VAULT` itself. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
+proves it: a vault planted in the sandbox's `~/.nooma` is never opened. A new package that runs
+commands gets the same `TestMain`.
+
 ### The UI is L1, and the stack is why
 
 `internal/ui/` needs no level of its own. The UI is server-side rendered

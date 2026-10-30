@@ -44,6 +44,9 @@ func TestUsageNamesOnlyCommandsThatWork(t *testing.T) {
 // printing "not implemented" would teach the user the command is there; an
 // unknown-command error is the honest answer until it works.
 //
+// "export" and "import" left it in M6 (ADR-0057): they exist, and only
+// passed here because both refuse a missing argument before resolving a vault.
+//
 // "consolidate" left this list in m2c-consolidation-runtime PR 12
 // (cmd/nooma/consolidate.go): it is dispatchable now, so it belongs in
 // TestUsageNamesOnlyCommandsThatWork's own coverage above instead —
@@ -51,7 +54,7 @@ func TestUsageNamesOnlyCommandsThatWork(t *testing.T) {
 func TestUnimplementedCommandsDoNotExist(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"reindex", "export", "import", "nonsense"} {
+	for _, name := range []string{"reindex", "nonsense"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
