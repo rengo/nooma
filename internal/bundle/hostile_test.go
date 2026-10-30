@@ -115,6 +115,13 @@ func TestVerify_RefusesAHostileBundle(t *testing.T) {
 			m, _ := json.Marshal(bundle.Manifest{BundleFormat: 1, Files: listed, NoomaVersion: strings.Repeat("v", 2<<20)})
 			return rawBundle(t, entries, listed, m)
 		}, "manifest.json is larger than"},
+		// Σ, σ and ς are one letter to a filesystem that folds case; lowering
+		// alone keeps final sigma apart.
+		"names that differ only by Greek case": {func() string {
+			entries, listed := base()
+			entries = append(entries, rawEntry{name: "attachments/Σ.txt", body: []byte("a")}, rawEntry{name: "attachments/ς.txt", body: []byte("b")})
+			return rawBundle(t, entries, append(listed, listedFile("attachments/Σ.txt", "a"), listedFile("attachments/ς.txt", "b")), nil)
+		}, "differ only by case"},
 		"names that differ only by case": {func() string {
 			entries, listed := base()
 			entries = append(entries, rawEntry{name: "attachments/Photo.txt", body: []byte("a")}, rawEntry{name: "attachments/photo.txt", body: []byte("b")})
@@ -122,7 +129,11 @@ func TestVerify_RefusesAHostileBundle(t *testing.T) {
 		}, "differ only by case"},
 	}
 	for _, reserved := range []string{"attachments/CON", "attachments/aux.txt", "attachments/com1.log", "attachments/lpt9", "attachments/nul",
-		"attachments/trailing.", "attachments/trailing ", "attachments/a:b", "attachments/q?.txt", "attachments/x\x01y"} {
+		"attachments/trailing.", "attachments/trailing ", "attachments/a:b", "attachments/q?.txt", "attachments/x\x01y",
+		// The device list in full: superscript digits, zero, a space before
+		// the extension, and the console names.
+		"attachments/COM¹.txt", "attachments/LPT²", "attachments/com³", "attachments/COM0", "attachments/LPT0.log",
+		"attachments/CON .txt", "attachments/conin$", "attachments/CONOUT$.txt"} {
 		cases["a Windows name "+strings.ReplaceAll(reserved, "\x01", `\x01`)] = struct {
 			build func() string
 			want  string
@@ -193,5 +204,17 @@ func TestVerify_StopsABombWhoseZipHeaderLies(t *testing.T) {
 
 	if _, err := bundle.Verify(p); err == nil || !strings.Contains(err.Error(), "attachments/bomb") {
 		t.Errorf("Verify of a bomb with a lying header = %v, want a refusal naming it", err)
+	}
+}
+
+// TestVerify_AcceptsNamesNearTheDeviceNames: a name that only starts like a
+// device name is an ordinary file.
+func TestVerify_AcceptsNamesNearTheDeviceNames(t *testing.T) {
+	for _, name := range []string{"attachments/console.txt", "attachments/COM10", "attachments/COM12.txt", "attachments/LPT23", "attachments/LPT.txt", "attachments/auxiliary", "attachments/nul-points.md", "attachments/coníñ.txt"} {
+		entries, listed := base()
+		entries = append(entries, rawEntry{name: name, body: []byte("x")})
+		if _, err := bundle.Verify(rawBundle(t, entries, append(listed, listedFile(name, "x")), nil)); err != nil {
+			t.Errorf("Verify with %q = %v, want it accepted", name, err)
+		}
 	}
 }

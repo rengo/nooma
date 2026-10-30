@@ -271,6 +271,10 @@ sudo rm /srv/nooma/backups/brain-20261029.noomabundle
 a user, a password or a query string. A **comment** is never read and goes in as written: do not
 keep a secret in a comment.
 
+An attachment whose name Windows cannot hold (a `:`, `?` or `*`, a trailing space or dot, a
+device name such as `CON` or `aux.txt`) makes the export fail, and the error names the file:
+rename it and export again. A bundle has to open on every system.
+
 An export that is interrupted (killed, or the host loses power) leaves its `.partial` file and
 a working folder named `.nooma-export-…` in `/backups`. Neither is a bundle; delete both by hand
 (`sudo rm -r /srv/nooma/backups/*.noomabundle.partial /srv/nooma/backups/.nooma-export-*`) and

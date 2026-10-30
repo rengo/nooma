@@ -150,8 +150,10 @@ func checkName(name string) error {
 }
 
 // windowsReserved reports a path segment Windows refuses or rewrites: a
-// device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with any extension), a
-// trailing dot or space, a character it reserves, or a control character.
+// device name with any extension (CON, PRN, AUX, NUL, CONIN$, CONOUT$, and
+// COM or LPT followed by 0-9 or a superscript ¹²³), spaces before the
+// extension included; a trailing dot or space; a character it reserves; or a
+// control character.
 func windowsReserved(seg string) bool {
 	if strings.HasSuffix(seg, ".") || strings.HasSuffix(seg, " ") || strings.ContainsAny(seg, `<>:"|?*`) {
 		return true
@@ -162,11 +164,17 @@ func windowsReserved(seg string) bool {
 		}
 	}
 	stem, _, _ := strings.Cut(strings.ToUpper(seg), ".")
+	stem = strings.TrimRight(stem, " ")
 	switch stem {
-	case "CON", "PRN", "AUX", "NUL":
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$":
 		return true
 	}
-	return len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9'
+	for _, port := range []string{"COM", "LPT"} {
+		if digit, ok := strings.CutPrefix(stem, port); ok && len(digit) > 0 && strings.Contains("0123456789¹²³", digit) && len([]rune(digit)) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // Verify re-reads the bundle at p and returns its manifest only when the zip
@@ -195,7 +203,9 @@ func Verify(p string) (Manifest, error) {
 			errs = append(errs, fmt.Errorf("bundle: %q is not a regular file (%s)", e.Name, e.Mode().Type()))
 		}
 		// Two names a case-insensitive filesystem would make one file.
-		key := strings.ToLower(e.Name)
+		// Upper then lower, so letters with more than one lower form (σ, ς)
+		// fold to one.
+		key := strings.ToLower(strings.ToUpper(e.Name))
 		if other, ok := folded[key]; ok {
 			errs = append(errs, fmt.Errorf("bundle: %q and %q differ only by case", other, e.Name))
 		}
