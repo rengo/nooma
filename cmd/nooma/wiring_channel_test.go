@@ -5,8 +5,11 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/rengo/nooma/internal/channels/telegram"
 	"github.com/rengo/nooma/internal/config"
 )
 
@@ -131,6 +134,57 @@ func TestWireTranscriber_HearsOnlyThroughAProviderThatCanTranscribe(t *testing.T
 			}
 			if said := log.Len() > 0; said != (tc.bound != "" && !tc.hears) {
 				t.Errorf("log %q: a binding that cannot hear is named, and only then", log.String())
+			}
+		})
+	}
+}
+
+// TestWireChannel_TheChannelServeBuildsHearsWhenTranscriptionIsBound pins
+// the channel serve actually runs, not wireTranscriber alone: bound to an
+// openai provider with its key, it holds a transcriber; bound to one that
+// cannot transcribe, it holds none and serve names the binding; unbound,
+// it holds none and says nothing (voice is answered as off, ADR-0062).
+//
+// The transcriber is read by reflection rather than through a method added
+// for this test: the field is the fact, and a seam would be production code
+// with no production caller.
+func TestWireChannel_TheChannelServeBuildsHearsWhenTranscriptionIsBound(t *testing.T) {
+	cases := []struct {
+		name, bound   string
+		hears, logged bool
+	}{
+		{"bound to openai", "cloud", true, false},
+		{"bound to ollama", "local", false, true},
+		{"unbound", "", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Providers: map[string]config.Provider{
+					"cloud": {Type: "openai", APIKeyEnv: "OPENAI_API_KEY", Model: "gpt-4o-mini"},
+					"local": {Type: "ollama", Model: "llama3"},
+				},
+				Tasks: map[string]config.TaskBinding{},
+			}
+			cfg.Channels.Telegram = config.Telegram{Enabled: true, BotTokenEnv: "TG_TOKEN", AllowedChatIDs: []int64{7}}
+			if tc.bound != "" {
+				cfg.Tasks["audio_transcription"] = config.TaskBinding{Provider: tc.bound}
+			}
+			var log bytes.Buffer
+			ch, err := wireChannel(cfg, func(string) (string, bool) { return "secret", true }, &log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tg, ok := ch.(*telegram.Channel)
+			if !ok {
+				t.Fatalf("wireChannel built %T, want *telegram.Channel", ch)
+			}
+			hears := !reflect.ValueOf(tg).Elem().FieldByName("transcriber").IsNil()
+			if hears != tc.hears {
+				t.Errorf("the channel serve runs hears voice = %v, want %v", hears, tc.hears)
+			}
+			if logged := strings.Contains(log.String(), "audio_transcription is bound to"); logged != tc.logged {
+				t.Errorf("serve's log %q names the binding = %v, want %v", log.String(), logged, tc.logged)
 			}
 		})
 	}
