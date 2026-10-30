@@ -855,6 +855,19 @@ command, it is answered once.
      style, with no hour for a day alone ("Turno con el oculista — mar 20 oct, 10:00"). Not
      the content alone: the content carries a resolved date as `YYYY-MM-DD`, the form a
      correction needs to find it (step 1), not the form a person reads.
+   - **What the code found is worded by the model, and checked before it is sent**
+     ([ADR-0061](adr/0061-the-model-words-what-the-code-found.md)). The code decides and
+     acts; the model only words it, in the user's variety and register (voseo answered with
+     voseo), warm and brief: one or two sentences, no emoji, no markdown, no offer, no question
+     the fixed text does not ask. It is handed the facts the code produced (`voice.Facts`: the
+     intent, the items with their title, type and instant, each day named as the code counted it,
+     the literals to keep, and the user's message for its tone, never as a fact) and the fixed
+     text as its draft. `voice.Check` sends the wording only when the shape rules above hold
+     and it carries every literal to keep; otherwise, and on a provider error or past
+     `reply_phrasing_timeout`, the draft is sent. Reading the wording's own dates and numbers
+     against the facts is the next change (ADR-0061). The timers' numbered list, the
+     `out_of_scope` refusal and the bot commands stay fixed. The check exists; the surfaces it words arrive in ADR-0061's order:
+     recall answers, then pushes and the timer rephrasing, then the digest, then confirmations.
    - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
      window and no terms is a list, not a search: the live units whose instant (`told`:
      `created_at`; `when`: `event_at`, else `due_at`) falls in it, in order of that instant, up
@@ -2509,6 +2522,10 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `max_reminder_choices` (`internal/core/classify.MaxReminderChoices`) | 5 — entries in the numbered reminder list the prompt carries, and so the highest `choice_number` or `reminder_target` position; the same bound numbers the live timers and so the highest `timer_target`, and the open goal check-ins and so the highest `goal_target` (§5 step 1, §7, §8; ADR-0033, ADR-0051, ADR-0054); chosen, a list a person can read in one message |
 | `conversation_context_turns` (`internal/core/classify.ConversationTurns`) | 20 — the last turns of a chat a chat message is read in, at any age (§5 step 1, ADR-0041), and so the most items its prompt letters (`A` to `T`), the ones the newest turns name; chosen by the client (2026-10-19: "que recuerde por almacenamiento, los últimos N chats", N = 20): a morning digest and its reminders, several exchanges, and a follow-up and its question. Each turn adds at most about 330 characters to the prompt (`max_turn_runes` and its label). Too small drops the digest before the reply that answers it; too large lets old, unrelated turns sit beside a new message and grows every chat prompt |
 | `max_turn_runes` (`internal/core/classify.MaxTurnRunes`) | 280 — a turn is shown clipped to it, and a clarifying question longer than it degrades (§5 step 1); chosen: a digest can be long, a question is one line on a phone |
+| `reply_phrasing_timeout` (`internal/core/voice.TimeoutSeconds`) | 5 s — how long a wording may take before the fixed text is sent (§5 step 2, ADR-0061); chosen by the client (2026-10-30) |
+| `reply_max_sentences` (`internal/core/voice.MaxSentences`) | 2 — the most sentences a wording has outside list lines, unless its draft has more (§5 step 2); the client's "one or two sentences" |
+| `reply_min_runes` (`internal/core/voice.MinRunes`) | 280 — a wording may be this long whatever its draft; a chat message read on a phone (§5 step 2); chosen |
+| `reply_runes_factor` (`internal/core/voice.RunesFactor`) | 2 — a wording may be this many times its draft's length when that is more than `reply_min_runes`: one far longer than the fixed text has added something (§5 step 2); chosen |
 | `max_title_runes` (`internal/core/classify.MaxTitleRunes`) | 60 — the longest title a unit keeps (§5 step 1); one line beside a date, chosen |
 | `calendar_days` (`internal/core/classify.CalendarDays`) | 14 — how many days, today included, the classify context lists (§5 step 1); the furthest a bare weekday reaches is seven days out, so a week of margin |
 | `weight_threshold` (archiving; `internal/core/consolidation.DefaultWeightThreshold` + `ResolveWeightThreshold`) | 0.5 |
