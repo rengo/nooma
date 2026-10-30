@@ -151,12 +151,13 @@ CREATE TABLE triggers (
   created_at        TEXT NOT NULL
 );
 
-CREATE TABLE unit_embeddings (
-  unit_id   TEXT PRIMARY KEY REFERENCES units(id) ON DELETE CASCADE,
+CREATE TABLE "unit_embeddings" (
+  unit_id   TEXT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
   model     TEXT NOT NULL,       -- e.g. 'nomic-embed-text'
   dim       INTEGER NOT NULL,    -- redundant with the blob length, and worth the redundancy
   embedding BLOB NOT NULL,       -- dim × float32, little-endian, L2-normalized on write
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (unit_id, model)
 );
 
 CREATE TABLE units (

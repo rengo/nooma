@@ -184,13 +184,13 @@ func TestCheckVaultCoverage_CountsUnitsLackingTheConfiguredModel(t *testing.T) {
 	if _, ok := err.(doctorOKDetail); ok {
 		t.Fatalf("checkVaultCoverage reported %q as ok", err)
 	}
-	for _, want := range []string{"2 live units have no model-a vector", "1 holds a model-b vector", "nooma reindex", "not in this version yet"} {
+	for _, want := range []string{"2 live units have no model-a vector", "vectors under other models: model-b on 1 live unit", "nooma reindex", "not in this version yet"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("checkVaultCoverage = %q, want it to say %q", err, want)
 		}
 	}
 	// The configured model is the one they lack, never one of the others.
-	if strings.Contains(err.Error(), "a model-a vector") {
+	if strings.Contains(err.Error(), "model-a on") {
 		t.Errorf("checkVaultCoverage = %q, names the configured model among the others", err)
 	}
 }

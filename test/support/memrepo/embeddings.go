@@ -19,8 +19,8 @@ type Embeddings struct {
 	// alone would return a different index ordering on every call, and while
 	// recall.Search sorts by score, ties would then resolve differently run
 	// to run — flakiness that reads as a ranking bug.
-	order  []string
-	byUnit map[string]ports.Embedding
+	order []embeddingKey
+	rows  map[embeddingKey]ports.Embedding
 
 	// liveUnits is every id EnsureUnit has registered, for
 	// CountLiveWithoutEmbedding's benefit. The fake has no notion of unit
@@ -39,7 +39,7 @@ var _ ports.EmbeddingRepo = (*Embeddings)(nil)
 // NewEmbeddings returns an empty, ready-to-use in-memory
 // ports.EmbeddingRepo. Every call returns an independent instance.
 func NewEmbeddings() *Embeddings {
-	return &Embeddings{byUnit: make(map[string]ports.Embedding), liveUnits: make(map[string]bool)}
+	return &Embeddings{rows: make(map[embeddingKey]ports.Embedding), liveUnits: make(map[string]bool)}
 }
 
 // EnsureUnit implements repocontract.EmbeddingHarness. It enforces no
@@ -62,7 +62,7 @@ func (r *Embeddings) CountLiveWithoutEmbedding(_ context.Context, model string) 
 
 	count := 0
 	for id := range r.liveUnits {
-		if e, embedded := r.byUnit[id]; !embedded || e.Model != model {
+		if _, embedded := r.rows[embeddingKey{id, model}]; !embedded {
 			count++
 		}
 	}
@@ -74,15 +74,16 @@ func (r *Embeddings) Put(_ context.Context, e ports.Embedding) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.byUnit[e.UnitID]; !exists {
-		r.order = append(r.order, e.UnitID)
+	key := embeddingKey{e.UnitID, e.Model}
+	if _, exists := r.rows[key]; !exists {
+		r.order = append(r.order, key)
 	}
-	// Keyed on UnitID alone: unit_embeddings.unit_id is the primary key, so
-	// a re-embed under a new model overwrites rather than adding a row.
+	// Keyed on (unit, model), as unit_embeddings is since migration 0016: a
+	// write under one model replaces only that model's vector for the unit.
 	// Copied, never aliased — the caller still holds the slice it passed.
 	stored := e
 	stored.Vector = slices.Clone(e.Vector)
-	r.byUnit[e.UnitID] = stored
+	r.rows[key] = stored
 	return nil
 }
 
@@ -96,9 +97,9 @@ func (r *Embeddings) LoadIndex(_ context.Context, model string) (recall.VectorIn
 		IDs:     make([]string, 0, len(r.order)),
 		Vectors: make([][]float32, 0, len(r.order)),
 	}
-	for _, id := range r.order {
-		e, ok := r.byUnit[id]
-		if !ok || e.Model != model {
+	for _, key := range r.order {
+		e := r.rows[key]
+		if key.model != model {
 			continue
 		}
 		idx.IDs = append(idx.IDs, e.UnitID)
@@ -108,3 +109,6 @@ func (r *Embeddings) LoadIndex(_ context.Context, model string) (recall.VectorIn
 	// empty string would mismatch every query.
 	return idx, nil
 }
+
+// embeddingKey is unit_embeddings' primary key, (unit_id, model).
+type embeddingKey struct{ unit, model string }

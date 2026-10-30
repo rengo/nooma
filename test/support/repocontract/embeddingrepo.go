@@ -62,11 +62,11 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		}
 	})
 
-	// unit_id is the primary key (design D8), so a second Put for the same
-	// unit replaces rather than duplicates. Without this, a re-embedding
+	// (unit_id, model) is the primary key (migration 0016), so a second Put
+	// for the same unit under the same model replaces rather than duplicates. Without this, a re-embedding
 	// would leave the old vector in the index alongside the new one and
 	// recall would score the same unit twice.
-	t.Run("Put upserts on unit_id", func(t *testing.T) {
+	t.Run("Put upserts on unit_id and model", func(t *testing.T) {
 		repo := newRepo(t)
 		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
@@ -130,17 +130,13 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		}
 	})
 
-	// A model change OVERWRITES the unit's row; it does not add a second
-	// one. unit_embeddings.unit_id is the primary key (migration 0002), and
-	// ADR-0003's amendment makes reindex an ordinary UPDATE loop, complete
-	// when no rows of the old model remain.
-	//
-	// This case exists because the opposite is an easy and plausible thing
-	// to build — a fake keyed on (unit_id, model) passes every other case
-	// here while being unimplementable over the real schema. That is the
-	// divergence design D6's "answered twice" rule exists to catch, and it
-	// caught exactly this one.
-	t.Run("a re-embed under a new model replaces the row", func(t *testing.T) {
+	// One vector per unit per model (I21, ADR-0058): a write under a new
+	// model ADDS the unit's row for that model and keeps the one under the
+	// old model, so a reindex never takes away the index the running model
+	// reads, and a switch back costs nothing. Migration 0016 keys
+	// unit_embeddings by (unit_id, model); before it, a write under a new
+	// model replaced the row, which is what this case used to assert.
+	t.Run("a write under another model keeps the first model's vector", func(t *testing.T) {
 		repo := newRepo(t)
 		repo.EnsureUnit(t, "unit-1")
 		ctx := context.Background()
@@ -156,17 +152,18 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		if err != nil {
 			t.Fatalf("LoadIndex(model-old): %v", err)
 		}
-		if len(old.IDs) != 0 {
-			t.Errorf("LoadIndex(model-old) still holds %v — a re-embed must move the unit, "+
-				"not leave a stale row a search could still return", old.IDs)
+		if len(old.IDs) != 1 || old.IDs[0] != "unit-1" || !reflect.DeepEqual(old.Vectors[0], []float32{1, 0, 0}) {
+			t.Errorf("LoadIndex(model-old) = %v %v, want unit-1 with its model-old vector, kept", old.IDs, old.Vectors)
 		}
-
 		fresh, err := repo.LoadIndex(ctx, "model-new")
 		if err != nil {
 			t.Fatalf("LoadIndex(model-new): %v", err)
 		}
-		if len(fresh.IDs) != 1 || fresh.IDs[0] != "unit-1" {
-			t.Errorf("LoadIndex(model-new) = %v, want [unit-1]", fresh.IDs)
+		if len(fresh.IDs) != 1 || fresh.IDs[0] != "unit-1" || !reflect.DeepEqual(fresh.Vectors[0], []float32{0, 1, 0}) {
+			t.Errorf("LoadIndex(model-new) = %v %v, want unit-1 with its model-new vector", fresh.IDs, fresh.Vectors)
+		}
+		if missing, err := repo.CountLiveWithoutEmbedding(ctx, "model-old"); err != nil || missing != 0 {
+			t.Errorf("CountLiveWithoutEmbedding(model-old) = %d, %v; want 0, the old vector kept", missing, err)
 		}
 	})
 

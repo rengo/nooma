@@ -260,7 +260,8 @@ Prior decisions: **[ADR-0004](adr/0004-license.md)** (license),
 | B | `nooma doctor` reads the vault read-only and never migrates it (I55); its schema check reports behind or ahead; the lock holder is reported; coverage counts the live units lacking the configured model's vector; the word index is checked against units; serve warns at boot ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)) | Shipped (#425) |
 | C1 | `nooma export`: a `.noomabundle` zip of the database snapshot, `nooma.yml` and attachments with a manifest of sizes and sha256s, never `.env`; written beside serve, re-read against its manifest, nothing left on failure (I54, [ADR-0057](adr/0057-a-bundle-is-a-checked-zip-of-the-vault.md)) | Shipped (#426) |
 | C2a | `bundle.Verify` refuses a hostile bundle: a link or directory, names equal once case is folded, Windows-reserved names, an oversized manifest, an entry larger than declared | Shipped (#427) |
-| C2b | `nooma import`: a new vault from a bundle, never over an existing one; refusals before any write (not empty, a newer format or schema, too little space), checked again as it unpacks, an older bundle migrated, the word index rebuilt, Telegram off in the copy | In review |
+| C2b | `nooma import`: a new vault from a bundle, never over an existing one; refusals before any write (not empty, a newer format or schema, too little space), checked again as it unpacks, an older bundle migrated, the word index rebuilt, Telegram off in the copy | Shipped (#428, released in v0.6.0) |
+| D1 | One vector per unit per model: migration 0016 keys `unit_embeddings` by `(unit_id, model)`, keeping every row; a write under one model keeps the unit's other vectors ([ADR-0058](adr/0058-a-unit-holds-one-vector-per-model.md), I21) | In review |
 
 ## After v1
 

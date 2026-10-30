@@ -289,12 +289,14 @@ catch-up together.)
 ```sql
 -- Embeddings: an ordinary table. No virtual table, no extension.
 -- Proximity search is a dot product in Go over an in-memory index (ADR-0012).
+-- One vector per unit per model (migration 0016, ADR-0058).
 CREATE TABLE unit_embeddings (
-  unit_id   TEXT PRIMARY KEY REFERENCES units(id) ON DELETE CASCADE,
+  unit_id   TEXT NOT NULL REFERENCES units(id) ON DELETE CASCADE,
   model     TEXT NOT NULL,       -- e.g. 'nomic-embed-text'
   dim       INTEGER NOT NULL,    -- redundant with the blob length, and worth the redundancy
   embedding BLOB NOT NULL,       -- dim × float32, little-endian, L2-normalized on write
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (unit_id, model)
 );
 CREATE INDEX idx_unit_embeddings_model ON unit_embeddings(model);
 
@@ -362,10 +364,14 @@ END;
   `units` row-for-row, or FTS5 returns rowids that resolve to the wrong unit or to nothing.
 - **Vectors are L2-normalized before storage.** Cosine similarity is then a plain dot product,
   which is what makes the brute-force search cheap enough to need no index (ADR-0012).
-- **The vault records the embedding model per row**, not in global metadata. If the user
-  changes model, the whole vault must be re-embedded (`nooma reindex` — an explicit command,
-  with progress). Because dimension is data rather than schema, reindex is a resumable
-  `UPDATE` loop rather than a table rebuild.
+- **The vault records the embedding model per row**, not in global metadata, and **a unit holds
+  one vector per model**: the key is `(unit_id, model)` (migration 0016,
+  [ADR-0058](adr/0058-a-unit-holds-one-vector-per-model.md)). A write replaces the unit's vector
+  under its own model and keeps its vectors under any other. If the user changes model, the
+  vault must be re-embedded (`nooma reindex`, an explicit command with progress); the new
+  model's vectors are added beside the old ones, so a reindex is resumable from the data alone,
+  never takes away the index the running model reads, and a return to the old model costs
+  nothing. Nothing is deleted.
 - **Never mix models in a search.** A vault can briefly hold two models mid-reindex, so
   **every search filters on `model`**, and so does the count of what lacks a vector: a unit
   embedded under another model lacks the configured one. This used to be guaranteed by the schema; it is now a
