@@ -164,11 +164,19 @@ working directory and its parents, then `~/.nooma`. On 2026-10-30 a test ran `no
 with no vault, resolution found the maintainer's real one, and the command migrated and
 rewrote it. So every package whose tests run commands as the binary would (`cmd/nooma`,
 `test/e2e`) starts in `test/support/sandbox`'s `TestMain`. It sets `HOME` (with `USERPROFILE`,
-the XDG and Windows app-data variables) to a throwaway folder, and `NOOMA_VAULT` to a folder that
-is not a vault, so a command given none stops at resolution's first step. A test that needs a vault
-names one or sets `NOOMA_VAULT` itself. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
+the XDG and Windows app-data variables, and the temporary directory) to a throwaway folder, and
+`NOOMA_VAULT` to a folder that is not a vault, so a command given none stops at resolution's first
+step. A test that needs a vault names one or sets `NOOMA_VAULT` to it. **`NOOMA_VAULT` is never
+empty in a test's own process**: empty, resolution walks up the working directory's parents and can
+find a `*.nooma` folder there before it ever reaches `HOME`. Only a child process may get an empty
+one, to exercise resolution, and only beside its own `HOME`, as e2e's are; its working directory is
+under the sandbox's temporary folder. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
 proves it: a vault planted in the sandbox's `~/.nooma` is never opened. A new package that runs
-commands gets the same `TestMain`.
+commands gets the same `TestMain`, and a gate says so:
+`TestSandboxGate_TheTreeHasNoUnsandboxedCommandTests` (`test/harness`) reads every `_test.go` and
+fails on a package that calls `run()` in `cmd/nooma`, runs the built binary, builds `./cmd/nooma`,
+or calls `config.ResolveVault` without a `TestMain` calling `sandbox.Main`, and on a test that
+sets `NOOMA_VAULT` empty, unsets it, or gives a child an empty one without its own `HOME`.
 
 ### The UI is L1, and the stack is why
 
