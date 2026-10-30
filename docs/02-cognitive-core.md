@@ -862,12 +862,36 @@ command, it is answered once.
      the fixed text does not ask. It is handed the facts the code produced (`voice.Facts`: the
      intent, the items with their title, type and instant, each day named as the code counted it,
      the literals to keep, and the user's message for its tone, never as a fact) and the fixed
-     text as its draft. `voice.Check` sends the wording only when the shape rules above hold
-     and it carries every literal to keep; otherwise, and on a provider error or past
-     `reply_phrasing_timeout`, the draft is sent. Reading the wording's own dates and numbers
-     against the facts is the next change (ADR-0061). The timers' numbered list, the
-     `out_of_scope` refusal and the bot commands stay fixed. The check exists; the surfaces it words arrive in ADR-0061's order:
-     recall answers, then pushes and the timer rephrasing, then the digest, then confirmations.
+     text as its draft.
+     - **The model never writes a fact; it writes slots the code fills** (I56,
+       [ADR-0063](adr/0063-the-model-writes-slots-the-code-fills.md)). `{n}` is item
+       n's own words, `{n.when}` its day and time with their own preposition ("mañana a las
+       10:00", "el jueves 5 de noviembre a las 15:30", the time left out for a day alone),
+       `{count}` the number of items, and on an empty recall `{none}` its finding of nothing ("no
+       encontré nada"); `voice.Check` puts in the same words the fixed text uses, capitalised where
+       a sentence starts. An item's words keep their stored case elsewhere, lowered only when the
+       user's message writes that word in lowercase. So a day given to the wrong item, a borrowed day or
+       a miscounted list cannot be written, and the word order is the model's.
+     - **Check sends the filled wording only when** it has no digit, no day or month name and
+       no day, time or number word ("hoy", "tarde", "tres") outside a slot; each item's `{n}`
+       and `{n.when}` appear once each, side by side with nothing of another item between them,
+       two items are parted by a comma, a conjunction or a new sentence, no article or
+       preposition comes right before a `{n.when}`, and `{count}` at most once; every other word
+       is a common word of the language (`vocabulary.frame`) or one of the draft's, the message's
+       or an item's, which keeps an invented item ("también el gimnasio") out. A negation or a
+       singular count ("no", "ni", "nada", "cosa") is not a common word, so only the draft or an
+       item licenses it; an empty recall has `{none}` exactly once and never says a word that
+       claims a finding ("algo", "hay", "encontré"), whatever the message says; and the shape
+       rules above hold, with list lines no more than the items. Otherwise, and on a provider
+       error or past `reply_phrasing_timeout`, the draft is sent.
+     - **What it cannot rule out** is a wording that is true and odd ("el dentista, y antes, la
+       reunión"), or an invented item or detail made only of the draft's, the message's or the
+       items' own words ("el dentista mañana a las 10:00 con Ana", Ana being another item's). A
+       natural wording that uses a word outside the frame falls back to the draft; the recorded
+       phrasings measure how often.
+     - The timers' numbered list, the `out_of_scope` refusal and the bot commands stay fixed.
+       The surfaces it words arrive in ADR-0061's order: recall answers, then pushes and the
+       timer rephrasing, then the digest, then confirmations.
    - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
      window and no terms is a list, not a search: the live units whose instant (`told`:
      `created_at`; `when`: `event_at`, else `due_at`) falls in it, in order of that instant, up

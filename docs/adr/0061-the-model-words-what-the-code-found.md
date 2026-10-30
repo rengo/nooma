@@ -7,7 +7,7 @@
 - **Supersedes**: [ADR-0032](0032-a-reminder-says-what-is-true-now.md) **in part**: point 4's
   fixed frame and its rejected option "re-word the text with a model at delivery". What a
   reminder says stays the unit as it is now; only its wording changes.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0063](0063-the-model-writes-slots-the-code-fills.md), in part (point 2's copying, point 3's reading of dates, and the word list)
 - **Extends** (none of them edited): [ADR-0033](0033-the-model-understands-the-code-acts.md)
   (the model understands, the code acts: now the model also words what the code did),
   [ADR-0022](0022-reply-language.md) (the fixed sentence in the reply's language is the fallback,
