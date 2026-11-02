@@ -24,21 +24,32 @@ import (
 // default-deny: a package needs a TestMain calling sandbox.Main (found by the
 // sandbox package's import path, whatever name the file gives it) when any of
 // its test files imports os/exec, imports internal/config, imports the
-// sandbox package (for Child), or is a package main under cmd/. A package that
-// execs something harmless pays for a throwaway HOME and nothing else.
+// sandbox package (for Child), imports a non-test package under test/support
+// that imports os/exec (directly, or through other test/support packages), or is a package main under cmd/. A
+// package that execs something harmless pays for a throwaway HOME and nothing
+// else.
 //
-// What it does not see: a test that runs nooma with no import at all (there is
-// no such route in Go short of the import); deliberate evasion (a split
-// literal such as "NOOMA_VAULT"+"=", os.Clearenv, a child given
-// []string{"PATH=/bin"}, which has neither vault nor HOME); a key held in a
-// variable rather than a constant; and build tags: a TestMain behind a tag
-// counts for the whole directory.
+// What it does not see, all named in docs/06-harness.md §3: a helper outside
+// test/support that runs a command; os.StartProcess, which needs only os; a
+// package config calling ResolveVault directly, which imports nothing; os under
+// an import alias (Unsetenv, Clearenv); a key or value held in a variable, a
+// map-built environment, or a constant declared in another file; deliberate
+// evasion (a split literal such as "NOOMA_VAULT"+"=", a child given
+// []string{"PATH=/bin"}, which has neither vault nor HOME, or an environment
+// filtered by prefix); and build tags: a TestMain behind a tag counts for the
+// whole directory. It also over-reports, loudly: a TestMain that reaches
+// sandbox.Main through a local helper, a dot import of the sandbox package,
+// "NOOMA_VAULT=" as a whole element of a list that only compares, and a key
+// constant shadowed in another function (stringConsts ignores scope).
 func sandboxViolations(root string) (violations []string, needsSandbox map[string]bool, err error) {
 	type pkg struct {
 		why       string
 		sandboxed bool
+		imports   []string
 	}
 	pkgs := map[string]*pkg{}
+	// Non-test packages under test/support: the paths each imports.
+	helpers := map[string]*pkg{}
 	needsSandbox = map[string]bool{}
 
 	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -59,22 +70,47 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 			}
 			return nil
 		}
-		if !strings.HasSuffix(p, "_test.go") {
+		isTest := strings.HasSuffix(p, "_test.go")
+		if !isTest && !strings.HasSuffix(p, ".go") {
 			return nil
-		}
-		src, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		file, err := parser.ParseFile(token.NewFileSet(), p, src, 0)
-		if err != nil {
-			return err
 		}
 		rel, err := filepath.Rel(root, filepath.Dir(p))
 		if err != nil {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if !isTest && !strings.HasPrefix(rel+"/", "test/support/") {
+			return nil
+		}
+		src, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		mode := parser.Mode(0)
+		if !isTest {
+			mode = parser.ImportsOnly
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), p, src, mode)
+		if err != nil {
+			return err
+		}
+		if !isTest {
+			if helpers[rel] == nil {
+				helpers[rel] = &pkg{}
+			}
+			for _, imp := range file.Imports {
+				path, _ := strconv.Unquote(imp.Path.Value)
+				helpers[rel].imports = append(helpers[rel].imports, path)
+			}
+			return nil
+		}
+		for _, imp := range file.Imports {
+			path, _ := strconv.Unquote(imp.Path.Value)
+			if pkgs[rel] == nil {
+				pkgs[rel] = &pkg{}
+			}
+			pkgs[rel].imports = append(pkgs[rel].imports, path)
+		}
 		if pkgs[rel] == nil {
 			pkgs[rel] = &pkg{}
 		}
@@ -127,6 +163,20 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 	if err != nil {
 		return nil, nil, err
 	}
+	imports := map[string][]string{}
+	for rel, h := range helpers {
+		imports[rel] = h.imports
+	}
+	execs := execingHelpers(imports)
+	for _, k := range pkgs {
+		for _, path := range k.imports {
+			if h := helperFor(path, execs); h != "" {
+				if k.why == "" {
+					k.why = "import " + h + ", a test/support package that runs commands"
+				}
+			}
+		}
+	}
 	for rel, k := range pkgs {
 		if k.why == "" {
 			continue
@@ -138,6 +188,47 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 	}
 	sort.Strings(violations)
 	return violations, needsSandbox, nil
+}
+
+// execingHelpers returns the test/support packages (dirs relative to the
+// root) that import os/exec, or import another that does. That includes
+// test/support/sandbox itself, whose importers need a sandbox by their own rule.
+func execingHelpers(imports map[string][]string) map[string]bool {
+	out := map[string]bool{}
+	for dir, imps := range imports {
+		for _, path := range imps {
+			if path == "os/exec" {
+				out[dir] = true
+			}
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for dir, imps := range imports {
+			if out[dir] {
+				continue
+			}
+			for _, path := range imps {
+				if helperFor(path, out) != "" {
+					out[dir] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
+// helperFor names the execing helper dir that import path path resolves to
+// ("<module>/test/support/x" is dir "test/support/x"), or "".
+func helperFor(path string, execs map[string]bool) string {
+	for dir := range execs {
+		if path == dir || strings.HasSuffix(path, "/"+dir) {
+			return dir
+		}
+	}
+	return ""
 }
 
 const emptyVaultMsg = "builds an environment entry with an empty NOOMA_VAULT by hand; sandbox.Child builds a child's, beside its own HOME"

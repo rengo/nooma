@@ -65,6 +65,23 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	write("wrongmain", "a_test.go", test(`"os/exec"`, `_ = exec.Command("x")`)+"func TestMain(m *testing.M) { m.Run() }\n")
 	write("othermain", "a_test.go", test(`"os/exec"`, `_ = exec.Command("x")`)+"func TestMain(m *testing.M) { other.Main(m) }\n")
 	write("dotimport", "a_test.go", "package p\nimport (\"os\"; \"os/exec\"; \"testing\"; . \""+sbPath+"\")\nfunc TestMain(m *testing.M) { os.Exit(Main(m)) }\nfunc TestA(t *testing.T) { _ = exec.Command(\"x\") }\n")
+	// A TestMain that does not call sandbox.Main does not count because Main is
+	// called from some other function.
+	write("mainelsewhere", "a_test.go", "package p\nimport (\"testing\"; sb \""+sbPath+"\")\nfunc TestMain(m *testing.M) { m.Run() }\nfunc other(m *testing.M) int { return sb.Main(m) }\n")
+	// A helper under test/support that runs commands, directly or through
+	// another, needs the sandbox of whoever imports it; the sandbox package and
+	// a helper that runs nothing do not count.
+	write("test/support/execer", "e.go", "package execer\nimport \"os/exec\"\nvar Run = exec.Command\n")
+	write("test/support/viaexecer", "v.go", "package viaexecer\nimport _ \""+"github.com/rengo/nooma/test/support/execer\"\n")
+	write("test/support/plain", "p.go", "package plain\nimport \"strings\"\nvar F = strings.ToUpper\n")
+	write("test/support/sandbox", "s.go", "package sandbox\nimport \"os/exec\"\nvar R = exec.Command\n")
+	write("lib/runner", "r.go", "package runner\nimport \"os/exec\"\nvar R = exec.Command\n")
+	write("userunner", "a_test.go", test(`"github.com/rengo/nooma/lib/runner"`, `_ = runner.R`))
+	write("usehelper", "a_test.go", test(`"github.com/rengo/nooma/test/support/execer"`, `_ = execer.Run`))
+	write("usevia", "a_test.go", test(`"github.com/rengo/nooma/test/support/viaexecer"`, `_ = 1`))
+	write("useplain", "a_test.go", test(`"github.com/rengo/nooma/test/support/plain"`, `_ = plain.F`))
+	// Only .claude/worktrees is skipped, not any folder of that name.
+	write("tools/worktrees/x", "a_test.go", test(`"os/exec"`, `_ = exec.Command("x")`))
 	// The rule is per package: a sandboxed file does not cover another's
 	// directory, and one that imports exec is enough.
 	write("split", "a_test.go", test(`"os/exec"`, `_ = exec.Command("x")`))
@@ -95,6 +112,7 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	write("unrelated", "a_test.go", "package p\nimport (\"os\"; \"strings\"; \"testing\")\nfunc f(a, b string) {}\nfunc TestA(t *testing.T) {\n"+
 		"\tf(\"want\", \"NOOMA_VAULT=\")\n\t_ = strings.HasPrefix(\"x\", \"NOOMA_VAULT=\")\n\tv := \"/v\"\n"+
 		"\t_ = append(os.Environ(), \"NOOMA_VAULT=\"+v)\n\t_ = []string{\"NOOMA_VAULT=\" + v, \"NOOMA_VAULTS=\"}\n\tt.Setenv(\"NOOMA_VAULT\", v)\n\tt.Setenv(\"OTHER\", \"\")\n}\n")
+	write("setsvalue", "a_test.go", test("", `t.Setenv("NOOMA_VAULT", "/v")`))
 	write(".claude/worktrees/stale/cmd/nooma", "a_test.go", "package main\nimport \"os/exec\"\nvar _ = exec.Command\n")
 
 	violations, needs, err := sandboxViolations(root)
@@ -111,12 +129,12 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	}
 	for _, dir := range []string{"exec", "execpath", "execalias", "config", "childonly", "cmd/tool", "wrongmain",
 		"othermain", "dotimport", "split", "empties", "unsets", "clears", "constkey", "localconstkey",
-		"envliteral", "envappend", "envsplit"} {
+		"envliteral", "envappend", "envsplit", "mainelsewhere", "usehelper", "usevia", "tools/worktrees/x"} {
 		if !reported[dir] {
 			t.Errorf("the gate did not report %s:\n%s", dir, strings.Join(violations, "\n"))
 		}
 	}
-	for _, dir := range []string{"ok", "cmd/okmain", "child", "sandbox", "noexec", "cmdlib", "unrelated", ".claude"} {
+	for _, dir := range []string{"ok", "cmd/okmain", "child", "sandbox", "noexec", "cmdlib", "unrelated", "setsvalue", "useplain", "userunner", ".claude"} {
 		if reported[dir] {
 			t.Errorf("the gate reported %s, which is sandboxed, harmless, or builds no entry of its own:\n%s", dir, strings.Join(violations, "\n"))
 		}
@@ -126,7 +144,7 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 			t.Errorf("the gate did not count %s among the packages that need a sandbox, so its TestMain was never checked", dir)
 		}
 	}
-	for _, dir := range []string{"noexec", "unrelated"} {
+	for _, dir := range []string{"noexec", "unrelated", "setsvalue", "useplain", "userunner"} {
 		if needs[dir] {
 			t.Errorf("the gate asked %s for a sandbox", dir)
 		}

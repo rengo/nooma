@@ -166,8 +166,8 @@ rewrote it. So every package whose tests run commands as the binary would (`cmd/
 `test/e2e`) starts in `test/support/sandbox`'s `TestMain`. It sets `HOME` (with `USERPROFILE`,
 the XDG and Windows app-data variables, and the temporary directory) to a throwaway folder, and
 `NOOMA_VAULT` to a folder that is not a vault, so a command given none stops at resolution's first
-step. A test that needs a vault names one or sets `NOOMA_VAULT` to it. **`NOOMA_VAULT` is never
-empty in a test's own process**: empty, resolution walks up the working directory's parents and can
+step. A test that needs a vault names one or sets `NOOMA_VAULT` to it. **In a sandboxed package,
+`NOOMA_VAULT` is never empty in a test's own process**: empty, resolution walks up the working directory's parents and can
 find a `*.nooma` folder there before it ever reaches `HOME`. Only a child process may get an empty
 one, to exercise resolution, and only through `sandbox.Child`, which gives it its own `HOME` and,
 unless the test chose one, a working directory under the sandbox's temporary folder. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
@@ -175,8 +175,8 @@ proves it: a vault planted in the sandbox's `~/.nooma` is never opened. A new pa
 commands gets the same `TestMain`, and a gate says so.
 `TestSandboxGate_TheTreeHasNoUnsandboxedCommandTests` (`test/harness`) reads every `_test.go` and
 is default-deny, so it never has to recognise a command that runs nooma: a package whose tests
-import `os/exec`, import `internal/config`, import the sandbox package (for `Child`) or are a
-`package main` under `cmd/` fails unless a `TestMain` in it calls `Main` on the sandbox package
+import `os/exec`, import `internal/config`, import the sandbox package (for `Child`), import a
+non-test package under `test/support` that imports `os/exec` (directly or through another) or are a `package main` under `cmd/` fails unless a `TestMain` in it calls `Main` on the sandbox package
 (found by import path, under any alias). A package that execs something harmless pays for a
 throwaway `HOME` and nothing else; a false negative is what corrupted the vault. `sandbox.Child`
 panics outside `Main`, so a child never starts with the machine's temporary folder. The gate also
@@ -184,9 +184,13 @@ fails on a test that sets `NOOMA_VAULT` to an empty string (a literal, or a cons
 file, local ones included), unsets it, calls `os.Clearenv`, or has the literal `"NOOMA_VAULT="` as
 a whole element of a list or an argument to `append`, instead of calling `sandbox.Child`;
 `"NOOMA_VAULT="+v` or the literal as an argument to another call (`strings.HasPrefix`) is not
-reported. What it does not see: deliberate evasion (a split literal, a key held in a variable, a
-child given `[]string{"PATH=/bin"}`, which has neither vault nor `HOME`), and build tags (a
-`TestMain` behind a tag counts for the whole directory). It skips `.claude/worktrees`, which holds other agents' copies of the tree.
+reported. What it does not see: a helper outside `test/support` that runs a command; `os.StartProcess`;
+`package config` calling `ResolveVault` directly; `os` under an import alias; a key or value held
+in a variable, a map-built environment, or a constant from another file; deliberate evasion (a
+split literal, a child given `[]string{"PATH=/bin"}`, which has neither vault nor `HOME`, or an
+environment filtered by prefix); and build tags (a `TestMain` behind a tag counts for the whole
+directory). It also reports, loudly, a `TestMain` that reaches `Main` through a local helper and a
+dot import of the sandbox package. It skips `.claude/worktrees`, which holds other agents' copies of the tree.
 
 ### The UI is L1, and the stack is why
 

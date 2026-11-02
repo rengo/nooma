@@ -6,7 +6,7 @@
 // vault before any test runs: NOOMA_VAULT names a folder that is not a vault,
 // so a command given none stops at resolution's first step, and HOME (with
 // its Windows and XDG relatives) is a throwaway folder in case anything looks
-// further. NOOMA_VAULT is never empty in a test's own process: empty, resolution
+// further. Under Main, NOOMA_VAULT is never empty in a test's own process: empty, resolution
 // would walk up the working directory's parents and could find a *.nooma
 // folder there before it reached HOME. The temporary directory moves into the
 // sandbox too, and Child starts a child there, so a child given an empty
@@ -76,10 +76,13 @@ func Main(m *testing.M) int {
 }
 
 // Child readies cmd to run nooma with no vault named: its own HOME, and an
-// empty NOOMA_VAULT so the child exercises resolution. Empty is safe only
-// here, beside a HOME of the child's own and a working directory under the
-// sandbox's temporary folder (the caller's Dir, when it set one); a test
-// builds no such environment by hand, which the gate in test/harness checks.
+// empty NOOMA_VAULT so the child exercises resolution. Empty is
+// acceptable only here, beside a HOME of the child's own and a working
+// directory under the sandbox's temporary folder (the caller's Dir, when it set
+// one). Resolution still walks past the sandbox to the filesystem root (on
+// Windows the default temporary folder is under the user's profile), so this
+// narrows the roads to a real vault and does not prove it closed. A test builds
+// no such environment by hand, which the gate in test/harness checks.
 // Child panics outside Main: there the temporary folder is the machine's.
 func Child(cmd *exec.Cmd, home string) {
 	if !active {
@@ -88,7 +91,7 @@ func Child(cmd *exec.Cmd, home string) {
 	if home == "" {
 		panic("sandbox.Child: an empty home is not a home of the child's own")
 	}
-	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT"+"=")
+	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
 	if cmd.Dir == "" {
 		cmd.Dir = os.TempDir()
 	}
