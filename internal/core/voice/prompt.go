@@ -26,7 +26,7 @@ func BuildPrompt(f Facts, draft string) string {
 	b.WriteString("  Write each item's slots once each, {n} and {n.when} side by side in either order, with nothing of another item between them,\n")
 	b.WriteString("    and part two items with a comma, \"y\"/\"and\" or a new sentence. Put no article or preposition right before a {n.when}.\n")
 	b.WriteString("  When an item's words start with a bare noun, put its article before the slot (\"el {1}\", \"la {1}\").\n")
-	b.WriteString("  Add no item, place, person or detail of your own: use plain words, and the words of the draft and the message.\n")
+	b.WriteString("  Add no item, place, person or detail of your own: use plain words and the draft's own words; an item's words only through its slot.\n")
 	b.WriteString("  One or two short sentences. With three or more items, one short line per item.\n")
 	b.WriteString("  No emojis, no markdown, no greeting, no sign-off, no remarks or offers of your own.\n")
 	b.WriteString("  Do not ask a question unless the draft asks it.\n")

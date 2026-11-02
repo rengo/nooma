@@ -869,24 +869,30 @@ command, it is answered once.
        10:00", "el jueves 5 de noviembre a las 15:30", the time left out for a day alone),
        `{count}` the number of items, and on an empty recall `{none}` its finding of nothing ("no
        encontré nada"); `voice.Check` puts in the same words the fixed text uses, capitalised where
-       a sentence starts. An item's words keep their stored case elsewhere, lowered only when the
-       user's message writes that word in lowercase. So a day given to the wrong item, a borrowed day or
-       a miscounted list cannot be written, and the word order is the model's.
+       a sentence starts. An item's first letter is lowered elsewhere ("el dentista"), unless the
+       message or another item's text writes that word with a capital (a name: "Pedro"). So a
+       day given to the wrong item, a borrowed day or a miscounted list cannot be written, and the
+       word order is the model's.
      - **Check sends the filled wording only when** it has no digit, no day or month name and
        no day, time or number word ("hoy", "tarde", "tres") outside a slot; each item's `{n}`
        and `{n.when}` appear once each, side by side with nothing of another item between them,
        two items are parted by a comma, a conjunction or a new sentence, no article or
-       preposition comes right before a `{n.when}`, and `{count}` at most once; every other word
-       is a common word of the language (`vocabulary.frame`) or one of the draft's, the message's
-       or an item's, which keeps an invented item ("también el gimnasio") out. A negation or a
-       singular count ("no", "ni", "nada", "cosa") is not a common word, so only the draft or an
-       item licenses it; an empty recall has `{none}` exactly once and never says a word that
-       claims a finding ("algo", "hay", "encontré"), whatever the message says; and the shape
-       rules above hold, with list lines no more than the items. Otherwise, and on a provider
-       error or past `reply_phrasing_timeout`, the draft is sent.
+       preposition comes right before a `{n.when}`, and `{count}` at most once; and every other
+       word is a common word of the language (`vocabulary.frame`) or one of the draft's own
+       fixed words. **The user's message and the items' text license no word**: an item's words
+       arrive only through its slot, and a negative question lends no negation. The frame holds
+       no negation ("no", "ni", "nada"; "not", "nothing"), no noun that can stand as an item or
+       a count ("cosa", "pendiente", "tema"; "thing", "topic"), no past tense of the verb ("tenías",
+       "had") and no "if", so only the draft's fixed text can say them. An empty recall has
+       `{none}` exactly once and never a word that claims a finding ("algo", "hay", "encontré",
+       "es", "queda", "más"; "but", "is", "it", "there"), whatever the draft or the message says,
+       so "sobre eso" is sent and "sobre el dentista" is not. The shape rules above hold, with
+       list lines no more than the items. Otherwise, and on a provider error or past
+       `reply_phrasing_timeout`, the draft is sent.
      - **What it cannot rule out** is a wording that is true and odd ("el dentista, y antes, la
-       reunión"), or an invented item or detail made only of the draft's, the message's or the
-       items' own words ("el dentista mañana a las 10:00 con Ana", Ana being another item's). A
+       reunión"), a name the facts never write with a capital, which is lowered ("pedro cumple
+       años"), and a tense or mood the frame holds (the present and a future pass; a past or a
+       conditional falls back). None of these states a date or a count the facts lack. A
        natural wording that uses a word outside the frame falls back to the draft; the recorded
        phrasings measure how often.
      - The timers' numbered list, the `out_of_scope` refusal and the bot commands stay fixed.

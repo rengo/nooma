@@ -1,6 +1,6 @@
 # ADR-0063 — The model writes slots, and the code fills in every fact
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-30
 - **Supersedes**: [ADR-0061](0061-the-model-words-what-the-code-found.md) **in part**: point 2's
   "so the model copies it", point 3's reading of the wording's own numbers and dates, and the
@@ -27,14 +27,24 @@ free text, which is the class of mistake ADR-0033 already ruled on.
 2. **The check is structural.** Outside the slots: no digit, no day or month name, no day, time or
    number word. Each item's slots appear once, side by side, and two items are parted. `{none}`
    appears exactly once on an empty recall and never otherwise. Every other word is a common word
-   of the language or one of the draft's, the message's or an item's own. Negations and singular
-   counts ("no", "ni", "nada", "cosa"; "not", "nothing", "thing") are not common words: only the
-   draft or an item can license them. On an empty recall, words that claim a finding ("algo",
-   "hay", "encontré") are refused even when the message holds them. Anything else, a provider
-   error, or a timeout sends the fixed text, as ADR-0061 point 4 says.
-3. **An item's words are sent as stored**, capitalised where a sentence starts. Mid-sentence, the
-   first letter is lowered only when the user's own message writes that word in lowercase, so a
-   name ("Pedro") is never lowercased by guesswork.
+   of the language (the frame) or one of the draft's own fixed words. **Neither the user's message
+   nor an item's text licenses a word**: the message is in the prompt for its tone, and an item's
+   words reach the wording only through its slot. So a negative question ("¿No tengo nada esta
+   semana?") lends no negation, and a message naming the dentist lends no "dentista" to an empty
+   recall. The frame holds no negation ("no", "ni", "nada", "sin"; "not", "nothing", "nor"), no
+   noun that can stand as an item or a count ("cosa", "pendiente", "tema", "turnos", "algo";
+   "thing", "topic", "something"), no past tense of the answer's verb ("tenías", "had") and no
+   "if" ("si"): only the draft's fixed text says them, so a draft that says "Encontré 2 cosas"
+   licenses its own count. On an empty recall, words that claim a finding are refused whatever
+   the draft or the message holds: the indefinites and verbs ("algo", "hay", "encontré",
+   "found"), and the copulas, locatives and "but" that would present something as there ("más",
+   "es", "está", "queda", "ahí"; "but", "is", "it", "there"). Anything else, a provider error, or
+   a timeout sends the fixed text, as ADR-0061 point 4 says.
+3. **An item's words are sent as stored, with the case the facts support.** A sentence's first
+   word is capitalised. Elsewhere an item's first letter is lowered ("el dentista", titles are
+   stored capitalised), unless the facts write that word with a capital: in the user's message, or
+   inside an item's text past its first word ("Regalo para Pedro"). Then it is a name and keeps its
+   capital.
 
 ## Why the word list does not break ADR-0033
 
@@ -46,9 +56,17 @@ false rejects.
 
 ## Consequences
 
-- A wording cannot state a date, a count or an item the facts do not hold. What it can still do
-  is attach a detail made only of the draft's, the message's or the items' own words ("el
-  dentista … con Ana"), or be true but odd.
-- Natural wordings that use a word missing from the list fall back to the fixed text. The rate is
-  measured, not assumed.
-- A capital mid-sentence ("tenés el Dentista") where the message does not write the word.
+- A wording cannot state a date, a count or an item the facts do not hold, and cannot negate a
+  found recall or claim a finding on an empty one. These are the guarantees the code keeps, each
+  pinned by a must-fail test (I56).
+- Because the message licenses no word, a wording that repeats the topic on an empty recall
+  ("no encontré nada sobre el dentista") falls back to the fixed text; "sobre eso" / "about that"
+  is sent. This is a behaviour change from the first draft of this ADR: the topic was the one use
+  of the message's words, and it also let the message put words such as "más que el dentista" in
+  an empty recall's mouth.
+- Known limits, documented rather than chased because none can state a false date or count: a
+  wording can be true but odd ("el dentista, y antes, la reunión"); a name the facts never write
+  with a capital is lowered ("pedro cumple años"); a natural wording that uses a word outside the
+  frame falls back to the fixed text, a rate the recorded phrasings measure; and a future
+  "será"/"will" or an infinitive is in the frame while a past or conditional form is not, so
+  tense and mood are only partly ruled.

@@ -53,10 +53,11 @@ func parseSlots(f Facts, out string) (slots []slot, rest string, ok bool) {
 
 // words reads what rest, a wording outside its slots, says in its own words: a
 // number, a date, or a day, month, time or number word is RejectFact; a word
-// that is neither a common word of the language nor one the draft, the message
-// or an item's text holds is RejectWord. An empty recall says what was found
-// through {none} alone: a word that claims a
-// finding ("algo", "hay", "encontré") is refused even from the message.
+// that is neither a common word of the language nor one of the draft's own,
+// its fixed text without the items' words, is RejectWord. The user's message
+// licenses no word (it is in the prompt for its tone), and an item's words
+// reach the wording only through its slot. An empty recall says what was found
+// through {none} alone, and never a word that claims a finding ("algo", "hay").
 func (v vocabulary) words(f Facts, draft, rest string) Rejection {
 	set := phrase.For(f.Language)
 	dated := map[string]bool{}
@@ -65,14 +66,14 @@ func (v vocabulary) words(f Facts, draft, rest string) Rejection {
 		dated[fold(w)] = true
 	}
 	allowed := map[string]bool{}
-	texts, frame := []string{draft, f.Message}, v.frame
+	fixed, frame := draft, v.frame
 	if f.Intent == RecallNone {
 		frame = slices.Concat(v.frame, v.noneFrame)
 	}
 	for _, it := range f.Items {
-		texts = append(texts, it.Text)
+		fixed = strings.ReplaceAll(fixed, it.Text, " ")
 	}
-	for _, w := range append(wordsOf(strings.Join(texts, " ")), frame...) {
+	for _, w := range append(wordsOf(fixed), frame...) {
 		allowed[fold(w)] = true
 	}
 	if f.Intent == RecallNone {
@@ -166,7 +167,8 @@ func lastWord(text string) string {
 }
 
 // fill puts each slot's words in out: the item's text, its day and time as the
-// code renders them, and the count, capitalised at a sentence's start.
+// code renders them, the count, and {none}, each capitalised at a sentence's
+// start, and an item's text lower-cased elsewhere unless it opens with a name.
 func fill(f Facts, out string, slots []slot) string {
 	var b strings.Builder
 	last := 0
@@ -183,7 +185,12 @@ func fill(f Facts, out string, slots []slot) string {
 		default:
 			text = f.Items[s.item].Text
 		}
-		b.WriteString(caseFor(text, atStart(b.String()), f.Message))
+		if s.item >= 0 && !s.when {
+			text = caseFor(f, text, atStart(b.String()))
+		} else if atStart(b.String()) {
+			text = caseFor(Facts{}, text, true)
+		}
+		b.WriteString(text)
 		last = s.end
 	}
 	b.WriteString(out[last:])
@@ -203,23 +210,51 @@ func lastRune(s string) rune {
 	return r
 }
 
-// caseFor is text with its first letter upper at a sentence's start. Elsewhere
-// it is lower only when the user's own message writes that first word in lower
-// case ("cuando tengo turno…"): lower-casing on a guess could turn a name the
-// user wrote ("Pedro") into a common word, while a capital keeps it as stored.
-func caseFor(text string, start bool, message string) string {
+// caseFor is an item's text where a slot puts it: its first letter upper at a
+// sentence's start, else lower ("el dentista"), unless the facts write that
+// first word with a capital somewhere it is not a sentence's first word, in the
+// user's message or inside an item's text ("¿cuándo cumple Pedro?", "Regalo para
+// Pedro"): then it is a name and keeps it.
+func caseFor(f Facts, text string, start bool) string {
 	r, n := utf8.DecodeRuneInString(text)
 	switch {
 	case n == 0:
 		return text
 	case start:
 		return string(unicode.ToUpper(r)) + text[n:]
+	case named(f, firstWord(text)):
+		return text
 	}
-	first := strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) })
-	if len(first) > 0 && slices.Contains(strings.FieldsFunc(message, func(r rune) bool { return !unicode.IsLetter(r) }), strings.ToLower(first[0])) {
-		return string(unicode.ToLower(r)) + text[n:]
+	return string(unicode.ToLower(r)) + text[n:]
+}
+
+// named reports whether word is written capitalised in the message or past the
+// first word of an item's text.
+func named(f Facts, word string) bool {
+	if word == "" || !unicode.IsUpper([]rune(word)[0]) {
+		return false
 	}
-	return text
+	if slices.Contains(letterWords(f.Message), word) {
+		return true
+	}
+	for _, it := range f.Items {
+		if ws := letterWords(it.Text); len(ws) > 1 && slices.Contains(ws[1:], word) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstWord(text string) string {
+	if ws := letterWords(text); len(ws) > 0 {
+		return ws[0]
+	}
+	return ""
+}
+
+// letterWords is the words of text, case kept.
+func letterWords(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) })
 }
 
 // when is item it's day and time as {n.when} says them, with their own

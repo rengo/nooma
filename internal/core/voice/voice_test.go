@@ -42,7 +42,7 @@ func TestCheck_TheClientsReplyIsSent(t *testing.T) {
 
 func TestCheck_AWordingOfTheWrongShapeSendsTheDraft(t *testing.T) {
 	t.Parallel()
-	long := "Tenés el {1} {1.when}" + strings.Repeat(", para los estudios", 20) + "."
+	long := "Tenés el {1} {1.when}" + strings.Repeat(", y eso es todo", 20) + "."
 	tests := []struct {
 		name, out string
 		facts     func(*Facts)
@@ -93,12 +93,12 @@ const meetingsDraft = "Encontré 2 cosas:\n• Dentista — mar 3 nov, 10:00\n�
 // two-item wordings, in slots: the day may come before its item or after it.
 func TestCheck_HonestWordingsAreSentInAnyOrder(t *testing.T) {
 	t.Parallel()
-	const d, r = "el Dentista", "la Reunión con Ana"
+	const d, r = "el dentista", "la reunión con Ana"
 	const tue, thu = "mañana a las 10:00", "el jueves 5 de noviembre a las 15:30"
 	for _, tc := range []struct{ out, want string }{
 		{"Tenés el {1} {1.when} y la {2} {2.when}.", "Tenés " + d + " " + tue + " y " + r + " " + thu + "."},
-		{"Tenés el {1} {1.when}. La {2} es {2.when}.", "Tenés " + d + " " + tue + ". La Reunión con Ana es " + thu + "."},
-		{"{1.when}, {1}.\n{2.when}, {2}.", "Mañana a las 10:00, Dentista.\nEl jueves 5 de noviembre a las 15:30, Reunión con Ana."},
+		{"Tenés el {1} {1.when}. La {2} es {2.when}.", "Tenés " + d + " " + tue + ". La reunión con Ana es " + thu + "."},
+		{"{1.when}, {1}.\n{2.when}, {2}.", "Mañana a las 10:00, dentista.\nEl jueves 5 de noviembre a las 15:30, reunión con Ana."},
 		{"Tenés {count} cosas: el {1} {1.when} y la {2} {2.when}.", "Tenés 2 cosas: " + d + " " + tue + " y " + r + " " + thu + "."},
 		{"{1.when} el {1}, y {2.when} la {2}.", "Mañana a las 10:00 " + d + ", y " + thu + " " + r + "."},
 		{"{1.when} tenés el {1} y {2.when}, la {2}.", "Mañana a las 10:00 tenés " + d + " y " + thu + ", " + r + "."},
@@ -148,26 +148,60 @@ func TestCheck_AFactCanOnlyComeFromItsSlot(t *testing.T) {
 		{"No tenés {1} {1.when}, ni {2} {2.when}.", RejectWord},        // a negation the facts do not hold
 		{"No hay nada: ni {1} {1.when}, ni {2} {2.when}.", RejectWord}, // the same
 		{"Tenés una cosa: {1} {1.when}, y {2} {2.when}.", RejectWord},  // one, for two items
-		{"Tenés un turno: {1} {1.when} y {2} {2.when}.", RejectWord},   // the same
+		{"Tenés un turno: {1} {1.when} y {2} {2.when}.", RejectWord},
+		{"Tenés un pendiente: el {1} {1.when}, y la {2} {2.when}.", RejectWord}, // B3, round 4
+		{"Hay un tema: el {1} {1.when}, y la {2} {2.when}.", RejectWord},
+		{"Tenés el {1} {1.when}, para los estudios.", RejectWord},          // an item's word outside its slot
+		{"Tenés el {1} {1.when}, la {2} {2.when} y algo más.", RejectWord}, // the same
 		{"Tenés el {1} {1.when} y la {2} {2.when} con Marta.", RejectWord},
 	} {
 		if got, why := Check(meetings(), meetingsDraft, tc.out); why != tc.want || got != meetingsDraft {
 			t.Errorf("Check(%q) = %q, %q; want the draft and %q", tc.out, got, why, tc.want)
 		}
 	}
+	// B1, round 4: the message licenses no word, so a negative question cannot
+	// lend its negation to the answer.
+	negES := meetings()
+	negES.Message = "¿No tengo nada esta semana?"
+	if got, why := Check(negES, meetingsDraft, "No tenés el {1} {1.when}, y nada de la {2} {2.when}."); why != RejectWord || got != meetingsDraft {
+		t.Errorf("a negation from the message was sent: %q", why)
+	}
+	// each negator alone, so a word list that regains one is caught.
+	for _, out := range []string{"No tenés el {1} {1.when} y la {2} {2.when}.", "Tenés nada: el {1} {1.when} y la {2} {2.when}.",
+		"Tenés el {1} {1.when} ni la {2} {2.when}.", "Tenés el {1} {1.when} sin la {2} {2.when}.",
+		"Nunca tenés el {1} {1.when} y la {2} {2.when}.", "Tampoco tenés el {1} {1.when} y la {2} {2.when}."} {
+		if _, why := Check(negES, meetingsDraft, out); why != RejectWord {
+			t.Errorf("Check(%q) = %q; a negator is not the frame's", out, why)
+		}
+	}
 	en := meetings()
-	en.Language = classify.LanguageEN
-	for _, out := range []string{"You have no {1} {1.when}, and no {2} {2.when}.", "Just a thing: {1} {1.when} and {2} {2.when}."} {
+	en.Language, en.Message = classify.LanguageEN, "Don't I have nothing this week?"
+	for _, out := range []string{"You have no {1} {1.when}, and no {2} {2.when}.", "Just a thing: {1} {1.when} and {2} {2.when}.",
+		"You don't have the {1} {1.when}, and the {2} {2.when}.", "It is not the {1} {1.when} and the {2} {2.when}.",
+		"You have the {1} {1.when} nor the {2} {2.when}.", "You never have the {1} {1.when} and the {2} {2.when}.", "You have nothing: the {1} {1.when}, and the {2} {2.when}.",
+		"There is a topic: the {1} {1.when}, and the {2} {2.when}.",                                                // B3
+		"You had the {1} {1.when} and the {2} {2.when}.", "If you have the {1} {1.when}, then the {2} {2.when}."} { // N2
 		if got, why := Check(en, "Found 2 things", out); why != RejectWord || got != "Found 2 things" {
 			t.Errorf("Check(%q) = %q; want the draft and %q", out, why, RejectWord)
 		}
 	}
-	none := Facts{Intent: RecallNone, Language: classify.LanguageES, Now: now, Message: "¿tengo algo el 26?"}
+	none := Facts{Intent: RecallNone, Language: classify.LanguageES, Now: now, Message: "¿tengo algo el 26 con el dentista? ¿queda?"}
+	noneEN := Facts{Intent: RecallNone, Language: classify.LanguageEN, Now: now, Message: "Do I have the dentist? Is it?"}
+	for _, out := range []string{"{none} but the dentist.", "{none}; the dentist is it.", "{none} but it.", "{none}, that is it.", "{none}; it is there."} {
+		if got, _ := Check(noneEN, "I found nothing.", out); got != "I found nothing." {
+			t.Errorf("an empty recall sent %q", got)
+		}
+	}
 	for _, out := range []string{"No tenés nada el 26.", "Hoy no tenés nada.", "No, pero tenés una reunión con Marta.", "No encontré {1}.",
 		// QA's affirmative wordings of an empty recall: with no {none}, or beside it.
 		"Encontré una cosa sobre eso.", "Encontré algo sobre eso.", "Sí, {none}, pero encontré algo.", "{none}, pero tenés algo.",
 		"{none}, pero hay algo.", "Sí, hay una cosa pendiente. {none}.", "Anotado, ya está agendado: {none}.", "{none} {none}.",
-		"{none}, pero el {count}."} {
+		"{none}, pero el {count}.",
+		"Perdón, todavía nada sobre eso.", // N3: no {none}, no claim word
+		// B2, round 4: the message's words name nothing in an empty recall.
+		"{none} más que el dentista.", "{none}: el dentista está ahí.", "{none}; el dentista es lo que queda.",
+		// the same through a pronoun: no word of the message needed.
+		"{none} más que eso.", "{none}: eso está ahí.", "{none}; eso es lo que queda.", "{none} y eso es todo."} {
 		if got, _ := Check(none, "No encontré nada.", out); got != "No encontré nada." {
 			t.Errorf("an empty recall sent %q", got)
 		}
@@ -184,8 +218,14 @@ func TestCheck_AWordingOfTheRightShapeIsSent(t *testing.T) {
 	one.Items[0].At = at(2026, 11, 26, 1, 5)
 	en := turno()
 	en.Language, en.Items[0].Text = classify.LanguageEN, "Flight to Lisbon"
-	pedro := turno()
+	pedro := turno() // the message names Pedro with his capital
+	pedro.Message = "¿cuándo cumple Pedro?"
 	pedro.Items[0].Text, pedro.Items[0].At = "Pedro cumple años", at(2026, 10, 31, 13, 0)
+	pedroGift := pedro // another item writes Pedro mid-text
+	pedroGift.Message = ""
+	pedroGift.Items = []Item{pedro.Items[0], {Text: "Regalo para Pedro", At: pedro.Items[0].At}}
+	pedroUnknown := pedro // no fact says Pedro is a name: the known gap
+	pedroUnknown.Message = ""
 	kept := Facts{Intent: RecallNone, Language: classify.LanguageES, Now: now, Keep: []string{"(Si fue un error, decime «no, seguí».)"}}
 	none := Facts{Intent: RecallNone, Language: classify.LanguageES, Now: now, Message: "¿qué sé del gastroenterólogo?"}
 	noneEN := Facts{Intent: RecallNone, Language: classify.LanguageEN, Now: now, Message: "what about the dentist?"}
@@ -198,17 +238,18 @@ func TestCheck_AWordingOfTheRightShapeIsSent(t *testing.T) {
 		{tomorrow, turnoDraft, "{1.when} tenés el {1}.", "Mañana a las 8:30 tenés el turno para estudios con el gastroenterólogo."},
 		{dayAlone, turnoDraft, "Tenés el {1} {1.when}.", "Tenés el turno para estudios con el gastroenterólogo el lunes 4 de enero de 2027."},
 		{one, turnoDraft, "{1}: {1.when}.", "Turno para estudios con el gastroenterólogo: el jueves 26 de noviembre a la 1:05."},
-		{en, "Found 1 thing", "Your {1} is {1.when}.", "Your Flight to Lisbon is on Thursday 26 November at 8:30."},
-		{turno(), "Encontré 1 cosa.", "Tenés el {1} {1.when}, para los estudios.", "Tenés el turno para estudios con el gastroenterólogo el jueves 26 de noviembre a las 8:30, para los estudios."},
-		{turno(), turnoDraft, "«{1}» {1.when}, para «estudios»", "«Turno para estudios con el gastroenterólogo» el jueves 26 de noviembre a las 8:30, para «estudios»"},
+		{en, "Found 1 thing", "Your {1} is {1.when}.", "Your flight to Lisbon is on Thursday 26 November at 8:30."},
+		{turno(), turnoDraft, "«{1}» {1.when}.", "«Turno para estudios con el gastroenterólogo» el jueves 26 de noviembre a las 8:30."},
 		{kept, "Listo.", "Mirá, {none}. (Si fue un error, decime «no, seguí».)", "Mirá, no encontré nada. (Si fue un error, decime «no, seguí».)"},
 		{pedro, turnoDraft, "Recordá: {1.when}, {1}.", "Recordá: mañana a las 13:00, Pedro cumple años."},
+		{pedroGift, turnoDraft, "Recordá: {1.when}, {1}, y {2.when}, {2}.", "Recordá: mañana a las 13:00, Pedro cumple años, y mañana a las 13:00, regalo para Pedro."},
+		{pedroUnknown, turnoDraft, "Recordá: {1.when}, {1}.", "Recordá: mañana a las 13:00, pedro cumple años."},
 		{turno(), turnoDraft, "Tenés una cosa: el {1} {1.when}.", "Tenés una cosa: el turno para estudios con el gastroenterólogo el jueves 26 de noviembre a las 8:30."},
-		{none, "No encontré nada.", "{none} sobre el gastroenterólogo.", "No encontré nada sobre el gastroenterólogo."},
-		{none, "No encontré nada.", "Che, por ahora {none} acerca de ese tema.", "Che, por ahora no encontré nada acerca de ese tema."},
+		{none, "No encontré nada.", "{none} sobre eso.", "No encontré nada sobre eso."},
+		{none, "No encontré nada.", "Che, por ahora {none} acerca de eso.", "Che, por ahora no encontré nada acerca de eso."},
 		{none, "No encontré nada.", "Todavía {none}.", "Todavía no encontré nada."},
 		{none, "No encontré nada.", "No, {none}.", "No, no encontré nada."},
-		{noneEN, "I found nothing.", "Sorry, {none} about the dentist.", "Sorry, I found nothing about the dentist."},
+		{noneEN, "I found nothing.", "Sorry, {none} about that.", "Sorry, I found nothing about that."},
 		{client, turnoDraft, "Tenés el {1} {1.when}.", "Tenés el turno para estudios con el gastroenterólogo el jueves 26 de noviembre a las 8:30."},
 	} {
 		if got, why := Check(tc.f, tc.draft, tc.out); why != Accepted || got != tc.want {
