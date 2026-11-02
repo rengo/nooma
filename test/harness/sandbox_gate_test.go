@@ -50,8 +50,25 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	write("wrongmain", "a_test.go", "package main\nimport \"testing\"\nfunc TestA(t *testing.T) { _ = run(nil, nil, nil) }\nfunc TestMain(m *testing.M) { m.Run() }\n")
 	write("empties", "a_test.go", "package p\nimport \"testing\"\nfunc TestA(t *testing.T) { t.Setenv(\"NOOMA_VAULT\", \"\") }\n")
 	write("unsets", "a_test.go", "package p\nimport (\"os\"; \"testing\")\nfunc TestA(t *testing.T) { _ = os.Unsetenv(\"NOOMA_VAULT\") }\n")
-	write("childnohome", "a_test.go", "package p\nimport (\"os\"; \"testing\")\nfunc TestA(t *testing.T) { _ = append(os.Environ(), \"NOOMA_VAULT=\") }\n")
-	write("childhome", "a_test.go", "package p\nimport (\"os\"; \"testing\")\nfunc TestA(t *testing.T) { home := \"h\"; _ = append(os.Environ(), \"HOME=\"+home, \"NOOMA_VAULT=\") }\n")
+
+	// Ways to run nooma the first fixtures did not name.
+	write("gobuild", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { _ = exec.Command(\"go\", \"build\", \"./cmd/nooma\") }\n")
+	write("gobuildmodule", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { _ = exec.Command(\"go\", \"build\", \"-o\", \"x\", \"github.com/rengo/nooma/cmd/nooma\") }\n")
+	write("gobuildctx", "a_test.go", "package p\nimport (\"context\"; \"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { _ = exec.CommandContext(context.Background(), \"go\", \"build\", \"./cmd/nooma\") }\n")
+	write("gobuildspread", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { a := []string{\"build\", \"./cmd/nooma\"}; _ = exec.Command(\"go\", a...) }\n")
+	write("aliased", "a_test.go", "package p\nimport (\"testing\"; cfg \"github.com/rengo/nooma/internal/config\")\nfunc TestA(t *testing.T) { _, _ = cfg.ResolveVault(\"\") }\n")
+	// A child's environment is never built with an empty vault by hand,
+	// whatever the shape; sandbox.Child builds it.
+	write("envliteral", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { c := exec.Command(\"x\"); c.Env = []string{\"PATH=/bin\", \"NOOMA_VAULT=\"} }\n")
+	write("envemptyhome", "a_test.go", "package p\nimport (\"os\"; \"testing\")\nfunc TestA(t *testing.T) { _ = append(os.Environ(), \"HOME=\", \"NOOMA_VAULT=\") }\n")
+	write("envsplit", "a_test.go", "package p\nimport (\"os\"; \"testing\")\nfunc TestA(t *testing.T) { e := append(os.Environ(), \"HOME=\"+\"h\"); e = append(e, \"NOOMA_VAULT=\") }\n")
+	write("constkey", "a_test.go", "package p\nimport \"testing\"\nconst k = \"NOOMA_VAULT\"\nfunc TestA(t *testing.T) { t.Setenv(k, \"\") }\n")
+	write("child", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\"; \"x/sandbox\")\nfunc TestA(t *testing.T) { c := exec.Command(\"x\"); sandbox.Child(c, \"h\") }\n")
+	// Not nooma: an unrelated call that merely names the string, a go command
+	// that builds something else, and a stale worktree of this repository.
+	write("unrelated", "a_test.go", "package p\nimport \"testing\"\nfunc f(a, b string) {}\nfunc TestA(t *testing.T) { f(\"want\", \"NOOMA_VAULT\") }\n")
+	write("gootherbuild", "a_test.go", "package p\nimport (\"os/exec\"; \"testing\")\nfunc TestA(t *testing.T) { _ = exec.Command(\"go\", \"build\", \"./cmd/other\") }\n")
+	write(".claude/worktrees/stale/cmd/nooma", "a_test.go", "package main\nimport \"testing\"\nfunc TestA(t *testing.T) { _ = run(nil, nil, nil) }\n")
 
 	violations, _, err := sandboxViolations(root)
 	if err != nil {
@@ -61,15 +78,20 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	for _, v := range violations {
 		dir, _, _ := strings.Cut(v, ":")
 		reported[dir] = true
+		if strings.HasPrefix(dir, ".claude/") {
+			reported[".claude"] = true
+		}
 	}
-	for _, dir := range []string{"runs", "binary", "resolves", "wrongmain", "empties", "unsets", "childnohome"} {
+	for _, dir := range []string{"runs", "binary", "resolves", "wrongmain", "empties", "unsets",
+		"gobuild", "gobuildmodule", "gobuildctx", "gobuildspread", "aliased",
+		"envliteral", "envemptyhome", "envsplit", "constkey"} {
 		if !reported[dir] {
 			t.Errorf("the gate did not report %s:\n%s", dir, strings.Join(violations, "\n"))
 		}
 	}
-	for _, dir := range []string{"ok", "childhome"} {
+	for _, dir := range []string{"ok", "child", "unrelated", "gootherbuild", ".claude"} {
 		if reported[dir] {
-			t.Errorf("the gate reported %s, which is sandboxed or gives its child a HOME:\n%s", dir, strings.Join(violations, "\n"))
+			t.Errorf("the gate reported %s, which is sandboxed, builds a child through sandbox.Child, or is not nooma:\n%s", dir, strings.Join(violations, "\n"))
 		}
 	}
 }

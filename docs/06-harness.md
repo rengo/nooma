@@ -169,14 +169,17 @@ the XDG and Windows app-data variables, and the temporary directory) to a throwa
 step. A test that needs a vault names one or sets `NOOMA_VAULT` to it. **`NOOMA_VAULT` is never
 empty in a test's own process**: empty, resolution walks up the working directory's parents and can
 find a `*.nooma` folder there before it ever reaches `HOME`. Only a child process may get an empty
-one, to exercise resolution, and only beside its own `HOME`, as e2e's are; its working directory is
-under the sandbox's temporary folder. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
+one, to exercise resolution, and only through `sandbox.Child`, which gives it its own `HOME` and,
+unless the test chose one, a working directory under the sandbox's temporary folder. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
 proves it: a vault planted in the sandbox's `~/.nooma` is never opened. A new package that runs
 commands gets the same `TestMain`, and a gate says so:
 `TestSandboxGate_TheTreeHasNoUnsandboxedCommandTests` (`test/harness`) reads every `_test.go` and
 fails on a package that calls `run()` in `cmd/nooma`, runs the built binary, builds `./cmd/nooma`,
-or calls `config.ResolveVault` without a `TestMain` calling `sandbox.Main`, and on a test that
-sets `NOOMA_VAULT` empty, unsets it, or gives a child an empty one without its own `HOME`.
+or execs `go` and names `cmd/nooma` (as `./cmd/nooma` or by module path, even through a slice), or
+calls `ResolveVault` on the config package under any import name, without a `TestMain` calling
+`sandbox.Main`; and on a test that sets `NOOMA_VAULT` empty (a literal, or a constant in the same
+file), unsets it, or writes the `NOOMA_VAULT=` environment entry itself instead of calling
+`sandbox.Child`. It skips `.claude/worktrees`, which holds other agents' copies of the tree.
 
 ### The UI is L1, and the stack is why
 

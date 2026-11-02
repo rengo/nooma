@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/rengo/nooma/internal/config"
+	"github.com/rengo/nooma/test/support/sandbox"
 )
 
 // nooma runs the compiled binary with $HOME pointed at a temporary directory, so
@@ -43,11 +44,7 @@ func noomaCmd(t *testing.T, home, cwd, stdin string, args ...string) (stdout, st
 
 	cmd := exec.Command(binaryPath(t), args...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(),
-		"HOME="+home,
-		"USERPROFILE="+home, // Windows
-		"NOOMA_VAULT=",      // never inherit a real one
-	)
+	sandbox.Child(cmd, home) // its own HOME, and no inherited vault
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}

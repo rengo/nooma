@@ -9,9 +9,9 @@
 // further. NOOMA_VAULT is never empty in a test's own process: empty, resolution
 // would walk up the working directory's parents and could find a *.nooma
 // folder there before it reached HOME. The temporary directory moves into the
-// sandbox too, so a child given an empty NOOMA_VAULT (with its own HOME, as
-// e2e's are) climbs through the sandbox first. test/harness's sandbox gate
-// checks every package follows this.
+// sandbox too, and Child starts a child there, so a child given an empty
+// NOOMA_VAULT (with its own HOME) climbs through the sandbox first.
+// test/harness's sandbox gate checks every package follows this.
 package sandbox
 
 import (
@@ -66,11 +66,22 @@ func Main(m *testing.M) int {
 			return 1
 		}
 	}
-	if os.Getenv("NOOMA_VAULT") == "" {
-		fmt.Fprintln(os.Stderr, "sandbox: NOOMA_VAULT is empty; refusing to run tests that could resolve a real vault")
-		return 1
-	}
 	return m.Run()
+}
+
+// Child readies cmd to run nooma with no vault named: its own HOME, and an
+// empty NOOMA_VAULT so the child exercises resolution. Empty is safe only
+// here, beside a HOME of the child's own and a working directory under the
+// sandbox's temporary folder (the caller's Dir, when it set one); a test
+// builds no such environment by hand, which the gate in test/harness checks.
+func Child(cmd *exec.Cmd, home string) {
+	if home == "" {
+		panic("sandbox.Child: an empty home is not a home of the child's own")
+	}
+	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT"+"=")
+	if cmd.Dir == "" {
+		cmd.Dir = os.TempDir()
+	}
 }
 
 // pinGoEnv sets each of names to the value `go env` reports for it now, when
