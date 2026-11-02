@@ -23,6 +23,10 @@ import (
 	"testing"
 )
 
+// active is true while Main is running a package's tests. Child refuses to
+// run outside it, where HOME and the temporary directory are the machine's.
+var active bool
+
 // Main runs m inside a throwaway home, for a package's TestMain:
 //
 //	func TestMain(m *testing.M) { os.Exit(sandbox.Main(m)) }
@@ -66,6 +70,8 @@ func Main(m *testing.M) int {
 			return 1
 		}
 	}
+	active = true
+	defer func() { active = false }()
 	return m.Run()
 }
 
@@ -74,7 +80,11 @@ func Main(m *testing.M) int {
 // here, beside a HOME of the child's own and a working directory under the
 // sandbox's temporary folder (the caller's Dir, when it set one); a test
 // builds no such environment by hand, which the gate in test/harness checks.
+// Child panics outside Main: there the temporary folder is the machine's.
 func Child(cmd *exec.Cmd, home string) {
+	if !active {
+		panic("sandbox.Child: called outside sandbox.Main; the package's TestMain must call it (docs/06-harness.md §3)")
+	}
 	if home == "" {
 		panic("sandbox.Child: an empty home is not a home of the child's own")
 	}

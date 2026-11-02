@@ -85,3 +85,29 @@ func TestChild_RefusesAnEmptyHome(t *testing.T) {
 	}()
 	Child(exec.Command("x"), "")
 }
+
+func TestChild_PanicsOutsideMain(t *testing.T) {
+	active = false
+	defer func() {
+		active = true
+		if recover() == nil {
+			t.Error("Child did not panic outside Main: its working directory would be the machine's temp folder")
+		}
+	}()
+	Child(exec.Command("x"), "/h")
+}
+
+// TestMain_GoKeepsItsCachesOnceHomeMoves: GOPATH, GOMODCACHE and GOCACHE
+// default under HOME; Main pins them where they were, so a test that builds
+// neither starts cold nor downloads into the sandbox.
+func TestMain_GoKeepsItsCachesOnceHomeMoves(t *testing.T) {
+	for _, name := range []string{"GOPATH", "GOMODCACHE", "GOCACHE"} {
+		out, err := exec.Command("go", "env", name).Output()
+		if err != nil {
+			t.Skip("no go on PATH")
+		}
+		if got := strings.TrimSpace(string(out)); got == "" || inside(got, root()) {
+			t.Errorf("go env %s = %q, want one outside the sandbox %q", name, got, root())
+		}
+	}
+}

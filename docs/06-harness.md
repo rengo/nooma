@@ -172,14 +172,21 @@ find a `*.nooma` folder there before it ever reaches `HOME`. Only a child proces
 one, to exercise resolution, and only through `sandbox.Child`, which gives it its own `HOME` and,
 unless the test chose one, a working directory under the sandbox's temporary folder. `TestSandbox_AVaultlessCommandNeverReachesAHomeVault`
 proves it: a vault planted in the sandbox's `~/.nooma` is never opened. A new package that runs
-commands gets the same `TestMain`, and a gate says so:
+commands gets the same `TestMain`, and a gate says so.
 `TestSandboxGate_TheTreeHasNoUnsandboxedCommandTests` (`test/harness`) reads every `_test.go` and
-fails on a package that calls `run()` in `cmd/nooma`, runs the built binary, builds `./cmd/nooma`,
-or execs `go` and names `cmd/nooma` (as `./cmd/nooma` or by module path, even through a slice), or
-calls `ResolveVault` on the config package under any import name, without a `TestMain` calling
-`sandbox.Main`; and on a test that sets `NOOMA_VAULT` empty (a literal, or a constant in the same
-file), unsets it, or writes the `NOOMA_VAULT=` environment entry itself instead of calling
-`sandbox.Child`. It skips `.claude/worktrees`, which holds other agents' copies of the tree.
+is default-deny, so it never has to recognise a command that runs nooma: a package whose tests
+import `os/exec`, import `internal/config`, import the sandbox package (for `Child`) or are a
+`package main` under `cmd/` fails unless a `TestMain` in it calls `Main` on the sandbox package
+(found by import path, under any alias). A package that execs something harmless pays for a
+throwaway `HOME` and nothing else; a false negative is what corrupted the vault. `sandbox.Child`
+panics outside `Main`, so a child never starts with the machine's temporary folder. The gate also
+fails on a test that sets `NOOMA_VAULT` to an empty string (a literal, or a constant in the same
+file, local ones included), unsets it, calls `os.Clearenv`, or has the literal `"NOOMA_VAULT="` as
+a whole element of a list or an argument to `append`, instead of calling `sandbox.Child`;
+`"NOOMA_VAULT="+v` or the literal as an argument to another call (`strings.HasPrefix`) is not
+reported. What it does not see: deliberate evasion (a split literal, a key held in a variable, a
+child given `[]string{"PATH=/bin"}`, which has neither vault nor `HOME`), and build tags (a
+`TestMain` behind a tag counts for the whole directory). It skips `.claude/worktrees`, which holds other agents' copies of the tree.
 
 ### The UI is L1, and the stack is why
 
