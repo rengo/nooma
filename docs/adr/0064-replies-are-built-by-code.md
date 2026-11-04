@@ -55,7 +55,8 @@ sentences in code. Model wording may return after 1.0, measured on recordings, u
    The relative day is counted on the calendar in now's zone.
 3. **Frames never guess a gender.** No article or gendered word stands right before an item's
    own words. In Spanish an item's words inside a sentence start lower-case unless their first
-   word is an acronym or appears capitalised elsewhere in the item's own title or content (a
+   word is an acronym or appears capitalised in the item's own title or content past that text's
+   first word (a
    name); English keeps the item's words as stored and quotes them inside a sentence.
 4. **Tense follows the instant.** A recalled item whose instant is behind now is said in the past.
 5. **Deterministic.** The same facts give the same bytes. Every surface in point 1 is pinned in
@@ -95,8 +96,9 @@ sentences in code. Model wording may return after 1.0, measured on recordings, u
 - Somewhat telegraphic in places ("Tenés anotado turno con el oculista…", "Acordate: tomar las
   pastillas, hoy."), because a frame cannot know whether an item's words are a noun or a verb,
   or their gender.
-- A name that is written capitalised only as an item's first word is lowered in Spanish ("ana
-  cumple años"): the code has nothing else to tell it is a name.
+- A name that is written capitalised only as the first word of its title or content is lowered in
+  Spanish ("ana cumple años"): the code has nothing else to tell it is a name. A capitalised word
+  later in a text, including one that opens a second sentence, is read as a name and kept.
 - A timer's ring no longer varies: the same words give the same sentence.
 - The classification prompt shows the model Nooma's recent turns as they were said. The recorded
   cases in `testdata/llm/reminders/` carry the old wording in their fixture turns; they stay valid

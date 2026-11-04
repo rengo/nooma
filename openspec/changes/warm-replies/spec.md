@@ -77,4 +77,4 @@ text in a conformance test, in both languages.
 ## R8 — No article guessed before an item's words
 
 A frame never puts a gendered article or adjective right before an item's own words. In Spanish,
-an item's words inside a sentence start lower-case unless the first word is an acronym or is written capitalised elsewhere in the item's own title or content (a name the code can see, such as "Pedro" in "Regalo para Pedro"). A name the code cannot see is lowered: "ana cumple años".
+an item's words inside a sentence start lower-case unless the first word is an acronym or is written capitalised in the item's own title or content past that text's first word (title and content each looked at on their own; a name the code can see, such as "Pedro" in the title "Pedro cumple" with the content "Regalo para Pedro el jueves"). The first word of the title or of the content is never evidence: a title "Turno con el oculista" with the content "Turno con el oculista el jueves" gives "turno con el oculista". A name the code cannot see is lowered: "ana cumple años".

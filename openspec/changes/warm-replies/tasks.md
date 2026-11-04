@@ -45,7 +45,10 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
       `tomorrow at 10:00` (no `on`); day alone has no clock; due → `para mañana`, past due →
       `era para ayer`, EN `due tomorrow`, `was due yesterday`.
 - [ ] 2.4 RED L1 `TestInline`: `Turno con el oculista` → `turno con el oculista`; `DNI vence` kept;
-      `Pedro cumple` with Names `Regalo para Pedro` kept; trailing period dropped; EN unchanged.
+      title and content opening with the same word (title `Turno con el oculista`, content `Turno con
+      el oculista el jueves`, Names without each first word) → `turno con el oculista`; `Pedro
+      cumple` with Names `cumple` + `para Pedro el jueves` kept; `Ana cumple` with Names `cumple`
+      + `cumple años` → `ana cumple`; trailing period dropped; EN unchanged.
 - [ ] 2.5 RED L1 `TestRecall`: one ahead, one past, one due, one undated, several, none — design
       §6 recall rows, both languages, exact text.
 - [ ] 2.6 Doc 06 §4: I59 row. RED L2 `TestI59_RecallAnswerIsBuiltByCode`: the §6 recall rows
@@ -107,6 +110,6 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
 
 ## After the chain
 
-- [ ] PM closes #435 unmerged (design D5); remove `../nooma-voice` when the PM says so.
+- [x] #435 closed unmerged (2026-11-04, design D5); remove `../nooma-voice` when the PM says so.
 - [ ] Optional, maintainer: re-record a few `testdata/llm/reminders/` follow-up cases with the new
       turn wording (measured, not required).

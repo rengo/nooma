@@ -1,6 +1,6 @@
 # Design — warm-replies
 
-> **nooma-dev-owned.** Base: `origin/main` at 827ddd78 (2026-11-04). Governs with
+> **nooma-dev-owned.** Base: `origin/main` at 1658c854 (2026-11-04). Governs with
 > [ADR-0064](../../../docs/adr/0064-replies-are-built-by-code.md) (Accepted). The client's
 > rulings of 2026-11-04 on Q1-Q3 are folded in; no open question remains. Doc 02 governs
 > behavior; every doc 02 change below lands in the same PR as its code.
@@ -17,7 +17,7 @@
 | Fired timer | `internal/brain/rephrase.go` `renderTimer`, task `timer_rephrase` | Live. A model rewords the timer's text; the user's words on failure; `timers.rendered_text` stores it |
 | Digest text | `internal/brain/digest.go` `dueLines`, `saidNow`, `digestMessageGoal`, `composeDigest`, `questionLine` | Live. Lines are pre-joined strings stored into `Payload.ActionText`; Today reuses `saidNow` |
 | Model wording | `internal/core/voice` (#433, 312 impl + 218 test lines) | **No production caller** (verified: nothing imports it). Doc 02 §5 step 2 describes it as arriving; §13 carries four rows for it; no I56 row exists in doc 06 |
-| Slots + check | #435, `feat/voice-facts`, ADR-0063 | Open PR, not on main. ADR-0063 and the I56 harness row exist only there |
+| Slots + check | #435, `feat/voice-facts`, ADR-0063 | Closed unmerged (2026-11-04), not on main. ADR-0063 and the I56 harness row exist only on that branch |
 
 Findings worth carrying:
 
@@ -50,8 +50,9 @@ type Moment struct {
 }
 
 // Item is one thing a reply names: its title, else its content, and its
-// instant when it has one. Names is the unit's other words (title and
-// content), read only to tell a name from an ordinary first word (D4).
+// instant when it has one. Names is the words of the unit's title and of
+// its content, each text without its own first word, read only to tell a
+// name from an ordinary first word (D4).
 type Item struct {
 	Text  string
 	When  *Moment
@@ -111,7 +112,12 @@ No frame puts an article or a gendered word right before an item's words. ES fra
 both a noun phrase and an infinitive read right: "Tenés anotado turno con el oculista…", "Tenés
 anotado tomar las pastillas…", "Acordate: cena con Ana, …". `Inline` lowers the first letter in
 Spanish unless the first word has a second upper-case letter (an acronym: "DNI") or appears
-capitalised in `Names` past its own first position (a name: "Regalo para Pedro" keeps "Pedro").
+capitalised in `Names`. The caller builds `Names` from the title and the content separately,
+each without its own first word (like #435's `slots.go:233-246`), so the ordinary case, where
+the title and the content open with the same capitalised word ("Turno con el oculista" / "Turno
+con el oculista el jueves"), is lowered, and a name later in either text ("Pedro" in "Regalo
+para Pedro el jueves") keeps its capital. A capitalised word that opens a second sentence is
+read as a name; that error is accepted.
 English keeps the words as stored and quotes them mid-sentence (“Renew the passport”), since
 English titles are stored capitalised and lowering one ("buy coffee") is no gain. A bullet line
 starts with the item's words as stored in both languages. A trailing period of the item's words
@@ -121,7 +127,9 @@ is dropped before the frame continues.
 
 `renderTimer` stops calling a model. A timer with words rings `Es la hora: <words>.` / `Time's up:
 <words>.` (`Set.TimerRing`, the words through `Inline`, a trailing period dropped first), plus
-`TimerLate` when `prospection.DelayCaveat` says so; a timer with none keeps `TimerNudge` (and the
+`TimerLate` when `prospection.DelayCaveat` says so (its wording changes, its meaning "later than
+you asked for" stays: "Perdón, te llega más tarde de lo que pediste." / "Sorry, this is later
+than you asked for."; the push `Late` note keeps "previsto"/"intended"); a timer with none keeps `TimerNudge` (and the
 late note). The `timer_rephrase` task, `rephrasePrompt`, the `llm` dependency of this path and
 `withCaveat`'s "successful rephrasing already acknowledged" branch go. `timers.rendered_text`
 stays in the schema (published migrations are never modified) and is written `NULL`; the
@@ -145,7 +153,7 @@ Retire it in link 1: delete the package, the four §13 rows and doc 02's paragra
   in history (b3af1e82; `feat/voice-facts`).
 - What is kept from it moves to `phrase`: #435's day/time rendering and case rule (D2, D4).
 
-Recommended for the PM: close #435 unmerged once ADR-0064 is accepted. ADR number 0063 is left
+#435 is closed unmerged (2026-11-04). ADR number 0063 is left
 unused on main on purpose (the number #435 used), so a link to "ADR-0063" in that PR's history
 never resolves to a different decision.
 
@@ -167,7 +175,7 @@ New invariant **I59** (I56 was ADR-0061's and never got a row; I57 is unassigned
 
 L1 tests in `phrase_test.go` cover `Day`, `When`, `Clock`, `Inline` edge cases: every offset
 -1..2 and 3, year change, hour 0, 1, 13, a day alone, a due day past and future, acronym, name
-from `Names`, trailing period, zone (an instant at 23:30 UTC-3 is "hoy", not "mañana").
+from `Names` (title and content each without its first word), trailing period, zone (an instant at 23:30 UTC-3 is "hoy", not "mañana").
 
 Existing pins that change text (updated, never weakened: the property each pins stays, only its
 expected words change): I22/I26 recall and language tests, `channel_reply_totality`, the
@@ -241,7 +249,7 @@ conformance row pins (the client accepted Q1 and Q3 on 2026-11-04).
 | Late | `… (Esto llega más tarde de lo previsto.)` | `Acordate: turno con el oculista, hoy a las 11:00. Perdón, te llega más tarde de lo previsto.` | `… Sorry, this is later than intended.` |
 | Unit unreadable, no text | `Me pediste que te recordara algo.` | unchanged | unchanged |
 | Timer rings (the model's own sentence today) | the model's wording, or the user's words on failure | `Es la hora: sacar la ropa.` | `Time's up: Take the clothes out.` |
-| Timer rings late | the words and `(Esto llega más tarde de lo previsto.)` | `Es la hora: sacar la ropa. Perdón, te llega más tarde de lo previsto.` | `Time's up: Take the clothes out. Sorry, this is later than intended.` |
+| Timer rings late | the words and `(Esto llega más tarde de lo que pediste.)` (`TimerLate`) | `Es la hora: sacar la ropa. Perdón, te llega más tarde de lo que pediste.` | `Time's up: Take the clothes out. Sorry, this is later than you asked for.` |
 
 ### Digest (now Wed 4 Nov 08:00)
 
