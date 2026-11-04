@@ -114,6 +114,7 @@ order, with no correspondence to anything.
 | [0060](0060-releases-are-built-by-goreleaser-on-a-tag.md) | Releases are built by goreleaser on a `v*` tag only: ADR-0013's seven targets, `checksums.txt` signed keyless by cosign, a GitHub Release, and `ghcr.io/rengo/nooma` for three Linux platforms, `:latest` only off a prerelease | Proposed | M6 |
 | [0061](0061-the-model-words-what-the-code-found.md) | The model words what the code found or did, from its facts and the fixed text; a pure check sends it only when it states nothing the facts do not hold, else the fixed text (supersedes ADR-0032 point 4 in part) | Accepted | v1.0 |
 | [0062](0062-a-voice-note-is-read-as-its-transcript.md) | A Telegram voice note is heard in the adapter behind the allow-list, transcribed in memory by `audio_transcription` (`gpt-4o-mini-transcribe`) and dropped; the transcript takes the typed path, is echoed only when nothing actionable was read, and writes one `capture.voice.transcribed` row; a note not heard is answered and captures nothing | Proposed | v1 |
+| [0064](0064-replies-are-built-by-code.md) | A reply that carries a fact is built by code in warm fixed sentences: days said as a person says them, no gender guessed, tense from the instant, exact text pinned; `internal/core/voice` retired (supersedes ADR-0061, and ADR-0032 point 4's frame wording) | Accepted | v1.0 |
 
 ## Template
 
