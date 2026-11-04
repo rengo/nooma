@@ -37,9 +37,8 @@ type LLMRequest struct {
 	// budget is exhausted. TestJSONOnlyPromptsSayJSON pins that coupling,
 	// which otherwise lives between two files that never mention each other.
 	//
-	// False for a free-text task. timer_rephrase writes a sentence for a
-	// human, and a sentence forced into JSON mode answers in a shape nothing
-	// downstream parses.
+	// False for a free-text task: a sentence for a human forced into JSON
+	// mode answers in a shape nothing downstream parses.
 	JSONOnly bool
 }
 

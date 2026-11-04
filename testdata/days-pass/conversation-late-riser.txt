@@ -7,8 +7,8 @@ Fri 2026-10-16 10:44 ← recordame el dentista el viernes a las 10
 Fri 2026-10-16 10:44 → Anotado para el vie 23 oct, 10:00. Te aviso el día anterior, 30 minutos antes y 15 minutos antes.
 Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
 Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
-Sat 2026-10-17 08:45 → Recordatorio: Llamar al médico — sáb 17 oct, 09:00
-Thu 2026-10-22 09:30 → Recordatorio: Pagar el gas — jue 22 oct
-Thu 2026-10-22 10:00 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
-Fri 2026-10-23 09:30 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
-Fri 2026-10-23 09:45 → Recordatorio: Cita con el dentista — vie 23 oct, 10:00
+Sat 2026-10-17 08:45 → Acordate: llamar al médico, hoy a las 9:00.
+Thu 2026-10-22 09:30 → Acordate: pagar el gas, hoy.
+Thu 2026-10-22 10:00 → Acordate: cita con el dentista, mañana a las 10:00.
+Fri 2026-10-23 09:30 → Acordate: cita con el dentista, hoy a las 10:00.
+Fri 2026-10-23 09:45 → Acordate: cita con el dentista, hoy a las 10:00.

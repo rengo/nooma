@@ -266,11 +266,8 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report
 		}
 		switch status {
 		case ports.TimerStatusFired:
-			delivery, err := r.renderTimer(ctx, t, now)
-			if err != nil {
-				return CheckReport{}, err
-			}
-			if err := r.timers.Fire(ctx, t.ID, now, delivery.rendered); err != nil {
+			text := r.renderTimer(ctx, t, now)
+			if err := r.timers.Fire(ctx, t.ID, now, nil); err != nil {
 				skipped, skipErr := r.skipOnConflict(ctx, now, err, ports.ErrTimerStatusConflict, "timers", t.ID, t.FireAt)
 				if skipErr != nil {
 					return CheckReport{}, skipErr
@@ -292,7 +289,7 @@ func (r checkRunner) at(ctx context.Context, now time.Time, commit bool) (report
 			// the timer is already fired, and failing here would cost
 			// every timer behind it for a transport problem.
 			if r.channel != nil && r.conversation != "" {
-				if err := r.channel.Send(ctx, r.conversation, delivery.text); err != nil {
+				if err := r.channel.Send(ctx, r.conversation, text); err != nil {
 					if logErr := r.record(ctx, now, ports.ActionCheckDeliveryFailed,
 						fmt.Sprintf("timer %q fired but could not be delivered: %v", t.ID, err),
 						detail); logErr != nil {
@@ -396,9 +393,9 @@ type checkRunner struct {
 	unreadable map[string]error
 	// stamps orders everything this pass marks as reaching the user.
 	stamps *surfaceStamps
-	// llm words a timer at delivery. Nil is legal: a vault with no
-	// provider bound delivers the user's own words, which is what the
-	// rephrasing falls back to anyway.
+	// llm is read by nothing: a check pass words no reply (ADR-0064). It
+	// stays so NewCheckService's signature does not churn every caller, and
+	// so a conformance guard can watch that nothing ever calls it again.
 	llm ports.LLMProvider
 	// questions is the digest's SECOND item source — the queue it asks one
 	// relation question from — and the expiry sweep's own store. Nil is

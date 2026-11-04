@@ -813,8 +813,8 @@ command, it is answered once.
        archived or not, a tie going to the newest (`classify.UsualLanguage`, over the model's own
        per-capture reading; ADR-0033 rules out word lists). A unit that knows none speaks that
        usual language too, and none known at all, the fallback. A timer is not a unit and has no
-       language of its own, so its generic nudge, its lateness note and the language its
-       rephrasing is asked for follow the usual language, as the digest does. Today speaks the
+       language of its own, so its ring, its generic nudge and its lateness note follow the usual
+       language, as the digest does. Today speaks the
        digest's language, since it previews it.
 
    - **Two of the thirteen are not memory, and they route before anything is built**
@@ -878,11 +878,10 @@ command, it is answered once.
      no article stands right before an item's own words. Tense follows the instant. The same
      facts give the same bytes. The timers' numbered list, the `out_of_scope` refusal, the bot
      commands, the voice-note answers and the texts a model already writes that carry no stored
-     fact (the chitchat answer, a follow-up's clarifying question) stay as they are. One
-     exception stands until the timer ring moves: a ringing timer is still reworded by the model
-     (§8). The surfaces move to this rule one at a time (the recall answer has; pushes, the digest
-     and confirmations follow); until one does, the fixed text this document gives for it is
-     what is sent.
+     fact (the chitchat answer, a follow-up's clarifying question) stay as they are. A ringing
+     timer is a fixed sentence too (§8). The surfaces move to this rule one at a time (the recall
+     answer, the pushes and the timer ring have; the digest and confirmations follow); until one
+     does, the fixed text this document gives for it is what is sent.
    - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
      window and no terms is a list, not a search: the live units whose instant (`told`:
      `created_at`; `when`: `event_at`, else `due_at`) falls in it, in order of that instant, up
@@ -1977,16 +1976,21 @@ box can audit it):
   may once more).
   **A reminder says its unit as it is now** (ADR-0032 point 4): a push and a digest line carry the
   unit's current `title`, else its current `content` (spec R12), and current instant in the
-  clock's zone, in a fixed frame (`Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00`; with
-  a title, `Recordatorio: Reunión con Juan — mié 14 oct, 22:30`), never a model call. A digest
-  line is the same words without the push's frame. A recurring one
+  clock's zone, said as a person says them (§5 step 2, ADR-0064): `Acordate: turno con el
+  oculista, hoy a las 11:00.` / `Don't forget: Appointment with the optician, today at 11:00.`;
+  a day alone has no time (`Acordate: tomar las pastillas, hoy.`) and a unit with no instant
+  says its words alone (`Acordate: llamar a mamá.`). Never a model call. A late push appends
+  `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` Words that
+  already end in `?`, `!` or a clipped `…` get no second period. A digest line still says the
+  unit's words and `AtWhen` form (`Turno con el oculista — mié 4 nov, 11:00`) until
+  `warm-replies` link 4 moves it to the push's words without its frame. A recurring one
   names its occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
   delivered. The text a reminder was armed with (the title the capture classified, else the
   content) is only the fallback when the unit cannot be read; a correction keeps it equal to
   what the unit says (§5 step 4).
-  The sentences (`phrase`: `Reminder`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
+  The sentences (`phrase`: `PushFrame`, `TimerRing`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   usual language for the digest (§5, ADR-0035); the glass box stays English.
   **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
@@ -2214,8 +2218,13 @@ trigger rings with its unit's, or its content when the model gave no title: the 
 ISO dates, and a chat listed "Recordatorio para sacar la pizza del horno a las 12:20 del
 2026-10-26." (ADR-0051). It is nullable ("remind me in 15 min" with no object → a generic
 nudge, and a capture whose text could not be salvaged writes that same `NULL` rather than an
-empty string). On firing, the LLM rephrases the text (`rendered_text`): it is stored as read
-and only worded at delivery time. Listable and cancellable from chat and from the UI.
+empty string). On firing, the ring is a fixed sentence built by code around the stored words
+(`Es la hora: sacar la ropa.` / `Time's up: Take the clothes out.`, `phrase.TimerRing`,
+[ADR-0064](adr/0064-replies-are-built-by-code.md) point 7); no model words it. A ring late by
+`DelayCaveat` appends `Perdón, te llega más tarde de lo que pediste.` / `Sorry, this is later than
+you asked for.`, and a timer with no words says its generic nudge. `rendered_text` is no longer
+written: it stays `NULL` and the column remains for old rows. Listable and cancellable from chat
+and from the UI.
 
 **What a timer is, as read**: a reminder asked for once, after a span of time counted from now
 in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
@@ -2232,8 +2241,8 @@ A timer keeps §7's quiet-hours exemption: its instant was set by the user, so o
 the night rings in the night.
 
 The stored half is what capture does today: the row is written with `action_text` holding the
-request as read and `rendered_text` left `NULL`, untouched rather than defaulted, because
-`NULL` there means "not yet worded" and an empty string would destroy that distinction. A timer
+request as read and `rendered_text` left `NULL`, which it stays when the timer fires (nothing is
+worded). A timer
 that has fired but not been surfaced is a real state this table can hold, and `surfaced_at` is
 what tells the two apart.
 

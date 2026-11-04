@@ -38,12 +38,12 @@ func TestI36_ARestartKeepsWhatTheUserAskedFor(t *testing.T) {
 		want           []string
 	}{
 		{"the asked event's healthy rows are carried", "classify-request-named-time-friday", "recordame el dentista el viernes a las 10",
-			[]string{"Fri 10-23 08:00 Recordatorio: Cita con el dentista — vie 23 oct, 10:00",
-				"Fri 10-23 09:45 Recordatorio: Cita con el dentista — vie 23 oct, 10:00"}},
+			[]string{"Fri 10-23 08:00 Acordate: cita con el dentista, hoy a las 10:00.",
+				"Fri 10-23 09:45 Acordate: cita con el dentista, hoy a las 10:00."}},
 		{"an asked date-only event keeps its day", "classify-request-acordate-de-avisarme", "acordate de avisarme que vence el seguro el viernes",
-			[]string{"Fri 10-23 09:00 Recordatorio: Vencimiento del seguro — vie 23 oct"}},
+			[]string{"Fri 10-23 09:00 Acordate: vencimiento del seguro, hoy."}},
 		{"an asked day alone is caught up while its day lasts", "classify-request-day-only-thursday", "recordame pagar el gas el jueves",
-			[]string{"Thu 10-22 21:35 Recordatorio: Pagar el gas — jue 22 oct"}},
+			[]string{"Thu 10-22 21:35 Acordate: pagar el gas, hoy."}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := newI36Vault()

@@ -340,9 +340,8 @@ func wireCheck(clock ports.Clock, db *sqlite.Vault) *brain.CheckService {
 		sqlite.NewStateRepo(db),
 		// No provider either: a subcommand that spent an LLM call to
 		// reword a timer nobody is listening to would be paying for a
-		// sentence with no reader. The delivered text falls back to the
-		// user's own words, which is what the rephrasing degrades to
-		// anyway.
+		// sentence with no reader. A ring is built by code from the
+		// timer's own words, so a provider would add nothing.
 		nil,
 		// No conversation, for the same reason as the nil channel above:
 		// there is nowhere for this subcommand to push to.
@@ -572,9 +571,8 @@ func (p proactiveCheck) ProactiveCheck(ctx context.Context) error {
 func wireProactive(clock ports.Clock, db *sqlite.Vault, cfg *config.Config, lookup func(string) (string, bool), channel ports.Channel, conv *brain.Conversation, keeper *brain.FocusKeeper) (*brain.CheckService, error) {
 	llm, _, _, err := resolveConsolidateProviders(cfg, lookup)
 	if err != nil {
-		// No provider bound. The pass still runs: a timer delivers the
-		// user's own words, which is what the rephrasing degrades to
-		// anyway (R4.1), and every other decision is pure.
+		// No provider bound. The pass still runs: a timer rings its own
+		// words (R4.1), and every other decision is pure.
 		llm = nil
 	}
 

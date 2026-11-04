@@ -159,13 +159,13 @@ func (s Set) Recall(items []Item, now time.Time) string {
 	case 1:
 		it := items[0]
 		if it.When == nil {
-			return fmt.Sprintf(s.RecallOneUndated, s.Inline(it))
+			return settled(fmt.Sprintf(s.RecallOneUndated, s.Inline(it)))
 		}
 		frame := s.RecallOne
 		if past(*it.When, now) {
 			frame = s.RecallOnePast
 		}
-		return fmt.Sprintf(frame, s.Inline(it), s.said(*it.When, now, false))
+		return settled(fmt.Sprintf(frame, s.Inline(it), s.said(*it.When, now, false)))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, s.RecallMany, len(items))
@@ -182,4 +182,42 @@ func (s Set) line(it Item, now time.Time) string {
 	}
 	text := strings.TrimSuffix(strings.TrimSpace(it.Text), ".")
 	return fmt.Sprintf(s.ItemWhen, text, s.When(*it.When, now))
+}
+
+// Push words a reminder: the item's words and, when it has an instant, its day
+// and time as a person says them (ADR-0064 point 1).
+func (s Set) Push(it Item, now time.Time) string {
+	words := s.Inline(it)
+	if it.When != nil {
+		words = fmt.Sprintf(s.ItemWhen, words, s.When(*it.When, now))
+	}
+	return settled(fmt.Sprintf(s.PushFrame, words))
+}
+
+// Ring is a ringing timer's fixed sentence around its words (ADR-0064 point 7).
+func (s Set) Ring(words string) string {
+	return settled(fmt.Sprintf(s.TimerRing, s.Inline(Item{Text: words})))
+}
+
+// settled drops the frame's period after words that already end a sentence
+// with ?, ! or a clipped ellipsis.
+func settled(sentence string) string {
+	for _, end := range []string{"?.", "!.", "\u2026."} {
+		if strings.HasSuffix(sentence, end) {
+			return strings.TrimSuffix(sentence, ".")
+		}
+	}
+	return sentence
+}
+
+// NamesOf is Item.Names for a unit: its title and its content, each without
+// its own first word.
+func NamesOf(title, content string) string {
+	past := func(text string) string {
+		if words := strings.Fields(text); len(words) > 0 {
+			return strings.Join(words[1:], " ")
+		}
+		return ""
+	}
+	return past(title) + " " + past(content)
 }

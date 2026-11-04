@@ -44,8 +44,8 @@ type Timer struct {
 }
 
 // DueTimer is TimerRepo's read shape: what the due scan needs, and nothing
-// else. rendered_text is absent because nothing has written it yet — the
-// LLM rephrasing at fire time is m3d's.
+// else. rendered_text is absent because nothing writes it any more: a
+// ringing timer is a fixed sentence built by code (ADR-0064 point 7).
 type DueTimer struct {
 	ID         string
 	FireAt     time.Time
@@ -81,10 +81,8 @@ type TimerRepo interface {
 	// delivered wording is missing would be a state nothing can say
 	// anything about. One statement makes it unrepresentable.
 	//
-	// nil leaves rendered_text NULL, which is what a generic nudge and a
-	// failed rephrasing both are: the column's "not yet worded" and
-	// "worded as itself" collapse to one absence, and the text the user
-	// receives is action_text either way.
+	// nil leaves rendered_text NULL, which is what every ring is since
+	// ADR-0064 point 7: nothing is worded, so the column is never written.
 	//
 	// It returns ErrTimerStatusConflict if id is no longer pending, and
 	// ErrTimerNotFound if no timer with id exists.

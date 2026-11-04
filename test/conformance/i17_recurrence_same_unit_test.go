@@ -244,8 +244,8 @@ func TestI17_AFailedRecurringPushIsPushedAgain(t *testing.T) {
 	got := i17Case{text: "Take the pills", eventAt: "2026-10-15T20:00:00-03:00", rule: "daily", interrupt: 0.8,
 		days: 2, failSends: 1}.live(t)
 	want := []string{
-		"Fri 2026-10-16 20:30  Reminder: Take the pills — Fri 16 Oct (This is later than intended.)",
-		"Sat 2026-10-17 20:00  Reminder: Take the pills — Sat 17 Oct",
+		"Fri 2026-10-16 20:30  Don't forget: Take the pills, today. Sorry, this is later than intended.",
+		"Sat 2026-10-17 20:00  Don't forget: Take the pills, today.",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("sent:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -259,8 +259,8 @@ func TestI17_ARecurringReminderDueAtNightWaitsForQuietEnd(t *testing.T) {
 	got := i17Case{text: "Back up the server", eventAt: "2026-10-16T00:30:00-03:00", rule: "daily", interrupt: 0.8,
 		days: 2}.live(t)
 	want := []string{
-		"Sat 2026-10-17 07:00  Reminder: Back up the server — Sat 17 Oct (This is later than intended.)",
-		"Sun 2026-10-18 07:00  Reminder: Back up the server — Sun 18 Oct (This is later than intended.)",
+		"Sat 2026-10-17 07:00  Don't forget: Back up the server, today. Sorry, this is later than intended.",
+		"Sun 2026-10-18 07:00  Don't forget: Back up the server, today. Sorry, this is later than intended.",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("sent:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

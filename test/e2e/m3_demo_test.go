@@ -144,10 +144,10 @@ func TestM3Demo_ASimulatedDay(t *testing.T) {
 	}
 	all := strings.Join(texts, "\n")
 	for _, want := range []string{
-		"take the bread out of the oven", // the timer, in the user's own words (no provider bound)
-		"later than you asked",           // and it says it was late
-		"call the clinic back",           // the push
-		"water the plants",               // the digest
+		"Time's up: take the bread out of the oven", // the timer, a fixed sentence (ADR-0064)
+		"later than you asked",                      // and it says it was late
+		"call the clinic back",                      // the push
+		"water the plants",                          // the digest
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the user never received %q. Everything sent:\n%s", want, all)
