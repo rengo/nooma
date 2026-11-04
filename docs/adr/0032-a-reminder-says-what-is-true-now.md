@@ -7,7 +7,9 @@
   [ADR-0047](0047-nothing-unasked-rings-at-once-on-the-told-day.md), point 3's "the one path
   besides capture that arms an at-once reminder" (the catch-up is now the one unasked at-once path);
   [ADR-0061](0061-the-model-words-what-the-code-found.md), point 4's fixed frame (a reminder is
-  worded by the model from the unit as it is now, and checked)
+  worded by the model from the unit as it is now, and checked);
+  [ADR-0064](0064-replies-are-built-by-code.md), point 4's frame wording (ADR-0061's model wording
+  is superseded in full: a reminder is built by code in a warm fixed sentence)
 - **Amends** (none of them edited): [ADR-0009](0009-scheduler-downtime.md) (judged at
   every delivery attempt, by a pass that can deliver), [ADR-0022](0022-reply-language.md) (its
   "anything Nooma says first" gap), [ADR-0029](0029-event-reminders-follow-the-users-leads.md)

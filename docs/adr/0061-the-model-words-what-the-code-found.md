@@ -1,13 +1,14 @@
 # ADR-0061 — The model words what the code found or did, and a check decides it may be sent
 
-- **Status**: Accepted (by the client, 2026-10-30: no emojis, one or two sentences with no added
-  remarks, natural but brief confirmations, no offers or added questions, a natural digest, and
-  a wait of up to 5 s before the fixed text)
+- **Status**: Superseded by [ADR-0064](0064-replies-are-built-by-code.md) (was Accepted by the
+  client, 2026-10-30: no emojis, one or two sentences with no added remarks, natural but brief
+  confirmations, no offers or added questions, a natural digest, and a wait of up to 5 s before
+  the fixed text)
 - **Date**: 2026-10-30
 - **Supersedes**: [ADR-0032](0032-a-reminder-says-what-is-true-now.md) **in part**: point 4's
   fixed frame and its rejected option "re-word the text with a model at delivery". What a
   reminder says stays the unit as it is now; only its wording changes.
-- **Superseded by**: —
+- **Superseded by**: [ADR-0064](0064-replies-are-built-by-code.md), in full
 - **Extends** (none of them edited): [ADR-0033](0033-the-model-understands-the-code-acts.md)
   (the model understands, the code acts: now the model also words what the code did),
   [ADR-0022](0022-reply-language.md) (the fixed sentence in the reply's language is the fallback,
