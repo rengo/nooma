@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/store/vaultlock"
+	"github.com/rengo/nooma/test/support/sandbox"
 )
 
 // freePort asks the kernel for a port and gives it straight back, so the test
@@ -510,7 +511,7 @@ func TestServeHoldsTheWriteLock(t *testing.T) {
 
 	// A second serve must refuse, and say who has it.
 	second := exec.Command(binaryPath(t), "serve", vault)
-	second.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
+	sandbox.Child(second, home)
 	var errOut strings.Builder
 	second.Stderr = &errOut
 	if err := second.Run(); err == nil {

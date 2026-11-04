@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/store/vaultlock"
+	"github.com/rengo/nooma/test/support/sandbox"
 )
 
 // The child process is this same test binary, re-executed with these variables
@@ -28,13 +29,14 @@ const (
 	childVaultEnv = "NOOMA_LOCK_VAULT"
 )
 
-// TestMain lets the test binary act as the lock-holding child when asked.
+// TestMain lets the test binary act as the lock-holding child when asked, and
+// runs the rest away from the machine's vaults (docs/06-harness.md §3).
 func TestMain(m *testing.M) {
 	if dir := os.Getenv(childVaultEnv); os.Getenv(childEnv) != "" && dir != "" {
 		holdForever(dir)
 		return
 	}
-	os.Exit(m.Run())
+	os.Exit(sandbox.Main(m))
 }
 
 func holdForever(dir string) {

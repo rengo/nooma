@@ -19,8 +19,11 @@ import (
 // vault resolved the maintainer's real one and migrated it.
 func TestSandbox_AVaultlessCommandNeverReachesAHomeVault(t *testing.T) {
 	home := os.Getenv("HOME")
-	if !strings.HasPrefix(home, os.TempDir()) {
-		t.Fatalf("HOME = %q during tests, want a folder under %s: TestMain did not sandbox this package", home, os.TempDir())
+	if !strings.Contains(home, "nooma-sandbox-") {
+		t.Fatalf("HOME = %q during tests, want a folder in the sandbox: TestMain did not sandbox this package", home)
+	}
+	if vault := os.Getenv("NOOMA_VAULT"); vault == "" || !strings.Contains(vault, "nooma-sandbox-") {
+		t.Fatalf("NOOMA_VAULT = %q during tests, want the sandbox's folder that is not a vault", vault)
 	}
 	if real, _ := os.UserHomeDir(); real != home {
 		t.Fatalf("os.UserHomeDir = %q, want the sandboxed %q", real, home)

@@ -10,6 +10,6 @@ import (
 )
 
 // TestMain runs the end-to-end tests away from the machine's vaults. Each
-// child binary is also given its own HOME and an empty NOOMA_VAULT (noomaCmd);
-// this covers the test process itself, and any child started without them.
+// child binary is also started through sandbox.Child, with its own HOME and an
+// empty NOOMA_VAULT; this covers the test process itself.
 func TestMain(m *testing.M) { os.Exit(sandbox.Main(m)) }

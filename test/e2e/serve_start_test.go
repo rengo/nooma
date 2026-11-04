@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/rengo/nooma/internal/store/vaultlock"
+	"github.com/rengo/nooma/test/support/sandbox"
 )
 
 // maxServeAttempts bounds how often a start that lost its port to a foreign
@@ -121,7 +122,7 @@ func launchServe(t *testing.T, home, vault string, port int, extraArgs ...string
 	args := append([]string{"serve"}, extraArgs...)
 	args = append(args, vault)
 	cmd := exec.Command(binaryPath(t), args...)
-	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "NOOMA_VAULT=")
+	sandbox.Child(cmd, home)
 	p := &serveProc{Cmd: cmd, stderr: &lockedBuffer{}, exited: make(chan struct{})}
 	cmd.Stderr = p.stderr
 	// Once the child is gone, Wait must not block on a stderr pipe a
