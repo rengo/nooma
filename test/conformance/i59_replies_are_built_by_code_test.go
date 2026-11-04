@@ -12,6 +12,7 @@ import (
 	"github.com/rengo/nooma/internal/brain"
 	"github.com/rengo/nooma/internal/channels"
 	"github.com/rengo/nooma/internal/core/classify"
+	"github.com/rengo/nooma/internal/core/correction"
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
@@ -22,8 +23,7 @@ import (
 
 // I59 (doc 02 §5 step 2, ADR-0064): a reply that carries a fact is built by
 // code, in warm fixed sentences. No model words it and none waits for one.
-// This file pins the recall, push, timer ring and digest surfaces; each later surface of the
-// warm-replies change adds its own rows here.
+// This file pins the recall, push, timer ring, digest, confirmation and correction surfaces.
 
 var (
 	i59Zone = time.FixedZone("ART", -3*60*60)
@@ -509,5 +509,104 @@ func TestI59_DigestOverTheBoundSaysWhatWaits(t *testing.T) {
 		if n := telegramUnits(got); n > 4096 {
 			t.Errorf("%s: digest is %d UTF-16 units, want at most 4096", tc.lang, n)
 		}
+	}
+}
+
+// i59Armed is a capture that armed a reminder, told at i59Now.
+func i59Armed(lang classify.Language, armed brain.Armed) brain.CaptureResult {
+	return brain.CaptureResult{Outcome: brain.OutcomeArmed, Language: lang, At: i59Now, Armed: &armed}
+}
+
+// TestI59_ConfirmationIsBuiltByCode: every capture confirmation of design §6,
+// exact text, in both languages, through the channel's own renderer.
+func TestI59_ConfirmationIsBuiltByCode(t *testing.T) {
+	at := func(m time.Month, d, h, min int) time.Time { return *i59At(m, d, h, min) }
+	daily := prospection.RuleDaily
+	rows := []struct {
+		name           string
+		res            brain.CaptureResult
+		wantES, wantEN string
+	}{
+		{"plain note", brain.CaptureResult{Outcome: brain.OutcomeStored, At: i59Now},
+			"Listo, anotado.", "Got it, noted."},
+		{"event armed", i59Armed("", brain.Armed{What: prospection.ArmTrigger, About: at(11, 12, 10, 0), FireAt: at(11, 11, 10, 0), Later: []time.Time{at(11, 12, 7, 30)}}),
+			"Listo, anotado para el jueves 12 de noviembre a las 10:00. Te aviso el día anterior y unas horas antes.",
+			"Got it, noted for Thursday 12 November at 10:00. I'll remind you the day before and a few hours before."},
+		{"day alone, asked", i59Armed("", brain.Armed{What: prospection.ArmTrigger, About: at(11, 13, 0, 0), DayOnly: true, FireAt: at(11, 13, 9, 0)}),
+			"Listo, anotado para el viernes 13 de noviembre. Te aviso ese día a las 9:00.",
+			"Got it, noted for Friday 13 November. I'll remind you that day at 9:00."},
+		{"task to the digest", brain.CaptureResult{Outcome: brain.OutcomeStored, At: i59Now, DueInDigest: i59At(11, 9, 0, 0)},
+			"Listo, anotado para el lunes 9 de noviembre. Te lo recuerdo en el resumen de esa mañana.",
+			"Got it, noted for Monday 9 November. I'll mention it in that morning's digest."},
+		{"event nothing was armed for", brain.CaptureResult{Outcome: brain.OutcomeStored, At: i59Now, NotArmedFor: i59At(11, 5, 21, 0)},
+			"Listo, anotado para mañana a las 21:00.", "Got it, noted for tomorrow at 21:00."},
+		{"daily", i59Armed("", brain.Armed{What: prospection.ArmRecurring, Rule: daily, About: at(11, 5, 9, 0), FireAt: at(11, 5, 9, 0)}),
+			"Listo, te aviso todos los días a las 9:00.", "Sure, I'll remind you every day at 9:00."},
+		{"timer, tomorrow", i59Armed("", brain.Armed{What: prospection.ArmTimer, About: at(11, 5, 0, 20), FireAt: at(11, 5, 0, 20)}),
+			"Listo, te aviso mañana a las 0:20.", "Sure, I'll remind you tomorrow at 0:20."},
+		{"timer, in the hour", i59Armed("", brain.Armed{What: prospection.ArmTimer, About: at(11, 4, 10, 20), FireAt: at(11, 4, 10, 20)}),
+			"Listo, te aviso a las 10:20.", "Sure, I'll remind you at 10:20."},
+		{"asked, past", brain.CaptureResult{Outcome: brain.OutcomeStored, At: i59Now, ArmRefused: &brain.ArmRefused{Why: prospection.RefusalAlreadyPast}},
+			"Lo anoté, pero no te puse aviso: esa hora ya pasó.", "I noted it, but I didn't set a reminder: that time has already passed."},
+		{"refused", brain.CaptureResult{Outcome: brain.OutcomeArmRefused, At: i59Now, ArmRefused: &brain.ArmRefused{Why: prospection.RefusalAlreadyPast}},
+			"No lo programé: esa hora ya pasó", "I did not set that: that time has already passed"},
+	}
+	for _, r := range rows {
+		for _, l := range []struct {
+			lang classify.Language
+			want string
+		}{{classify.LanguageES, r.wantES}, {classify.LanguageEN, r.wantEN}} {
+			res := r.res
+			res.Language = l.lang
+			if got := channels.RenderReply(res); got != l.want {
+				t.Errorf("%s (%s): reply\n%q\nwant\n%q", r.name, l.lang, got, l.want)
+			}
+		}
+	}
+}
+
+// TestI59_CorrectionIsBuiltByCode: every correction answer of design §6, exact
+// text, in both languages.
+func TestI59_CorrectionIsBuiltByCode(t *testing.T) {
+	moved := i59At(11, 5, 11, 0)
+	rows := []struct {
+		name           string
+		c              brain.Correction
+		wantES, wantEN string
+	}{
+		{"moved, with leads", brain.Correction{UnitID: "u", MovedTo: moved, About: *moved,
+			Fields:    []correction.Field{correction.FieldReminderLeads},
+			Reminders: []time.Time{*i59At(11, 5, 7, 30), *i59At(11, 5, 10, 45)}},
+			"Listo, lo pasé para mañana a las 11:00. Te aviso unas horas antes y 15 minutos antes.",
+			"Done, I moved it to tomorrow at 11:00. I'll remind you a few hours before and 15 minutes before."},
+		{"moved, a day alone", brain.Correction{UnitID: "u", MovedTo: i59At(11, 13, 0, 0), MovedToDayOnly: true},
+			"Listo, lo pasé para el viernes 13 de noviembre.", "Done, I moved it to Friday 13 November."},
+		{"corrected", brain.Correction{UnitID: "u"}, "Listo, lo corregí.", "Done, I fixed it."},
+		{"unchanged", brain.Correction{UnitID: "u", Unchanged: true},
+			"Ya decía eso, así que no cambié nada.", "It already said that, so I changed nothing."},
+	}
+	for _, r := range rows {
+		for _, l := range []struct {
+			lang classify.Language
+			want string
+		}{{classify.LanguageES, r.wantES}, {classify.LanguageEN, r.wantEN}} {
+			c := r.c
+			res := brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: l.lang, At: i59Now, Correction: &c}
+			if got := channels.RenderReply(res); got != l.want {
+				t.Errorf("%s (%s): reply\n%q\nwant\n%q", r.name, l.lang, got, l.want)
+			}
+		}
+	}
+}
+
+// TestI59_TimersListNamesEachClockAsCodeSaysIt: the timers' list keeps its
+// structure (ADR-0051) and every clock is the one Clock writes, with no leading
+// zero.
+func TestI59_TimersListNamesEachClockAsCodeSaysIt(t *testing.T) {
+	words := "sacar la ropa"
+	res := brain.CaptureResult{Outcome: brain.OutcomeTimers, Language: classify.LanguageES, At: i59Now,
+		Timers: &brain.TimersAnswer{Listed: []brain.ListedTimer{{ID: "a", FireAt: *i59At(11, 4, 10, 20), Text: &words}, {ID: "b", FireAt: *i59At(11, 4, 9, 5)}}}}
+	if got, want := channels.RenderReply(res), "Hay 2 temporizadores puestos:\n1) 10:20 \u2014 sacar la ropa\n2) 9:05"; got != want {
+		t.Errorf("list\n%q\nwant\n%q", got, want)
 	}
 }

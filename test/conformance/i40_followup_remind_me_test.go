@@ -111,7 +111,7 @@ func TestI40_ARemindMeFollowUpRemindsTheItemItFollows(t *testing.T) {
 	if res.Outcome != brain.OutcomeArmed || res.UnitID != "gift" {
 		t.Errorf("result = %+v, want the gift armed", res)
 	}
-	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso ese día a las 09:00.") {
+	if got := channels.RenderReply(res); !strings.Contains(got, "Te aviso ese día a las 9:00.") {
 		t.Errorf("reply = %q, want the asked reminder's answer", got)
 	}
 
@@ -141,7 +141,7 @@ func TestI40_ARemindMeOfAnUndatedItemSaysNoReminderWasSet(t *testing.T) {
 	if u, _ := f.units.ByID(context.Background(), "gift"); !u.RemindMe {
 		t.Error("gift is not marked asked: a date given later would arm nothing")
 	}
-	if got := channels.RenderReply(res); !strings.Contains(got, "no puse aviso") {
+	if got := channels.RenderReply(res); !strings.Contains(got, "no te puse aviso") {
 		t.Errorf("reply = %q, want that no reminder was set, and why", got)
 	}
 }
@@ -256,7 +256,7 @@ func TestI40_ARemindMeThatMovesTheItemMovesItThenReminds(t *testing.T) {
 	// Every ring that remains (ADR-0044): the move armed the event's own lead
 	// beside the asked one, and naming the asked one alone was the live
 	// message 4's answer.
-	if !strings.HasPrefix(reply, "Movido al ") || !strings.HasSuffix(reply, ". Te aviso unas horas antes y 15 minutos antes.") {
+	if !strings.HasPrefix(reply, "Listo, lo pasé para ") || !strings.HasSuffix(reply, ". Te aviso unas horas antes y 15 minutos antes.") {
 		t.Errorf("reply = %q, want the move and every ring that remains named", reply)
 	}
 }
@@ -273,7 +273,7 @@ func TestI40_ARemindMeThatMovesTheItemTooLateSaysWhy(t *testing.T) {
 		t.Errorf("meeting at %v, want moved to 18:05", got.EventAt)
 	}
 	reply := channels.RenderReply(res)
-	if !strings.HasPrefix(reply, "Movido al ") || !strings.Contains(reply, "no puse aviso: queda muy poco tiempo para esa hora") {
+	if !strings.HasPrefix(reply, "Listo, lo pasé para ") || !strings.Contains(reply, "no te puse aviso: queda muy poco tiempo para esa hora") {
 		t.Errorf("reply = %q, want the move named and the reminder said not set, and why", reply)
 	}
 }

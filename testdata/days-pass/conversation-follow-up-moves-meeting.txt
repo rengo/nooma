@@ -4,9 +4,9 @@
 # "Tengo reunión con Juan mañana a las 22:30" is read by a hand-written reading, not a recording
 # "Es a las 08:00." is read by a hand-written reading, not a recording
 Tue 2026-10-13 20:00 ← dentista el viernes a las 10
-Tue 2026-10-13 20:00 → Anotado para el vie 16 oct, 10:00. Te aviso el día anterior y unas horas antes.
+Tue 2026-10-13 20:00 → Listo, anotado para el viernes 16 de octubre a las 10:00. Te aviso el día anterior y unas horas antes.
 Tue 2026-10-13 21:05 ← Tengo reunión con Juan mañana a las 22:30
-Tue 2026-10-13 21:05 → Anotado para el mié 14 oct, 22:30. Te aviso unas horas antes.
+Tue 2026-10-13 21:05 → Listo, anotado para mañana a las 22:30. Te aviso unas horas antes.
 Tue 2026-10-13 21:10 ← Es a las 08:00.
-Tue 2026-10-13 21:10 → Movido al mié 14 oct, 08:00.
+Tue 2026-10-13 21:10 → Listo, lo pasé para mañana a las 8:00.
 Wed 2026-10-14 07:00 → Acordate: reunión con Juan, hoy a las 8:00.

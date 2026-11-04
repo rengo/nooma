@@ -2,11 +2,11 @@
 # a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Sat 2026-10-24 12:00
 # quiet hours end at 09:30
 Fri 2026-10-16 10:43 ← recordame pagar el gas el jueves
-Fri 2026-10-16 10:43 → Anotado para el jue 22 oct. Te aviso ese día a las 09:30.
+Fri 2026-10-16 10:43 → Listo, anotado para el jueves 22 de octubre. Te aviso ese día a las 9:30.
 Fri 2026-10-16 10:44 ← recordame el dentista el viernes a las 10
-Fri 2026-10-16 10:44 → Anotado para el vie 23 oct, 10:00. Te aviso el día anterior, 30 minutos antes y 15 minutos antes.
+Fri 2026-10-16 10:44 → Listo, anotado para el viernes 23 de octubre a las 10:00. Te aviso el día anterior, 30 minutos antes y 15 minutos antes.
 Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
-Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:46 → Listo, anotado para mañana a las 9:00. Te aviso 15 minutos antes.
 Sat 2026-10-17 08:45 → Acordate: llamar al médico, hoy a las 9:00.
 Thu 2026-10-22 09:30 → Acordate: pagar el gas, hoy.
 Thu 2026-10-22 10:00 → Acordate: cita con el dentista, mañana a las 10:00.

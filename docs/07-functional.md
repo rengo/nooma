@@ -103,14 +103,14 @@ is on the 15th.
    (I30). The edit changes the one field you corrected, with its pre-image
    recorded; a moved date also rewrites the date the text states, and moves, arms or cancels the
    unit's reminders as a fresh capture of the new date would, and the answer names the new
-   instant ("Movido al mar 20 oct, 11:00."). Right after an event, "avisame solo 1 hora antes"
+   instant ("Listo, lo pasé para el martes 20 de octubre a las 11:00."). Right after an event, "avisame solo 1 hora antes"
    gives that event its own reminders, one hour before, and the answer says so ("Te aviso 1 hora
    antes."); they stay when it moves or your preferences change. Asked of something with no time
    of day, Nooma says it did not change the reminders (ADR-0038). "también 1 hora antes" adds
    that reminder to the ones the event has, and a chat message that tells an event and names
    its leads ("dentista mañana a las 10, avisame 1 hora antes") is reminded at those alone
    (ADR-0045); one already behind never rings at once, but on the event's day at 09:00 ("Te
-   aviso ese día a las 09:00."). A chat's first message, the CLI and the API read them too. A
+   aviso ese día a las 9:00."). A chat's first message, the CLI and the API read them too. A
    task keeps its reminder 15 minutes before whatever leads it names. A learning signal is emitted ([doc 02 §5 step 4](02-cognitive-core.md#5-capture), ADR-0016).
 
 **When the capture itself cannot proceed**, Nooma says why in plain words and saves nothing
@@ -215,8 +215,8 @@ of a black box.
    its day as a person says it ("• Tomar las pastillas, hoy", "• Renovar el
    pasaporte, era para ayer"); the code writes every word, no model does.
    A task with a due date ("mañana renuevo el pasaporte") rings no reminder: the reply says so
-   ("Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.", with its hour,
-   "mar 20 oct, 10:00", when you told one), and the digest names it
+   ("Listo, anotado para el martes 20 de octubre. Te lo recuerdo en el resumen de esa mañana.", with
+   its hour, "el martes 20 de octubre a las 10:00", when you told one), and the digest names it
    first on its due day, and on the next two mornings while it is still open, even on a
    low-energy morning, and even when it is the only thing to say. Answer it "ya lo hice" and the
    task is closed (archived, its reminders dropped) and named no more: "Listo, saqué «Renovar el
@@ -266,7 +266,7 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
    "in an hour"); a day or a time of day ("mañana a las 9") is a task or an event with a
    reminder instead.
 2. **Arms it at capture** at now plus that span, resolved against your clock, and names that
-   moment in the reply ("Te aviso a las 10:28."). It rings once, at that moment: a timer has no
+   moment in the reply ("Listo, te aviso a las 10:28."). It rings once, at that moment: a timer has no
    lead before it.
 3. **Fires it when due.** A background check scans every few minutes. At fire time the code
    says "Es la hora: sacar la ropa." around your words, or a generic nudge if there are none;

@@ -85,7 +85,7 @@ func TestChannelReplyCarriesWhatTheOutcomeNames(t *testing.T) {
 			name: "an armed timer names when it will fire",
 			result: brain.CaptureResult{Outcome: brain.OutcomeArmed, At: time.Date(2026, 10, 26, 23, 50, 0, 0, time.UTC),
 				Armed: &brain.Armed{What: prospection.ArmTimer, ID: "t-1", FireAt: time.Date(2026, 10, 27, 0, 20, 0, 0, time.UTC)}},
-			wants: []string{"tue 27 oct", "00:20"},
+			wants: []string{"tomorrow at 0:20"},
 		},
 		{
 			name: "a refused arming says which thing was missing",

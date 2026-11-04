@@ -88,7 +88,7 @@ func TestI44_ANamedLeadAlreadyBehindRingsOnTheEventsDay(t *testing.T) {
 	if got := f.i44Fires(t, res.UnitID); !slices.EqualFunc(got, []time.Time{i44At(15, 9, 0)}, time.Time.Equal) {
 		t.Errorf("armed at %v, want one ring on the event's day at 09:00", got)
 	}
-	if got, want := channels.RenderReply(res), "Anotado para el jue 15 oct, 10:00. Te aviso ese día a las 09:00."; got != want {
+	if got, want := channels.RenderReply(res), "Listo, anotado para mañana a las 10:00. Te aviso ese día a las 9:00."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }

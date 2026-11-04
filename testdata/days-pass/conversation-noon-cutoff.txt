@@ -1,7 +1,7 @@
 # a check-in put off, the server down over the next morning and back at 22:55
 # a check pass every 5m0s from Fri 2026-10-16 10:40 -03:00 to Wed 2026-10-21 12:00
 Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
-Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:46 → Listo, anotado para mañana a las 9:00. Te aviso 15 minutos antes.
 Sat 2026-10-17 08:45 → Acordate: llamar al médico, hoy a las 9:00.
 Sat 2026-10-17 08:50 ← después lo veo
 Sat 2026-10-17 08:50 → (chat reply)

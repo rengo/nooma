@@ -960,7 +960,7 @@ command, it is answered once.
        rewritten. Only the asked reminder is armed, so an event's own leads are never armed twice,
        and one already armed at the same instant is not armed again. The answer names every
        ring the item has once the asked one is armed, as a capture's does ("Te aviso ese día a
-       las 09:00."; "Te aviso unas horas antes y 15 minutos antes.", ADR-0044); an item with no date, or
+       las 9:00."; "Te aviso unas horas antes y 15 minutos antes.", ADR-0044); an item with no date, or
        one too close for the asked reminder while an own lead would still fit, is still marked
        asked, and the
        answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
@@ -968,8 +968,8 @@ command, it is answered once.
        `correction.MovesDate`: an echoed instant is none, and so is a bare date on the item's own
        local day, the day the model restates beside "recordámelo", ADR-0044) moves it first, through the correction
        path above, and then arms the asked reminder on the moved unit; the answer names the move
-       and every ring ("Movido al mar 20 oct, 11:00. Te aviso unas horas antes y 15 minutos
-       antes."). A correction that asks
+       and every ring ("Listo, lo pasé para el martes 20 de octubre a las 11:00. Te aviso unas horas antes y 15
+       minutos antes."). A correction that asks
        instead arms nothing. Text alone is not a change here: the reading restates its item.
        Leads win: a reading carrying `reminder_leads_minutes` ("avisame 2 horas antes") takes
        the correction path and sets the event's own leads, and a `remind_request` beside it is
@@ -1071,11 +1071,14 @@ command, it is answered once.
      `correction.applied` row and no learning signal, and the answer says nothing changed; only
      the reminder step still runs, so the repair above works.
      **The answer names what changed** (I40). A correction that moves `event_at` or `due_at`
-     answers with the instant it moved to, named as the capture reply names it ("Movido al mar
-     20 oct, 11:00."; a day alone without a clock); one that sets the event's leads (below)
+     answers with the instant it moved to, named as the capture reply names it ("Listo, lo pasé
+     para el martes 20 de octubre a las 11:00."; a day alone without a clock); one that sets the event's leads (below)
      names the reminders then armed, as the user said them ("Te aviso 1 hora antes."), or that
      none is left before the event; one that changes only the wording or the title answers a
-     bare confirmation, which claims no time and no reminder.
+     bare confirmation ("Listo, lo corregí."), which claims no time and no reminder, and one
+     that finds the unit already saying it, "Ya decía eso, así que no cambié nada.". All of
+     it is built by code from the correction's facts (§5 step 2, ADR-0064); a day is said as
+     the capture reply says it, and a clock as `phrase.Clock` does.
      **A follow-up can set the event's own reminder leads** (I40,
      [ADR-0038](adr/0038-an-event-can-carry-its-own-reminder-leads.md)). Beside a chat
      `referent`, the classification may carry `reminder_leads_minutes`: every lead the message
@@ -1744,7 +1747,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   names only that. When that would leave no lead ahead and none asked, the nearest stays (a
   date-only event tomorrow told before 09:00 keeps its 09:00 reminder today). An asked lead is
   untouched. A ring kept on the told day is named in the reply as today at its hour ("Te aviso
-  hoy a las 09:00."), read from the capture instant, never as "the day before". The told day is a capture's own, and a correction's own (`prospection.Follow`); a
+  hoy a las 9:00."), read from the capture instant, never as "the day before". The told day is a capture's own, and a correction's own (`prospection.Follow`); a
   preference re-arm and the check pass's re-plan take the unit's `created_at`, so the dropped
   lead does not come back on the capture day and a day-before reminder armed earlier stays.
   **Nothing rings at the moment it is told**
@@ -1756,12 +1759,12 @@ have N nudges; a pattern watcher does not hang off any unit):
   day), quiet hours applying as to any reminder, and serves no lead; a correction arms it as a
   capture does. With neither before the event, none is set and `capture.arm.refused`
   (`quiet_hours`) says why. "Mañana renuevo el pasaporte", said at
-  13:32, is reminded tomorrow at 09:00 ("Te aviso ese día a las 09:00."). **An event on the told
+  13:32, is reminded tomorrow at 09:00 ("Listo, anotado para mañana. Te aviso ese día a las 9:00."). **An event on the told
   day itself** ([ADR-0047](adr/0047-nothing-unasked-rings-at-once-on-the-told-day.md)) is held to
   the same principle: a lead still ahead is kept, one behind or pulled to now is dropped, and
   with none left there is no reminder. The unit is stored, `capture.arm.refused`
-  (`leads_behind`) says why, and the reply names what was read and promises no ring ("Anotado
-  para el mar 20 oct, 21:00."): "hoy a las 21", told at
+  (`leads_behind`) says why, and the reply names what was read and promises no ring ("Listo, anotado
+  para hoy a las 21:00."): "hoy a las 21", told at
   17:14 with a 4-hour lead, rings nothing; with the default leads it rings at 19:00 alone. A live
   reminder already due keeps its instant, and a correction expires the rest with that reason. An
   asked event's leads nobody asked for follow it too. A re-plan on a later day keeps ADR-0032's
@@ -1781,7 +1784,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   hora antes" is `[60]`; an `event` with a time of day and leads valid as a preference, else the
   capture ignores them; a `remind_request` beside them is ignored, so the unit is not asked, and
   the answer names the rings as said, "Te aviso 1 hora antes.", and a ring serving none of them
-  by when it rings, "Te aviso ese día a las 09:00."; read with a chat or none, and a task keeps its
+  by when it rings, "Te aviso ese día a las 9:00."; read with a chat or none, and a task keeps its
   reminders as before): every plan of that event — the
   capture, the correction, a later date correction, a preference change and the due scan — uses
   them in place of the user's (`ReminderPrefs.WithEventLeads`), and the told-day rule leaves
@@ -1841,7 +1844,7 @@ have N nudges; a pattern watcher does not hang off any unit):
   ADR-0039, ADR-0047); when it is not, no allowed instant is left before the
   event and the reminder is not armed — a capture records why, `capture.arm.refused` with
   reason `quiet_hours`, the unit stays stored, and an unasked event's reply names what was read
-  with no ring ("Anotado para el vie 16 oct, 00:30.", ADR-0047). Two reminders the adjustment lands on one
+  with no ring ("Listo, anotado para mañana a las 0:30.", ADR-0047). Two reminders the adjustment lands on one
   instant are armed once. `payload.lead_minutes` is the adjusted instant's distance to the
   event, so `fire_at + lead_minutes` still names it; a reminder armed at once — the at-once one,
   or a lead pulled to now — carries no lead. A 05:00 flight is reminded at 07:00 and at 22:00
@@ -1870,17 +1873,21 @@ have N nudges; a pattern watcher does not hang off any unit):
   row day-granular only by its `day_only` key, so an asked named midnight passes at midnight; a
   row nobody asked about keeps the midnight reading. A timer, and a unit nobody asked about, arm
   as before. Capture writes the payload keys `asked`, `day_only` and `night_exempt` the gate
-  reads. The reply names the instant and the reminder: "Anotado para el sáb 17 oct, 10:00. Te
-  aviso 15 minutos antes." (a lead under an hour is said in minutes), and for a day alone the
-  day and the hour it rings ("Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."), every
-  ring named, so an asked event on a day alone says the day before too ("Te aviso el día anterior
-  y ese día a las 09:00."); a
-  recurring reminder, when it rings every time, at its anchor's weekday, day or date and time ("Te
-  aviso todos los días a las 21:00.", "todos los lunes a las 08:30", "el día 31 de cada mes a las
-  18:00", "todos los años el 23 de octubre a las 09:00"; `phrase.Every`). An
+  reads. The reply is built by code (ADR-0064, §5 step 2). It names the instant and the reminder: "Listo,
+  anotado para el sábado 17 de octubre a las 10:00. Te aviso 15 minutos antes." (a lead under an
+  hour is said in minutes), and for a day alone the day and the hour it rings ("Listo, anotado
+  para el sábado 17 de octubre. Te aviso ese día a las 9:00."), every ring named, so an asked
+  event on a day alone says the day before too ("Te aviso el día anterior y ese día a las
+  9:00."); a recurring reminder, when it rings every time, at its anchor's weekday, day or date
+  and time ("Listo, te aviso todos los días a las 21:00.", "todos los lunes a las 8:30", "el día 31
+  de cada mes a las 18:00", "todos los años el 23 de octubre a las 9:00"; `phrase.Every`). The
+  day is a name when it is yesterday to the day after tomorrow ("mañana a las 10:00") and the
+  full date otherwise, counted on the calendar in the user's zone; a clock is 24-hour with no
+  leading zero, "a la 1:00" for one o'clock, and every clock a reply says (a lead's included)
+  is written by `phrase.Clock`, so one message never mixes `09:00` and `9:00`. An
   asked unit that arms nothing (`no_date`, `already_past`, `too_late`) is still stored with
   `remind_me` set, writes one `capture.arm.refused` row carrying `asked`, and its reply says why
-  ("Anotado, pero no puse aviso: la hora indicada ya pasó.").
+  ("Lo anoté, pero no te puse aviso: esa hora ya pasó.").
   A **recurring reminder** keeps one trigger **on** its next occurrence (ADR-0034); one armed a
   week ahead before it keeps that instant and re-arms on the occurrence. Triggers armed before
   ADR-0029 keep the instant they were armed for; a correction of their date re-arms them as the new set.
@@ -2089,12 +2096,13 @@ box can audit it):
     and the `check.digest.sent` row adds how many tasks it named. The digest is a turn about their
     units (ADR-0036). **The capture reply says so**: such a task due on a later local day than
     the capture's (`prospection.DueDayAhead`) is answered with its day and that morning's digest
-    (`Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.`; `Noted for Tue 20
-    Oct. I will mention it in that morning's digest.`; `phrase` `NotedForDigest`), and with its
-    hour beside the day when `due_at` was told one (`Anotado para el jue 22 oct, 10:00. …`, as an
+    (`Listo, anotado para el martes 20 de octubre. Te lo recuerdo en el resumen de esa mañana.`;
+    `Got it, noted for Tuesday 20 October. I'll mention it in that morning's digest.`; `phrase`
+    `NotedForDigest`), and with its
+    hour beside the day when `due_at` was told one (`Listo, anotado para el jueves 22 de octubre a las 10:00. …`, as an
     event's reply names its time; the shape of the wire value decides, not a midnight), never a
     reminder it does not have; one due today or earlier, whose morning may be past, or with no
-    date, is `Anotado.`
+    date, is `Listo, anotado.`
   - TONE softens when the user is loaded: the brain passes the fact (`loaded`), the render
     layer picks the words. Urgent push is NOT softened — `Interrupt.Route() == RoutePush` is the
     one exemption to the softening above.
@@ -2246,8 +2254,8 @@ and from the UI.
 in minutes or hours ("avisame en 20 minutos que saque la pizza", "remind me in an hour"). Its
 `due_at` is the local time the prompt states plus that span, and it rings AT that instant: a
 timer has no lead, so nothing rings before it, and the capture reply names that one instant,
-by its hour on the day it was set and by its day and hour on another ("Te aviso a las 10:28.",
-"Te aviso el mar 27 oct a las 00:20."; `phrase.TimerAt`).
+by its hour on the day it was set and by its day and hour on another ("Listo, te aviso a las 10:28.",
+"Listo, te aviso mañana a las 0:20."; `phrase.TimerAt`).
 The classify prompt defines the type in those terms (ADR-0033: the model reads, the code
 arms); a day or a time of day named for a reminder ("mañana a las 9") is not a span, and stays
 a `task` or an `event` with `remind_request`. The prompt listed `timer` as a type and never
@@ -2275,7 +2283,9 @@ what tells the two apart.
   nothing: "¿qué temporizadores tengo?" read as a `recall`
   searched the notes.
 - **A list** answers with the numbered timers, each by its hour on the day it was set and by
-  its day and hour otherwise. It counts those past the list, and says when none is set.
+  its day and hour otherwise ("1) 10:20 \u2014 sacar la ropa"; the hour is `phrase.Hour`, as
+  `phrase.Clock` writes it, with no leading zero). It counts those past the list, and says when
+  none is set.
 - **A cancel** binds only a shown position. That timer moves `pending → cancelled`, never a
   delete, and writes one `capture.timer.cancelled` row. Anything else asks "¿Cuál cancelo?" with
   the same list and cancels nothing; the answer is read with that question in the chat (§5

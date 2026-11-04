@@ -3,9 +3,9 @@
 # "mañana tengo dentista a las 10" is read by a hand-written reading, not a recording
 # "es a las11" is read by a hand-written reading, not a recording
 Mon 2026-10-19 09:00 ← mañana tengo dentista a las 10
-Mon 2026-10-19 09:00 → Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.
+Mon 2026-10-19 09:00 → Listo, anotado para mañana a las 10:00. Te aviso unas horas antes.
 Mon 2026-10-19 09:05 ← es a las11
-Mon 2026-10-19 09:05 → Movido al mar 20 oct, 11:00.
+Mon 2026-10-19 09:05 → Listo, lo pasé para mañana a las 11:00.
 Mon 2026-10-19 09:10 ← avisame solo 1 hora antes
 Mon 2026-10-19 09:10 → Te aviso 1 hora antes.
 Tue 2026-10-20 10:00 → Acordate: dentista, hoy a las 11:00.

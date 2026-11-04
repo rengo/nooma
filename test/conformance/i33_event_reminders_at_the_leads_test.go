@@ -283,10 +283,10 @@ func TestI33_NothingUnaskedRingsAtOnceOnTheToldDay(t *testing.T) {
 		want           []time.Time
 		reply          string
 	}{
-		{"a 4-hour lead already behind: no ring", event + `}`, str(`[240]`), nil, "Anotado para el mar 20 oct, 21:00."},
-		{"its own 4-hour lead already behind: no ring", event + `,"reminder_leads_minutes":[240]}`, nil, nil, "Anotado para el mar 20 oct, 21:00."},
+		{"a 4-hour lead already behind: no ring", event + `}`, str(`[240]`), nil, "Listo, anotado para hoy a las 21:00."},
+		{"its own 4-hour lead already behind: no ring", event + `,"reminder_leads_minutes":[240]}`, nil, nil, "Listo, anotado para hoy a las 21:00."},
 		{"the 2-hour lead still ahead stays, the 24-hour one is dropped", event + `}`, nil,
-			[]time.Time{time.Date(2026, 10, 20, 19, 0, 0, 0, zone)}, "Anotado para el mar 20 oct, 21:00. Te aviso unas horas antes."},
+			[]time.Time{time.Date(2026, 10, 20, 19, 0, 0, 0, zone)}, "Listo, anotado para hoy a las 21:00. Te aviso unas horas antes."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,7 +335,7 @@ func TestI33_AQuietHoursRefusalNamesWhatWasRead(t *testing.T) {
 	if n := len(triggers.All()); n != 0 {
 		t.Fatalf("triggers = %d, want none: only night is left", n)
 	}
-	if got, want := channels.RenderReply(result), "Anotado para el vie 16 oct, 00:30."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para mañana a las 0:30."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
