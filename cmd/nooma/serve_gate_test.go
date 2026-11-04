@@ -625,7 +625,7 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 	}
 	var order []string
 	for _, line := range strings.Split(sent[0].Text, "\n\u2022 ")[1:] {
-		line, _, _ = strings.Cut(line, " \u2014 ")
+		line, _, _ = strings.Cut(line, ", ")
 		order = append(order, strings.TrimPrefix(line, "act on "))
 	}
 	return order

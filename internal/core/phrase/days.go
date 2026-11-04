@@ -117,7 +117,9 @@ func (s Set) Inline(it Item) string {
 	if !s.LowerFirst {
 		return text
 	}
-	first, size := utf8.DecodeRuneInString(text)
+	// An opening ¿ or ¡ is not the first letter: the word after it is.
+	open := len(text) - len(strings.TrimLeft(text, "¿¡"))
+	first, size := utf8.DecodeRuneInString(text[open:])
 	if !unicode.IsLetter(first) {
 		return text
 	}
@@ -125,7 +127,7 @@ func (s Set) Inline(it Item) string {
 	if upper(word) > 1 || upper(word) == 1 && slices.Contains(letterWords(it.Names), word) {
 		return text
 	}
-	return string(unicode.ToLower(first)) + text[size:]
+	return text[:open] + string(unicode.ToLower(first)) + text[open+size:]
 }
 
 // upper counts the upper-case letters of w.
@@ -170,13 +172,15 @@ func (s Set) Recall(items []Item, now time.Time) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, s.RecallMany, len(items))
 	for _, it := range items {
-		b.WriteString("\n" + fmt.Sprintf(s.DigestLine, s.line(it, now)))
+		b.WriteString("\n" + fmt.Sprintf(s.DigestLine, s.DigestLineOf(it, now)))
 	}
 	return b.String()
 }
 
-// line is an item on a list: its words as stored, then its day and time.
-func (s Set) line(it Item, now time.Time) string {
+// DigestLineOf is an item as one bullet of the digest or of a list: its words
+// as stored, so the bullet keeps the capital, then its day and time, a due day
+// as due (ADR-0064).
+func (s Set) DigestLineOf(it Item, now time.Time) string {
 	if it.When == nil {
 		return strings.TrimSpace(it.Text)
 	}

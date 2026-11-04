@@ -38,7 +38,7 @@ func TestI41_TheDigestNamesATaskOnItsDueDay(t *testing.T) {
 	}
 
 	report := v.checkAt(time.Date(2026, 10, 15, 7, 0, 0, 0, time.UTC), false)
-	want := "Here is 1 thing for today:\n• Renew the passport — Thu 15 Oct"
+	want := "Good morning. You have one thing:\n• Renew the passport, due today"
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Fatalf("on its due day, sent %q; want exactly [%q]", v.ch.texts, want)
 	}
@@ -57,10 +57,11 @@ func TestI41_AnOverdueTaskIsNamedForDueTaskDigestDaysMornings(t *testing.T) {
 	v := newI37Vault(t)
 	v.task("passport", "Renew the passport", time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))
 
+	said := []string{"due today", "was due yesterday", "was due Thursday 15 October"}
 	for day := 15; day < 15+prospection.DueTaskDigestDays; day++ {
 		v.ch.texts = nil
 		v.checkAt(time.Date(2026, 10, day, 7, 0, 0, 0, time.UTC), false)
-		want := "Here is 1 thing for today:\n• Renew the passport — Thu 15 Oct"
+		want := "Good morning. You have one thing:\n• Renew the passport, " + said[day-15]
 		if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 			t.Errorf("Oct %d: sent %q; want exactly [%q]", day, v.ch.texts, want)
 		}

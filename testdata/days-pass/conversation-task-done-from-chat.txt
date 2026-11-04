@@ -3,7 +3,7 @@
 # "ya lo hice" is replayed at Tue 10-20 09:00; its reading was recorded at Tue 10-20 07:20
 Mon 2026-10-19 16:34 ← mañana renuevo el pasaporte
 Mon 2026-10-19 16:34 → Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.
-Tue 2026-10-20 07:00 → Hoy hay 1 cosa:
-                       • Renovar el pasaporte — mar 20 oct
+Tue 2026-10-20 07:00 → Buen día. Tenés una cosa:
+                       • Renovar el pasaporte, para hoy
 Tue 2026-10-20 09:00 ← ya lo hice
 Tue 2026-10-20 09:00 → Listo, saqué «Renovar el pasaporte».

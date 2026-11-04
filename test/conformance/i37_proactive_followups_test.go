@@ -53,9 +53,9 @@ func TestDigestOverTheMessageBoundDropsTheTail(t *testing.T) {
 		name, language, more string
 		text                 func(int) string
 	}{
-		{"english", "en", "and %d more", plain},
-		{"spanish", "es", "y %d más", plain},
-		{"astral text counts as two units a rune", "", "and %d more", astral},
+		{"english", "en", "And %d more I'll tell you about tomorrow.", plain},
+		{"spanish", "es", "Y %d más que te cuento mañana.", plain},
+		{"astral text counts as two units a rune", "", "And %d more I'll tell you about tomorrow.", astral},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			const n = 14
@@ -74,7 +74,7 @@ func TestDigestOverTheMessageBoundDropsTheTail(t *testing.T) {
 			if shown < 1 || shown >= n {
 				t.Fatalf("%d lines shown of %d, want some dropped", shown, n)
 			}
-			if want := fmt.Sprintf(c.more, n-shown); !strings.HasSuffix(msg, want+".") {
+			if want := fmt.Sprintf(c.more, n-shown); !strings.HasSuffix(msg, want) {
 				t.Errorf("the digest does not end saying %q:\n...%s", want, msg[max(0, len(msg)-80):])
 			}
 			if report.DigestCarried != shown {
@@ -152,14 +152,14 @@ func TestTodayRendersFromTheUnit(t *testing.T) {
 		t.Fatalf("Today: %v", err)
 	}
 
-	if len(today.Upcoming) != 1 || today.Upcoming[0].Text != "Dentista — mié 14 oct, 20:00" {
+	if len(today.Upcoming) != 1 || today.Upcoming[0].Text != "Dentista, hoy a las 20:00" {
 		t.Errorf("Upcoming = %+v, want the unit's text and instant in Spanish", today.Upcoming)
 	}
 	got := map[string]string{}
 	for _, l := range today.Digest.Items {
 		got[l.TriggerID] = l.Text
 	}
-	if got["b"] != "Cumpleaños de Leo — mié 21 oct" || got["lost"] != "Frozen words" {
+	if got["b"] != "Cumpleaños de Leo, el miércoles 21 de octubre" || got["lost"] != "Frozen words" {
 		t.Errorf("Digest items = %v, want the unit's current text and day, and the frozen text of an unreadable unit", got)
 	}
 }
@@ -173,7 +173,7 @@ func TestTodayFallsBackToEnglish(t *testing.T) {
 	v.say("bd", "Leo's birthday")
 
 	today, err := newI37Today(v).Today(context.Background())
-	if err != nil || len(today.Digest.Items) != 1 || today.Digest.Items[0].Text != "Leo's birthday — Wed 21 Oct" {
+	if err != nil || len(today.Digest.Items) != 1 || today.Digest.Items[0].Text != "Leo's birthday, on Wednesday 21 October" {
 		t.Errorf("Today = %+v, %v; want the English line", today.Digest.Items, err)
 	}
 }

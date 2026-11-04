@@ -151,19 +151,6 @@ func pushItem(u unit.Unit, t ports.DueTrigger, now time.Time) phrase.Item {
 	return it
 }
 
-// unitWords is what the digest says of u: its text now and when its event is, in
-// the clock's zone, with no hour for a whole day, in set's words for the days.
-func unitWords(u unit.Unit, t ports.DueTrigger, now time.Time, set phrase.Set) (text, when string) {
-	if at, dayOnly, known := occasionOf(u, t, now); known {
-		if dayOnly {
-			when = set.Date(at)
-		} else {
-			when = set.Time(at)
-		}
-	}
-	return clip(shownText(u)), when
-}
-
 // shownText is what a reminder calls u: its title when it has one, else its
 // content (spec R12).
 func shownText(u unit.Unit) string {

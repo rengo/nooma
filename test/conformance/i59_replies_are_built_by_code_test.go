@@ -3,6 +3,7 @@ package conformance
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -14,13 +15,14 @@ import (
 	"github.com/rengo/nooma/internal/core/prospection"
 	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/ports"
+	"github.com/rengo/nooma/test/support/fakechannel"
 	"github.com/rengo/nooma/test/support/fakeprovider"
 	"github.com/rengo/nooma/test/support/memrepo"
 )
 
 // I59 (doc 02 §5 step 2, ADR-0064): a reply that carries a fact is built by
 // code, in warm fixed sentences. No model words it and none waits for one.
-// This file pins the recall and push surfaces; each later surface of the
+// This file pins the recall, push, timer ring and digest surfaces; each later surface of the
 // warm-replies change adds its own rows here.
 
 var (
@@ -354,5 +356,155 @@ func TestI59_TimerWithBlankWordsRingsTheNudge(t *testing.T) {
 	sent := i59Pass(t, now, []unit.Unit{newest}, nil, []ports.Timer{{ID: "tmr", FireAt: now.Add(-time.Minute), ActionText: &blank, CreatedAt: now.Add(-time.Hour)}})
 	if len(sent) != 1 || sent[0] != "Me pediste que te recordara algo ahora." {
 		t.Errorf("sent %q, want the nudge", sent)
+	}
+}
+
+// i59Morning is Wednesday 4 November 08:00 in the user's zone: the digest
+// fixture of warm-replies design §6.
+var i59Morning = time.Date(2026, 11, 4, 8, 0, 0, 0, i59Zone)
+
+// i59DigestVault is one vault a morning digest runs over.
+type i59DigestVault struct {
+	t         *testing.T
+	lang      string
+	units     *memrepo.Units
+	triggers  *memrepo.Triggers
+	questions *memrepo.PendingQuestions
+}
+
+func newI59DigestVault(t *testing.T, lang string) *i59DigestVault {
+	return &i59DigestVault{t: t, lang: lang, units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), questions: memrepo.NewPendingQuestions()}
+}
+
+func (v *i59DigestVault) unit(u unit.Unit) {
+	v.t.Helper()
+	created := i59Morning.AddDate(0, 0, -7)
+	u.Status, u.Source, u.Language, u.Weight = unit.StatusPool, "telegram", v.lang, 1
+	u.CreatedAt, u.UpdatedAt, u.LastTouchedAt = created, created, created
+	if err := v.units.Create(context.Background(), u); err != nil {
+		v.t.Fatal(err)
+	}
+}
+
+// task stores a task due on day November d, a day alone.
+func (v *i59DigestVault) task(id, title string, d int) {
+	v.unit(unit.Unit{ID: id, Type: unit.TypeTask, Title: title, Content: title, DueAt: i59At(11, d, 0, 0)})
+}
+
+// recurring stores a daily-style reminder fired for today and waiting for the
+// digest, as a recurring row armed before ADR-0034 does.
+func (v *i59DigestVault) recurring(id, title string) {
+	v.t.Helper()
+	ctx := context.Background()
+	v.unit(unit.Unit{ID: id, Type: unit.TypeEvent, Title: title, Content: title, EventAt: i59At(11, 4, 0, 0)})
+	fire := time.Date(2026, 11, 4, 0, 0, 0, 0, i59Zone)
+	yearly := prospection.RuleYearly
+	if err := v.triggers.Create(ctx, ports.Trigger{ID: "trg-" + id, Kind: ports.TriggerKindTimeBased, FireAt: &fire, UnitID: &id,
+		Payload: ports.TriggerPayload{ActionText: title, LeadDays: 7}, RecurrenceRule: &yearly,
+		RecurrenceAnchor: &prospection.Anchor{Month: time.November, Day: 4}, CreatedAt: fire.Add(-time.Hour)}); err != nil {
+		v.t.Fatal(err)
+	}
+	if err := v.triggers.Fire(ctx, "trg-"+id, fire); err != nil {
+		v.t.Fatal(err)
+	}
+}
+
+// question queues an uncertain relation's question about from and to.
+func (v *i59DigestVault) question(from, to string) {
+	v.t.Helper()
+	v.questions.EnsureRelation(v.t, "rel-1", "same_topic", "a", "b", from, to)
+	if err := v.questions.Create(context.Background(), ports.PendingQuestion{ID: "q-1", RelationID: "rel-1", CreatedAt: i59Morning.Add(-time.Hour)}); err != nil {
+		v.t.Fatal(err)
+	}
+}
+
+// digest runs the morning's pass with a provider that answers no task and
+// returns the one message it sent.
+func (v *i59DigestVault) digest() string {
+	v.t.Helper()
+	ch := fakechannel.New()
+	guard := &i59Guard{t: v.t}
+	if _, err := brain.NewCheckService(fixedClock{now: i59Morning}, v.triggers, memrepo.NewTimers(), &counterIDs{}, memrepo.NewDecisionLog(), ch,
+		v.units, memrepo.NewState(), guard, "12449194", v.questions, nil, nil, nil).Check(context.Background(), brain.CheckRequest{}); err != nil {
+		v.t.Fatalf("Check: %v", err)
+	}
+	if len(guard.tasks) != 0 {
+		v.t.Errorf("the digest called the provider for %v; it words nothing (I59)", guard.tasks)
+	}
+	sent := ch.Sent(v.t)
+	if len(sent) != 1 {
+		v.t.Fatalf("channel received %d message(s), want exactly 1 digest: %+v", len(sent), sent)
+	}
+	return sent[0].Text
+}
+
+// TestI59_DigestIsBuiltByCode: the digest of design §6, byte for byte, in both
+// languages: the greeting and the count, one line per thing with its day as a
+// person says it, a task past its due day as "era para ayer", and the relation
+// question on a line of its own after "una pregunta más". The provider answers
+// nothing.
+func TestI59_DigestIsBuiltByCode(t *testing.T) {
+	for _, tc := range []struct {
+		name, lang, want string
+		fill             func(v *i59DigestVault)
+	}{
+		{"three kinds of line and a question, es", "es",
+			"Buen día. Tenés 2 cosas:\n• Renovar el pasaporte, era para ayer\n• Tomar las pastillas, hoy\n\nUna pregunta más:\nRelacioné «Cena con Ana» con «Reservar restaurante». ¿Tienen que ver?",
+			func(v *i59DigestVault) {
+				v.task("passport", "Renovar el pasaporte", 3)
+				v.recurring("pills", "Tomar las pastillas")
+				v.question("Cena con Ana", "Reservar restaurante")
+			}},
+		{"three kinds of line and a question, en", "en",
+			"Good morning. You have 2 things:\n• Renew the passport, was due yesterday\n• Take the pills, today\n\nOne more question:\nI linked “Dinner with Ana” with “Book a restaurant”. Are they related?",
+			func(v *i59DigestVault) {
+				v.task("passport", "Renew the passport", 3)
+				v.recurring("pills", "Take the pills")
+				v.question("Dinner with Ana", "Book a restaurant")
+			}},
+		{"one line, es", "es", "Buen día. Tenés una cosa:\n• Renovar el pasaporte, para hoy",
+			func(v *i59DigestVault) { v.task("passport", "Renovar el pasaporte", 4) }},
+		{"one line, en", "en", "Good morning. You have one thing:\n• Renew the passport, due today",
+			func(v *i59DigestVault) { v.task("passport", "Renew the passport", 4) }},
+		{"a question alone, es", "es", "Buen día.\n\nRelacioné «Cena con Ana» con «Reservar restaurante». ¿Tienen que ver?",
+			func(v *i59DigestVault) {
+				v.unit(unit.Unit{ID: "k", Type: unit.TypeKnowledge, Content: "algo"})
+				v.question("Cena con Ana", "Reservar restaurante")
+			}},
+		{"a question alone, en", "en", "Good morning.\n\nI linked “Dinner with Ana” with “Book a restaurant”. Are they related?",
+			func(v *i59DigestVault) {
+				v.unit(unit.Unit{ID: "k", Type: unit.TypeKnowledge, Content: "something"})
+				v.question("Dinner with Ana", "Book a restaurant")
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := newI59DigestVault(t, tc.lang)
+			tc.fill(v)
+			if got := v.digest(); got != tc.want {
+				t.Errorf("digest\n%q\nwant\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestI59_DigestOverTheBoundSaysWhatWaits: a digest that does not fit one
+// message keeps the lines that do, ends saying how many wait for tomorrow, and
+// stays under the bound.
+func TestI59_DigestOverTheBoundSaysWhatWaits(t *testing.T) {
+	for _, tc := range []struct{ lang, want string }{
+		{"es", "\nY 2 más que te cuento mañana."},
+		{"en", "\nAnd 2 more I'll tell you about tomorrow."},
+	} {
+		v := newI59DigestVault(t, tc.lang)
+		for i := range 10 {
+			v.task(fmt.Sprintf("t%d", i), fmt.Sprintf("Task %d %s", i, strings.Repeat("x", 480)), 4)
+		}
+		got := v.digest()
+		if !strings.HasSuffix(got, tc.want) {
+			t.Errorf("%s: digest ends %q, want it to end %q", tc.lang, got[max(0, len(got)-80):], tc.want)
+		}
+		if n := telegramUnits(got); n > 4096 {
+			t.Errorf("%s: digest is %d UTF-16 units, want at most 4096", tc.lang, n)
+		}
 	}
 }

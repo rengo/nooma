@@ -85,15 +85,15 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
 
 ## Link 4 — `feat/replies-digest`
 
-- [ ] 4.1 RED L1 `TestDigestLineOf`: event, day alone, due today, due past; bullets keep the
+- [x] 4.1 RED L1 `TestDigestLineOf`: event, day alone, due today, due past; bullets keep the
       item's capital.
-- [ ] 4.2 RED L2 `TestI59_DigestIsBuiltByCode`: design §6 digest (ES and EN) byte for byte; one
+- [x] 4.2 RED L2 `TestI59_DigestIsBuiltByCode`: design §6 digest (ES and EN) byte for byte; one
       line; question only; over the bound → `Y 2 más que te cuento mañana.`; the bound still
       drops re-asks first (existing test unchanged in property).
-- [ ] 4.3 GREEN: `saidNow` and `dueLines` render through `DigestLineOf`; `DigestHeader` with
+- [x] 4.3 GREEN: `saidNow` and `dueLines` render through `DigestLineOf`; `DigestHeader` with
       greeting; `AndMore`, `OneMore`, `RelationQuestion`; Today's preview follows (its pins
       updated).
-- [ ] 4.4 Doc 02 §7 digest and tasks-due examples, §4 question wording; restore the §7 sentence "A
+- [x] 4.4 Doc 02 §7 digest and tasks-due examples, §4 question wording; restore the §7 sentence "A
   digest line is the same words without the push's frame" that link 3 replaced with the
   `AtWhen` caveat; `make check-all`.
 

@@ -67,7 +67,7 @@ func TestDigestLineHasNoRecordatorioPrefix(t *testing.T) {
 
 	v.check(false)
 
-	want := "Hoy hay 1 cosa:\n• Cumpleaños de Leo — mié 21 oct"
+	want := "Buen día. Tenés una cosa:\n• Cumpleaños de Leo, el miércoles 21 de octubre"
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("digest sent %q, want exactly [%q]", v.ch.texts, want)
 	}

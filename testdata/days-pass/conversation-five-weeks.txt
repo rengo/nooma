@@ -35,10 +35,14 @@ Sat 2026-10-17 10:00 → Listo, saqué «Comprar café».
 Sat 2026-10-17 20:30 → Acordate: reunión con Juan, hoy a las 22:30.
 Sat 2026-10-17 21:00 → Acordate: tomar las pastillas, hoy.
 Sat 2026-10-17 22:15 → Acordate: reunión con Juan, hoy a las 22:30.
-Sun 2026-10-18 07:00 → Te pregunto de nuevo:
+Sun 2026-10-18 07:00 → Buen día.
+
+                       Te pregunto de nuevo:
                        • ¿Ya está «Llamar al médico»?
 Sun 2026-10-18 21:00 → Acordate: tomar las pastillas, hoy.
-Mon 2026-10-19 07:00 → Te pregunto de nuevo:
+Mon 2026-10-19 07:00 → Buen día.
+
+                       Te pregunto de nuevo:
                        • ¿Ya está «Llamar al médico»?
 Mon 2026-10-19 21:00 → Acordate: tomar las pastillas, hoy.
 Mon 2026-10-19 22:00 ·· the server stops

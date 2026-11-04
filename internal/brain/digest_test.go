@@ -358,7 +358,7 @@ func TestDigest_WithNoQueuedQuestionIsUnchanged(t *testing.T) {
 	if ch.count() != 1 {
 		t.Fatalf("sent %d digest(s), want 1", ch.count())
 	}
-	if got, want := ch.sent[0], "Here is 1 thing for today:\n• renew the passport"; got != want {
+	if got, want := ch.sent[0], "Good morning. You have one thing:\n• renew the passport"; got != want {
 		t.Errorf("digest text = %q, want the trigger-only shape %q — an empty queue must change nothing", got, want)
 	}
 	if n := countAction(t, log, digestNow, ports.ActionCheckDigestQuestionAsked); n != 0 {
@@ -546,8 +546,8 @@ func TestRenderDigest_NamesBothEndpointsAfterTheItems(t *testing.T) {
 
 	got, _ := renderDigest(sentences(), []prospection.DigestItem{{ID: "trg-1"}}, pending, &q)
 
-	want := "Here is 1 thing for today:\n• renew the passport\n\n" +
-		"One more — I linked \"plan the offsite\" with \"the travel budget\". Are they related?"
+	want := "Good morning. You have one thing:\n• renew the passport\n\n" +
+		"One more question:\nI linked “plan the offsite” with “the travel budget”. Are they related?"
 	if got != want {
 		t.Errorf("renderDigest() =\n%q\nwant\n%q", got, want)
 	}
@@ -567,7 +567,7 @@ func TestRenderDigest_WithoutItemsDropsTheHeaderRatherThanLie(t *testing.T) {
 	if strings.Contains(got, "for today") {
 		t.Errorf("renderDigest() with no carried items still writes the item header:\n%q", got)
 	}
-	if want := "I linked \"plan the offsite\" with \"the travel budget\". Are they related?"; got != want {
+	if want := "Good morning.\n\nI linked “plan the offsite” with “the travel budget”. Are they related?"; got != want {
 		t.Errorf("renderDigest() = %q, want %q", got, want)
 	}
 }
@@ -896,13 +896,13 @@ func TestRenderDigest_SpeaksTheSetItIsGiven(t *testing.T) {
 
 	got, _ := renderDigest(es, carry, pending, &q)
 
-	want := "Hoy hay 2 cosas:\n• renovar el pasaporte\n• Me pediste que te recordara algo.\n\n" +
-		"Una más — Relacioné \"planear la salida\" con \"el presupuesto\". ¿Tienen relación?"
+	want := "Buen día. Tenés 2 cosas:\n• renovar el pasaporte\n• Me pediste que te recordara algo.\n\n" +
+		"Una pregunta más:\nRelacioné «planear la salida» con «el presupuesto». ¿Tienen que ver?"
 	if got != want {
 		t.Errorf("renderDigest() =\n%q\nwant\n%q", got, want)
 	}
-	if got, _ := renderDigest(sentences(), carry[1:], pending, nil); got != "Here is 1 thing for today:\n\u2022 You asked me to remind you about something." {
-		want := "Here is 1 thing for today:\n\u2022 You asked me to remind you about something."
+	if got, _ := renderDigest(sentences(), carry[1:], pending, nil); got != "Good morning. You have one thing:\n\u2022 You asked me to remind you about something." {
+		want := "Good morning. You have one thing:\n\u2022 You asked me to remind you about something."
 		t.Errorf("English renderDigest() = %q, want %q", got, want)
 	}
 }
@@ -925,7 +925,7 @@ func TestRenderDigest_AReaskSaysTheUnitWithoutItsInstant(t *testing.T) {
 	r := digestRunner(t, &emptyTriggers{}, units, memrepo.NewState(), &recordingLog{}, nil)
 
 	text, sent, asked, _ := r.digestText(ctx, digestNow, nil, nil, nil, []ports.DueTrigger{reask}, nil, nil)
-	if want := "Asking again:\n\u2022 Is \"buy coffee\" done?"; text != want {
+	if want := "Good morning.\n\nAsking again:\n\u2022 Is \"buy coffee\" done?"; text != want {
 		t.Errorf("digest %q, want %q", text, want)
 	}
 	if len(sent) != 0 || len(asked) != 1 || asked[0] != "t-coffee" {
@@ -947,7 +947,7 @@ func TestRenderDigest_ReasksFollowTheDaysItems(t *testing.T) {
 
 	es := phrase.For(classify.LanguageES)
 	got, sent, asked := digestMessage(es, carry, pending, reasks, nil)
-	want := "Hoy hay 1 cosa:\n\u2022 Cumpleaños de Ana \u2014 vie 25 dic\n\n" +
+	want := "Buen día. Tenés una cosa:\n\u2022 Cumpleaños de Ana \u2014 vie 25 dic\n\n" +
 		"Te pregunto de nuevo:\n\u2022 ¿Ya está «Comprar café»?\n\u2022 ¿Ya está «Llamar al banco»?"
 	if got != want {
 		t.Errorf("Spanish digest =\n%q\nwant\n%q", got, want)
@@ -957,7 +957,7 @@ func TestRenderDigest_ReasksFollowTheDaysItems(t *testing.T) {
 	}
 
 	got, _, _ = digestMessage(sentences(), nil, nil, reasks[:1], &q)
-	want = "Asking again:\n\u2022 Is \"Comprar café\" done?\n\nOne more \u2014 I linked \"plan\" with \"budget\". Are they related?"
+	want = "Good morning.\n\nAsking again:\n\u2022 Is \"Comprar café\" done?\n\nOne more question:\nI linked “plan” with “budget”. Are they related?"
 	if got != want {
 		t.Errorf("English digest =\n%q\nwant\n%q", got, want)
 	}

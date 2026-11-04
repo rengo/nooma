@@ -47,7 +47,7 @@ func TestI37_SpanishUnitPushAndDigestInSpanish(t *testing.T) {
 	digest.speaks("bd", "es", i37Now.Add(-time.Hour), i37At(1, 12))
 	digest.fired("b", "bd", "Cumpleaños de Leo", i37Day(13, 16, 0), yearlyOn21)
 	digest.check(false)
-	if want := "Hoy hay 1 cosa:\n• Cumpleaños de Leo — mié 21 oct"; len(digest.ch.texts) != 1 || digest.ch.texts[0] != want {
+	if want := "Buen día. Tenés una cosa:\n• Cumpleaños de Leo, el miércoles 21 de octubre"; len(digest.ch.texts) != 1 || digest.ch.texts[0] != want {
 		t.Errorf("digest sent %q, want exactly [%q]", digest.ch.texts, want)
 	}
 }
@@ -64,9 +64,9 @@ func TestPushFallsBackToLatestThenEnglish(t *testing.T) {
 		want     string
 		digestOf string
 	}{
-		{"its own language wins over the newest", "en", "es", "Don't forget: Dentist, tomorrow at 11:00.", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
-		{"no language of its own: the newest unit's", "", "es", "Acordate: dentist, mañana a las 11:00.", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
-		{"nobody knows: English", "", "", "Don't forget: Dentist, tomorrow at 11:00.", "Here is 1 thing for today:\n• Dentist — Wed 21 Oct"},
+		{"its own language wins over the newest", "en", "es", "Don't forget: Dentist, tomorrow at 11:00.", "Buen día. Tenés una cosa:\n• Dentist, el miércoles 21 de octubre"},
+		{"no language of its own: the newest unit's", "", "es", "Acordate: dentist, mañana a las 11:00.", "Buen día. Tenés una cosa:\n• Dentist, el miércoles 21 de octubre"},
+		{"nobody knows: English", "", "", "Don't forget: Dentist, tomorrow at 11:00.", "Good morning. You have one thing:\n• Dentist, on Wednesday 21 October"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestTheDigestSpeaksTheLanguageUsuallyWritten(t *testing.T) {
 	digest.speaks("dentist", "", i37Now.Add(-48*time.Hour), i37At(1, 12))
 	digest.fired("b", "dentist", "Dentist", i37Day(13, 16, 0), yearlyOn21)
 	digest.check(false)
-	if want := "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"; len(digest.ch.texts) != 1 || digest.ch.texts[0] != want {
+	if want := "Buen día. Tenés una cosa:\n• Dentist, el miércoles 21 de octubre"; len(digest.ch.texts) != 1 || digest.ch.texts[0] != want {
 		t.Errorf("digest sent %q, want exactly [%q]", digest.ch.texts, want)
 	}
 }

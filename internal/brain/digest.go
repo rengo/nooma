@@ -361,8 +361,9 @@ func (r checkRunner) tasksDue(ctx context.Context, now time.Time) ([]unit.Unit, 
 }
 
 // dueLine is a task due as the digest says it: its unit, and its title (else
-// its content) with its due date, the day alone in now's zone. A due date is a
-// day: a time is not said, since nothing records whether one was named.
+// its content) with its due day, said as due: the day alone in now's zone. A
+// due date is a day: a time is not said, since nothing records whether one was
+// named.
 type dueLine struct {
 	unitID, text string
 }
@@ -370,7 +371,8 @@ type dueLine struct {
 func dueLines(tasks []unit.Unit, now time.Time, set phrase.Set) []dueLine {
 	lines := make([]dueLine, 0, len(tasks))
 	for _, u := range tasks {
-		lines = append(lines, dueLine{unitID: u.ID, text: set.Line(clip(shownText(u)), set.Date(u.DueAt.In(now.Location())))})
+		due := phrase.Moment{At: u.DueAt.In(now.Location()), DayOnly: true, Due: true}
+		lines = append(lines, dueLine{unitID: u.ID, text: set.DigestLineOf(phrase.Item{Text: clip(shownText(u)), When: &due}, now)})
 	}
 	return lines
 }
@@ -502,8 +504,9 @@ func heldCounts(history []ports.Decision) map[string]int {
 	return counts
 }
 
-// saidNow is pending as the digest says it: each text is its unit's now, with
-// when, or the one it was armed with when the unit cannot be read (ADR-0032).
+// saidNow is pending as the digest says it: each text is its unit's now, as a
+// bullet with its day, or the one it was armed with when the unit cannot be
+// read (ADR-0032, ADR-0064).
 func (r checkRunner) saidNow(ctx context.Context, pending []ports.DueTrigger, now time.Time, set phrase.Set) []ports.DueTrigger {
 	return saidNow(ctx, r.units, pending, now, set)
 }
@@ -513,11 +516,7 @@ func saidNow(ctx context.Context, units ports.UnitRepo, pending []ports.DueTrigg
 	out := slices.Clone(pending)
 	for i, t := range out {
 		if u, ok := readUnit(ctx, units, t); ok {
-			text, when := unitWords(u, t, now, set)
-			if when != "" {
-				text = set.Line(text, when)
-			}
-			out[i].Payload.ActionText = text
+			out[i].Payload.ActionText = set.DigestLineOf(pushItem(u, t, now), now)
 		} else {
 			out[i].Payload.ActionText = clip(t.Payload.ActionText)
 		}
@@ -650,7 +649,11 @@ func digestMessageGoal(set phrase.Set, tasks []dueLine, carry []prospection.Dige
 // lines left out when there are any.
 func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, question *ports.RelationQuestion, goal string) string {
 	var b strings.Builder
-	if keep > 0 {
+	// Every digest greets. Lines come with a count; a digest with none is the
+	// greeting alone before what it asks.
+	if keep == 0 {
+		b.WriteString(set.Morning)
+	} else {
 		b.WriteString(set.DigestHeader(keep))
 		for _, l := range lines[:keep] {
 			b.WriteString("\n" + set.DigestItem(l.text))
@@ -660,30 +663,26 @@ func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, 
 		}
 	}
 	if len(asks) > 0 {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
+		b.WriteString("\n\n")
 		b.WriteString(set.AskAgain + "\n" + strings.Join(asks, "\n"))
 	}
 	// The goal check-in, its own paragraph after everything ranked, and the
 	// whole message when it is all the morning has to say.
 	if goal != "" {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(goal)
+		b.WriteString("\n\n" + goal)
 	}
 
 	if question != nil {
-		// "One more" only when there IS something before it. A digest sent
-		// for a question alone cannot open with a header counting items it
-		// does not have — "Here are 0 things for today" is a sentence that
-		// is simply false, and the item header counts Carry's output.
+		// "One more question" only when there IS something before the
+		// greeting's own line. A digest sent for a question alone cannot open
+		// with a header counting items it does not have, and cannot call its
+		// only question "one more".
 		//
 		// The question itself is written once, in questionLine, so the two
 		// shapes cannot drift into two different questions.
-		if b.Len() > 0 {
-			b.WriteString("\n\n" + set.OneMore)
+		b.WriteString("\n\n")
+		if keep > 0 || len(asks) > 0 || goal != "" {
+			b.WriteString(set.OneMore)
 		}
 		b.WriteString(questionLine(set, *question))
 	}

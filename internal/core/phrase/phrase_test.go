@@ -362,27 +362,27 @@ func TestProactiveSentences(t *testing.T) {
 	}
 	es := For(classify.LanguageES)
 	for got, want := range map[string]string{
-		es.DigestHeader(1):               "Hoy hay 1 cosa:",
-		es.DigestHeader(3):               "Hoy hay 3 cosas:",
-		es.Question("plan", "budget"):    `Relacioné "plan" con "budget". ¿Tienen relación?`,
+		es.DigestHeader(1):               "Buen día. Tenés una cosa:",
+		es.DigestHeader(3):               "Buen día. Tenés 3 cosas:",
+		es.Question("plan", "budget"):    `Relacioné «plan» con «budget». ¿Tienen que ver?`,
 		es.Delayed("Acordate: x."):       "Acordate: x. Perdón, te llega más tarde de lo previsto.",
 		es.SomethingYouAsked:             "Me pediste que te recordara algo.",
-		es.OneMore:                       "Una más — ",
+		es.OneMore:                       "Una pregunta más:\n",
 		es.DigestItem("x"):               "• x",
-		For(classify.LanguageEN).OneMore: "One more — ",
+		For(classify.LanguageEN).OneMore: "One more question:\n",
 	} {
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	}
 	en := For(classify.LanguageEN)
-	if got, want := en.Question("plan", "budget"), `I linked "plan" with "budget". Are they related?`; got != want {
+	if got, want := en.Question("plan", "budget"), `I linked “plan” with “budget”. Are they related?`; got != want {
 		t.Errorf("en.Question = %q, want %q", got, want)
 	}
 	if got, want := en.Delayed("x"), "x Sorry, this is later than intended."; got != want {
 		t.Errorf("en.Delayed = %q, want %q", got, want)
 	}
-	if en.DigestHeader(1) != "Here is 1 thing for today:" || en.DigestHeader(2) != "Here are 2 things for today:" {
+	if en.DigestHeader(1) != "Good morning. You have one thing:" || en.DigestHeader(2) != "Good morning. You have 2 things:" {
 		t.Errorf("en headers = %q, %q", en.DigestHeader(1), en.DigestHeader(2))
 	}
 }

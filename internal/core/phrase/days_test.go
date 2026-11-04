@@ -120,7 +120,10 @@ func TestInline(t *testing.T) {
 			Item{Text: "Ana cumple", Names: "cumple cumple años"}, "ana cumple", "Ana cumple"},
 		{"trailing period", Item{Text: "La clave del wifi es 1234."}, "la clave del wifi es 1234", "La clave del wifi es 1234"},
 		{"already lower", Item{Text: "tomar las pastillas"}, "tomar las pastillas", "tomar las pastillas"},
-		{"leading punctuation", Item{Text: "¡Llamar a mamá!"}, "¡Llamar a mamá!", "¡Llamar a mamá!"},
+		{"opening exclamation", Item{Text: "¡Llamar a mamá!"}, "¡llamar a mamá!", "¡Llamar a mamá!"},
+		{"opening question", Item{Text: "¿Llamaste a mamá?"}, "¿llamaste a mamá?", "¿Llamaste a mamá?"},
+		{"opening mark before an acronym", Item{Text: "¿DNI vencido?"}, "¿DNI vencido?", "¿DNI vencido?"},
+		{"a digit first stays", Item{Text: "3 pastillas"}, "3 pastillas", "3 pastillas"},
 	} {
 		if got := es.Inline(tc.it); got != tc.es {
 			t.Errorf("%s: ES Inline = %q, want %q", tc.name, got, tc.es)
