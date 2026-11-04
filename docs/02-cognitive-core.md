@@ -865,8 +865,9 @@ command, it is answered once.
      no article stands right before an item's own words. Tense follows the instant. The same
      facts give the same bytes. The timers' numbered list, the `out_of_scope` refusal, the bot
      commands, the voice-note answers and the texts a model already writes that carry no stored
-     fact (the chitchat answer, a follow-up's clarifying question) stay as they are. The
-     surfaces move to this rule one at a time; until one does, the fixed text this document
+     fact (the chitchat answer, a follow-up's clarifying question) stay as they are. One
+     exception stands until the timer ring moves: a ringing timer is still reworded by the model
+     (§8). The surfaces move to this rule one at a time; until one does, the fixed text this document
      gives for it is what is sent.
    - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
      window and no terms is a list, not a search: the live units whose instant (`told`:
