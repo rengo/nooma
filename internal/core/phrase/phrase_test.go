@@ -53,7 +53,8 @@ func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
 		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
-		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "FoundOne": 1, "FoundMany": 1,
+		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "RecallOne": 2, "RecallOnePast": 2, "RecallOneUndated": 1, "RecallMany": 1, "ItemWhen": 2,
+		"OnDate": 3, "YearSuffix": 1, "At": 1, "AtOne": 1, "OnDay": 1, "DueFuture": 1, "DuePast": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1, "VoiceHeard": 1, "VoiceTooLong": 1,
 	}
 
@@ -110,30 +111,6 @@ func TestSet_Time_KeepsTheInstantsOwnZone(t *testing.T) {
 
 	if got := For(classify.LanguageES).Time(at); !strings.Contains(got, "09:00") {
 		t.Errorf("Time() = %q, want it to carry 09:00 — the instant's own zone, not the process's", got)
-	}
-}
-
-// TestSet_Found_AgreesWithItsNumber is why FoundOne and FoundMany are two
-// fields rather than one plural rule. Plural agreement is not a shared
-// mechanism across languages, and pretending it is produces "1 things" in
-// whichever language was not the author's.
-func TestSet_Found_AgreesWithItsNumber(t *testing.T) {
-	tests := []struct {
-		lang classify.Language
-		n    int
-		want string
-	}{
-		{classify.LanguageEN, 1, "Found 1 thing:"},
-		{classify.LanguageEN, 3, "Found 3 things:"},
-		{classify.LanguageEN, 0, "Found 0 things:"},
-		{classify.LanguageES, 1, "Encontré 1 cosa:"},
-		{classify.LanguageES, 3, "Encontré 3 cosas:"},
-	}
-
-	for _, tt := range tests {
-		if got := For(tt.lang).Found(tt.n); got != tt.want {
-			t.Errorf("%s Found(%d) = %q, want %q", tt.lang, tt.n, got, tt.want)
-		}
 	}
 }
 
@@ -333,26 +310,6 @@ func TestSet_NamedLeads(t *testing.T) {
 		if got := es.NamedLeads(tc.about, tc.named, tc.fires...); got != tc.want {
 			t.Errorf("NamedLeads(%v, %v) = %q, want %q", tc.named, tc.fires, got, tc.want)
 		}
-	}
-}
-
-// TestSet_List_PutsEveryResultUnderItsHeader covers the assembled message,
-// which is what a person actually receives — the header alone is not the
-// answer.
-func TestSet_List_PutsEveryResultUnderItsHeader(t *testing.T) {
-	got := For(classify.LanguageES).List([]string{"turno con el dentista", "pagar el alquiler"})
-
-	if !strings.HasPrefix(got, "Encontré 2 cosas:") {
-		t.Errorf("List() does not open with its header: %q", got)
-	}
-	for _, want := range []string{"\n• turno con el dentista", "\n• pagar el alquiler"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("List() is missing %q: %q", want, got)
-		}
-	}
-
-	if got := For(classify.LanguageEN).List(nil); got != "Found 0 things:" {
-		t.Errorf("List(nil) = %q — an empty list still renders its header; the caller is what decides not to send it", got)
 	}
 }
 

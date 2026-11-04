@@ -179,12 +179,31 @@ type Set struct {
 	LeadHour       string
 	LeadHoursExact string
 
-	// FoundOne takes one %d and FoundMany takes one %d. Two fields rather
-	// than one plural rule because plural agreement is not a shared
-	// mechanism across languages, and pretending it is produces "1 things"
-	// in whichever language was not the author's.
-	FoundOne  string
-	FoundMany string
+	// Recall frames (ADR-0064): the answer to "what do I have noted?".
+	// RecallOne and RecallOnePast take the item's words and its day, and
+	// RecallOneUndated its words alone; RecallMany takes the count. The
+	// frame never puts an article before the item's words (Inline).
+	RecallOne        string
+	RecallOnePast    string
+	RecallOneUndated string
+	RecallMany       string
+	// ItemWhen joins an item's words and its day on a list line.
+	ItemWhen string
+
+	// Day and time words (ADR-0064 point 2). Yesterday to DayAfter name the
+	// days around now; OnDate, with the full weekday and month names, any
+	// other; YearSuffix follows a date in another year. At and AtOne frame a
+	// clock (AtOne is the one o'clock Spanish says differently), OnDay an
+	// adverbial date, DueFuture and DuePast a due day. LowerFirst says
+	// whether Inline lowers an item's first letter.
+	Yesterday, TodayWord, Tomorrow, DayAfter string
+	OnDate, YearSuffix                       string
+	At, AtOne, OnDay                         string
+	DueFuture, DuePast                       string
+	LowerFirst                               bool
+	// DayNames are the singular weekday names, "el jueves"; WeekdayNames
+	// stay plural for "todos los lunes".
+	DayNames [7]string
 
 	// Weekdays is indexed by time.Weekday — Sunday is 0, as the stdlib
 	// has it. Months is indexed by time.Month minus one.
@@ -220,7 +239,7 @@ var sets = map[classify.Language]Set{
 		OutOfScope:   "That is not something I can do.",
 		NoAnswer:     "I could not answer that just now.",
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
-		NothingFound: "I could not find anything about that.",
+		NothingFound: "I don't have anything noted about that.",
 
 		RemindYou:      "I will remind you %s.",
 		NoReminderLeft: "No reminder is left before it.",
@@ -291,8 +310,17 @@ var sets = map[classify.Language]Set{
 		LeadHour:       "1 hour before",
 		LeadHoursExact: "%d hours before",
 
-		FoundOne:  "Found %d thing:",
-		FoundMany: "Found %d things:",
+		RecallOne:        "You have \u201c%s\u201d %s.",
+		RecallOnePast:    "You had \u201c%s\u201d %s.",
+		RecallOneUndated: "You have this noted: %s.",
+		RecallMany:       "You have %d things noted:",
+		ItemWhen:         "%s, %s",
+
+		Yesterday: "yesterday", TodayWord: "today", Tomorrow: "tomorrow", DayAfter: "the day after tomorrow",
+		OnDate: "%s %d %s", YearSuffix: " %d",
+		At: "at %s", AtOne: "at %s", OnDay: "on %s",
+		DueFuture: "due %s", DuePast: "was due %s",
+		DayNames: [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"},
 
 		Weekdays:     [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"},
 		Months:       [12]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
@@ -315,7 +343,7 @@ var sets = map[classify.Language]Set{
 		OutOfScope:   "Eso no es algo que pueda hacer.",
 		NoAnswer:     "No pude responder eso en este momento.",
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",
-		NothingFound: "No encontré nada sobre eso.",
+		NothingFound: "No tengo nada anotado sobre eso.",
 
 		RemindYou:      "Te aviso %s.",
 		NoReminderLeft: "Ya no queda ningún aviso antes de esa hora.",
@@ -386,8 +414,18 @@ var sets = map[classify.Language]Set{
 		LeadHour:       "1 hora antes",
 		LeadHoursExact: "%d horas antes",
 
-		FoundOne:  "Encontré %d cosa:",
-		FoundMany: "Encontré %d cosas:",
+		RecallOne:        "Tenés anotado %s %s.",
+		RecallOnePast:    "Tenías anotado %s %s.",
+		RecallOneUndated: "Tenés anotado: %s.",
+		RecallMany:       "Tenés %d cosas anotadas:",
+		ItemWhen:         "%s, %s",
+
+		Yesterday: "ayer", TodayWord: "hoy", Tomorrow: "mañana", DayAfter: "pasado mañana",
+		OnDate: "el %s %d de %s", YearSuffix: " de %d",
+		At: "a las %s", AtOne: "a la %s", OnDay: "%s",
+		DueFuture: "para %s", DuePast: "era para %s",
+		LowerFirst: true,
+		DayNames:   [7]string{"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"},
 
 		Weekdays: [7]string{"dom", "lun", "mar", "mié", "jue", "vie", "sáb"},
 		Months:   [12]string{"ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"},
@@ -532,14 +570,6 @@ func (s Set) More(n int) string { return fmt.Sprintf(s.AndMore, n) }
 
 // Delayed notes that text is being said later than intended.
 func (s Set) Delayed(text string) string { return text + " " + s.Late }
-
-// Found renders the header over a recall's results, in agreement with n.
-func (s Set) Found(n int) string {
-	if n == 1 {
-		return fmt.Sprintf(s.FoundOne, n)
-	}
-	return fmt.Sprintf(s.FoundMany, n)
-}
 
 // Lead names when a nudge firing at fire arrives, relative to about.
 //
@@ -690,14 +720,4 @@ func (s Set) join(leads []string) string {
 		return strings.Join(said, "")
 	}
 	return strings.Join(said[:len(said)-1], ", ") + " " + s.And + " " + said[len(said)-1]
-}
-
-// List renders a recall's header and its bullets as one message.
-func (s Set) List(contents []string) string {
-	var b strings.Builder
-	b.WriteString(s.Found(len(contents)))
-	for _, c := range contents {
-		b.WriteString("\n• " + c)
-	}
-	return b.String()
 }

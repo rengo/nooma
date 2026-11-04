@@ -82,8 +82,9 @@ is on the 15th.
    [relations](02-cognitive-core.md#4-relations) with a confidence.
 6. **Answers a question instead of filing it.** When you ask "what did I say about Laura?", the
    message is classified as a `recall`: nothing is stored, and the units that clear the
-   admission floor come back, ranked. In a chat each one is named by its title and when it is
-   ("Turno con el oculista — mar 20 oct, 10:00"). In a chat the question's own scope narrows
+   admission floor come back, ranked. In a chat the answer is a sentence the code builds, naming
+   each unit by its title and when it is ("Tenés anotado turno con el oculista el jueves 26 de
+   noviembre a las 8:30."; several come as a count and a bullet each, ADR-0064). In a chat the question's own scope narrows
    the answer (ADR-0048): "¿qué te conté anteayer?" lists what was told that day, "¿qué tengo
    esta semana?" what is ahead from now to Sunday, and "lo del oculista" only what names it, or
    a synonym the model wrote ("odontólogo" finds the dentist). Over HTTP this is `POST /recall`;

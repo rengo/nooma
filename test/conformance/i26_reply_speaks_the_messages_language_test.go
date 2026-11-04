@@ -132,7 +132,7 @@ func TestI26_TheGlassBoxStaysEnglish(t *testing.T) {
 		// trail's prose. Content quoted from the message is a different
 		// thing and is not what this checks: these are the rendered
 		// sentences from internal/core/phrase.
-		for _, spanish := range []string{"Anotado", "Encontré", "No lo programé"} {
+		for _, spanish := range []string{"Anotado", "Encontré", "Tenés anotado", "No tengo nada anotado", "No lo programé"} {
 			if strings.Contains(row.Rationale, spanish) {
 				t.Errorf("action %q renders a person-facing Spanish sentence into the trail: %q", row.Action, row.Rationale)
 			}

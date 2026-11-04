@@ -8,7 +8,7 @@ import "testing"
 // was asked. A maintainer asked their own brain over Telegram:
 //
 //	Pablo:  y cuando tengo gym?
-//	Nooma:  Found 1 thing: • Tengo cita con el dentista el 2026-08-28.
+//	Nooma:  Tenés anotado: tengo cita con el dentista el 2026-08-28.
 //
 // Vectors are unit-normalised at the storage boundary, so dot IS a cosine
 // in [-1, 1] and a floor means something. Admit is where "nearest" becomes
