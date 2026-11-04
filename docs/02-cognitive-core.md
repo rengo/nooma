@@ -850,11 +850,23 @@ command, it is answered once.
      wants a floor, because there is no judge after it: whatever comes back is presented to a
      person as a fact. So the answering entrance keeps only what clears
      `recall_min_similarity`, and candidate search keeps everything both legs found.
-   - **An answer names each unit the way the digest does**: its title, else its content, and
-     when it is — its `event_at`, else its `due_at` — in the user's zone and the reply's own
-     style, with no hour for a day alone ("Turno con el oculista — mar 20 oct, 10:00"). Not
-     the content alone: the content carries a resolved date as `YYYY-MM-DD`, the form a
-     correction needs to find it (step 1), not the form a person reads.
+   - **A recall answer is a sentence built by code** (ADR-0064, `phrase.Recall`, I59). It names
+     each unit by its title, else its content, and when it is — its `event_at`, else its
+     `due_at` — in the user's zone, with no hour for a day alone. Not the content alone: the
+     content carries a resolved date as `YYYY-MM-DD`, the form a correction needs to find it
+     (step 1), not the form a person reads. One unit with an instant is one sentence, in the
+     past tense when that instant is behind now (a day alone, when its day is): "Tenés anotado
+     turno con el oculista el jueves 26 de noviembre a las 8:30." / "You had “Dinner with Ana”
+     yesterday at 21:00." A `due_at` is said as a due day: "Tenés anotado renovar el pasaporte
+     para mañana." One with no instant quotes what is noted: "Tenés anotado: la clave del wifi
+     es 1234." Several are a line with the count, then a bullet each with its day ("Tenés 3 cosas
+     anotadas:" / "• Cena con Ana, el viernes 13 de noviembre a las 21:00"; a past due day reads
+     "era para ayer" / "was due yesterday"). Nothing admitted is "No tengo nada anotado sobre
+     eso." / "I don't have anything noted about that.", and never names a topic, an item or a
+     count. Spanish lowers an item's first letter inside a sentence unless its first word is an
+     acronym or is written capitalised past the first word of the unit's title or of its content
+     (each looked at on its own; a name the code cannot see, "Ana cumple", is lowered). English
+     keeps the words as stored and quotes them in a one-item sentence.
    - **A reply that carries a fact is built by code**
      ([ADR-0064](adr/0064-replies-are-built-by-code.md), superseding ADR-0061). No model words
      a recall answer, a push, the digest, a confirmation or a correction: the code that found
@@ -867,8 +879,9 @@ command, it is answered once.
      commands, the voice-note answers and the texts a model already writes that carry no stored
      fact (the chitchat answer, a follow-up's clarifying question) stay as they are. One
      exception stands until the timer ring moves: a ringing timer is still reworded by the model
-     (§8). The surfaces move to this rule one at a time; until one does, the fixed text this document
-     gives for it is what is sent.
+     (§8). The surfaces move to this rule one at a time (the recall answer has; pushes, the digest
+     and confirmations follow); until one does, the fixed text this document gives for it is
+     what is sent.
    - **The chat's answer is narrowed by its reading's scope** (step 1, ADR-0048, I45). A
      window and no terms is a list, not a search: the live units whose instant (`told`:
      `created_at`; `when`: `event_at`, else `due_at`) falls in it, in order of that instant, up

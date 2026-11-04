@@ -268,13 +268,12 @@ func TestRenderReply_AClosedTaskIsNamed(t *testing.T) {
 }
 
 // TestRenderReply_ARecallNamesEachItemByTitleAndDay: a recall's answer lists
-// each unit as the digest does — its title, or its content when it has none,
-// and when it is, in the capture's zone and the reply's style — never the
-// stored content with the ISO date the classification wrote into it.
+// each unit by its title, or its content when it has none, and when it is, in
+// the capture's zone and the reply's style (ADR-0064) — never the stored
+// content with the ISO date the classification wrote into it.
 //
 //	Pablo:  ¿cuándo era lo del oculista?
-//	Nooma:  Encontré 1 cosa:
-//	        • Tengo turno con el oculista el 2026-10-20 a las 10:00.
+//	Nooma:  Tenías anotado turno con el oculista ayer a las 10:00.
 //
 // Mutation: render u.Content again and the first line fails; drop the zone
 // conversion and the oculista reads 13:00; drop the midnight rule and the
@@ -293,9 +292,9 @@ func TestRenderReply_ARecallNamesEachItemByTitleAndDay(t *testing.T) {
 			{Content: "Me gusta el café sin azúcar."},
 		},
 	}
-	want := "Encontré 3 cosas:\n" +
-		"• Turno con el oculista — mar 20 oct, 10:00\n" +
-		"• Renovar el pasaporte — vie 23 oct\n" +
+	want := "Tenés 3 cosas anotadas:\n" +
+		"• Turno con el oculista, ayer a las 10:00\n" +
+		"• Renovar el pasaporte, para pasado mañana\n" +
 		"• Me gusta el café sin azúcar."
 	if got := RenderReply(result); got != want {
 		t.Errorf("recall answered\n%q\nwant\n%q", got, want)

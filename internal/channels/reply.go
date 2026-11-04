@@ -116,15 +116,13 @@ func RenderReply(result brain.CaptureResult) string {
 		return say.OutOfScope
 
 	case brain.OutcomeRecalled:
-		// "No results" is an answer; an empty message is not.
-		if len(result.Recalled) == 0 {
-			return say.NothingFound
-		}
-		lines := make([]string, len(result.Recalled))
+		// An empty recall is an answer, not an empty message; phrase says
+		// both, built from what was found (ADR-0064).
+		items := make([]phrase.Item, len(result.Recalled))
 		for i, u := range result.Recalled {
-			lines[i] = recalledLine(say, u, result.At.Location())
+			items[i] = recallItem(u, result.At.Location())
 		}
-		return say.List(lines)
+		return say.Recall(items, result.At)
 
 	case brain.OutcomeCorrected:
 		c := result.Correction
@@ -234,30 +232,36 @@ func atMidnight(t time.Time) bool {
 	return t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0
 }
 
-// recalledLine is how a recall's answer names u, the way the digest names a
-// unit: its title, else its content, and when it is — its event, else its
-// due day — in zone, the capture's own, with no hour for a day alone.
+// recallItem is how a recall's answer names u: its title, else its content,
+// and when it is — its event, else its due day — in zone, the capture's own,
+// with no hour for a day alone.
 //
 // Not the content alone: the classification writes a resolved date into it
 // as YYYY-MM-DD, the one form a correction can find (doc 02 §5), which is
 // what the vault needs and not what a reader in a chat does.
-func recalledLine(say phrase.Set, u unit.Unit, zone *time.Location) string {
-	text := u.Title
-	if text == "" {
-		text = u.Content
+//
+// Names is what phrase reads to tell a name from an ordinary first word: the
+// title and the content, each without its own first word.
+func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
+	it := phrase.Item{Text: u.Title, Names: pastFirstWord(u.Title) + " " + pastFirstWord(u.Content)}
+	if it.Text == "" {
+		it.Text = u.Content
 	}
-	at := u.EventAt
+	at, due := u.EventAt, false
 	if at == nil {
-		at = u.DueAt
+		at, due = u.DueAt, u.DueAt != nil
 	}
-	if at == nil {
-		return text
+	if at != nil {
+		local := at.In(zone)
+		it.When = &phrase.Moment{At: local, DayOnly: atMidnight(local), Due: due}
 	}
-	local := at.In(zone)
-	if atMidnight(local) {
-		return say.Line(text, say.Date(local))
-	}
-	return say.Line(text, say.Time(local))
+	return it
+}
+
+// pastFirstWord is text without its first word.
+func pastFirstWord(text string) string {
+	_, rest, _ := strings.Cut(strings.TrimSpace(text), " ")
+	return rest
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.
