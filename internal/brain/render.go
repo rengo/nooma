@@ -132,14 +132,30 @@ func readUnit(ctx context.Context, units ports.UnitRepo, t ports.DueTrigger) (u 
 	return u, strings.TrimSpace(u.Content) != ""
 }
 
-// unitWords is what a reminder says of u: its text now and when its event is, in
-// the clock's zone, with no hour for a whole day (ADR-0032 point 4), in set's
-// words for the days.
-func unitWords(u unit.Unit, t ports.DueTrigger, now time.Time, set phrase.Set) (text, when string) {
+// occasionOf is the instant a message about u's reminder names, in the clock's
+// zone, and whether it is a whole day (ADR-0032 point 4).
+func occasionOf(u unit.Unit, t ports.DueTrigger, now time.Time) (at time.Time, dayOnly, known bool) {
 	reminder := newReminder(t, true)
 	reminder.Current = currentEvent(u)
-	if at, dayOnly, known := reminder.Occasion(now.Location()); known {
-		if at = at.In(now.Location()); dayOnly {
+	at, dayOnly, known = reminder.Occasion(now.Location())
+	return at.In(now.Location()), dayOnly, known
+}
+
+// pushItem is what a reminder names of u: its title, else its content, and the
+// instant it is about now (ADR-0064 point 1).
+func pushItem(u unit.Unit, t ports.DueTrigger, now time.Time) phrase.Item {
+	it := phrase.Item{Text: clip(shownText(u)), Names: phrase.NamesOf(u.Title, u.Content)}
+	if at, dayOnly, known := occasionOf(u, t, now); known {
+		it.When = &phrase.Moment{At: at, DayOnly: dayOnly}
+	}
+	return it
+}
+
+// unitWords is what the digest says of u: its text now and when its event is, in
+// the clock's zone, with no hour for a whole day, in set's words for the days.
+func unitWords(u unit.Unit, t ports.DueTrigger, now time.Time, set phrase.Set) (text, when string) {
+	if at, dayOnly, known := occasionOf(u, t, now); known {
+		if dayOnly {
 			when = set.Date(at)
 		} else {
 			when = set.Time(at)
@@ -164,8 +180,7 @@ func (r checkRunner) pushText(ctx context.Context, group []ports.DueTrigger, now
 	u, ok := r.readUnit(ctx, group[0])
 	set := r.setFor(ctx, u.Language)
 	if ok {
-		text, when := unitWords(u, group[0], now, set)
-		return withDelayCaveat(set.Remind(text, when), latest, now, set)
+		return withDelayCaveat(set.Push(pushItem(u, group[0], now), now), latest, now, set)
 	}
 	var lines []string
 	for _, t := range group {

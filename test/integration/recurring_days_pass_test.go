@@ -105,16 +105,16 @@ func TestRecurringReminder_DaysPassOverSQLite(t *testing.T) {
 	}
 
 	want := []string{
-		"Fri 2026-10-16 20:00  Reminder: Take the pills — Fri 16 Oct",
-		"Sat 2026-10-17 20:00  Reminder: Take the pills — Sat 17 Oct",
-		"Sun 2026-10-18 20:00  Reminder: Take the pills — Sun 18 Oct",
-		"Mon 2026-10-19 20:00  Reminder: Take the pills — Mon 19 Oct",
-		"Sat 2026-10-24 21:30  Reminder: Take the pills — Sat 24 Oct (This is later than intended.)",
-		"Sun 2026-10-25 20:00  Reminder: Take the pills — Sun 25 Oct",
-		"Mon 2026-10-26 20:00  Reminder: Take the pills — Mon 26 Oct",
-		"Tue 2026-10-27 20:00  Reminder: Take the pills — Tue 27 Oct",
-		"Wed 2026-10-28 20:00  Reminder: Take the pills — Wed 28 Oct",
-		"Thu 2026-10-29 20:00  Reminder: Take the pills — Thu 29 Oct",
+		"Fri 2026-10-16 20:00  Don't forget: Take the pills, today.",
+		"Sat 2026-10-17 20:00  Don't forget: Take the pills, today.",
+		"Sun 2026-10-18 20:00  Don't forget: Take the pills, today.",
+		"Mon 2026-10-19 20:00  Don't forget: Take the pills, today.",
+		"Sat 2026-10-24 21:30  Don't forget: Take the pills, today. Sorry, this is later than intended.",
+		"Sun 2026-10-25 20:00  Don't forget: Take the pills, today.",
+		"Mon 2026-10-26 20:00  Don't forget: Take the pills, today.",
+		"Tue 2026-10-27 20:00  Don't forget: Take the pills, today.",
+		"Wed 2026-10-28 20:00  Don't forget: Take the pills, today.",
+		"Thu 2026-10-29 20:00  Don't forget: Take the pills, today.",
 	}
 	if !slices.Equal(ch.sent, want) {
 		t.Errorf("sent:\n%s\nwant:\n%s", fmt.Sprint(ch.sent), fmt.Sprint(want))

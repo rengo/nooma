@@ -260,7 +260,7 @@ func TestRenderPush_SpeaksTheSetItIsGiven(t *testing.T) {
 	tr := pushTrigger("t", deliverFireAt, 0.9)
 	tr.Payload.ActionText = ""
 
-	if got, want := renderPush(tr, late, es), "Me pediste que te recordara algo. (Esto llega más tarde de lo previsto.)"; got != want {
+	if got, want := renderPush(tr, late, es), "Me pediste que te recordara algo. Perdón, te llega más tarde de lo previsto."; got != want {
 		t.Errorf("renderPush() = %q, want %q", got, want)
 	}
 }

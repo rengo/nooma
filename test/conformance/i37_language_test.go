@@ -39,7 +39,7 @@ func TestI37_SpanishUnitPushAndDigestInSpanish(t *testing.T) {
 	push.speaks("dentist", "es", i37Now.Add(-time.Hour), &event)
 	push.row("r", "dentist", "Dentista", i37Now.Add(-time.Minute), modern(event, 1500))
 	push.check(false)
-	if want := "Recordatorio: Dentista — jue 15 oct, 11:00"; len(push.ch.texts) != 1 || push.ch.texts[0] != want {
+	if want := "Acordate: dentista, mañana a las 11:00."; len(push.ch.texts) != 1 || push.ch.texts[0] != want {
 		t.Errorf("push sent %q, want exactly [%q]", push.ch.texts, want)
 	}
 
@@ -64,9 +64,9 @@ func TestPushFallsBackToLatestThenEnglish(t *testing.T) {
 		want     string
 		digestOf string
 	}{
-		{"its own language wins over the newest", "en", "es", "Reminder: Dentist — Thu 15 Oct, 11:00", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
-		{"no language of its own: the newest unit's", "", "es", "Recordatorio: Dentist — jue 15 oct, 11:00", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
-		{"nobody knows: English", "", "", "Reminder: Dentist — Thu 15 Oct, 11:00", "Here is 1 thing for today:\n• Dentist — Wed 21 Oct"},
+		{"its own language wins over the newest", "en", "es", "Don't forget: Dentist, tomorrow at 11:00.", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
+		{"no language of its own: the newest unit's", "", "es", "Acordate: dentist, mañana a las 11:00.", "Hoy hay 1 cosa:\n• Dentist — mié 21 oct"},
+		{"nobody knows: English", "", "", "Don't forget: Dentist, tomorrow at 11:00.", "Here is 1 thing for today:\n• Dentist — Wed 21 Oct"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestTheDigestSpeaksTheLanguageUsuallyWritten(t *testing.T) {
 	push.speaks("dentist", "", i37Now.Add(-48*time.Hour), &event)
 	push.row("r", "dentist", "Dentist", i37Now.Add(-time.Minute), modern(event, 1500))
 	push.check(false)
-	if want := "Recordatorio: Dentist — jue 15 oct, 11:00"; len(push.ch.texts) != 1 || push.ch.texts[0] != want {
+	if want := "Acordate: dentist, mañana a las 11:00."; len(push.ch.texts) != 1 || push.ch.texts[0] != want {
 		t.Errorf("push sent %q, want exactly [%q]", push.ch.texts, want)
 	}
 
@@ -141,7 +141,7 @@ func TestFallbackSentencesSpeakTheLatestLanguage(t *testing.T) {
 	late.speaks("dentist", "es", i37Now.Add(-time.Hour), &event)
 	late.fired("r", "dentist", "Dentista", i37Now.Add(-20*time.Minute), modern(event, 1500))
 	late.check(false)
-	want := "Recordatorio: Dentista — jue 15 oct, 11:00 (Esto llega más tarde de lo previsto.)"
+	want := "Acordate: dentista, mañana a las 11:00. Perdón, te llega más tarde de lo previsto."
 	if len(late.ch.texts) != 1 || late.ch.texts[0] != want {
 		t.Errorf("a late reminder sent %q, want [%q]", late.ch.texts, want)
 	}

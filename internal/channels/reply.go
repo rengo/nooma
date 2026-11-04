@@ -243,7 +243,7 @@ func atMidnight(t time.Time) bool {
 // Names is what phrase reads to tell a name from an ordinary first word: the
 // title and the content, each without its own first word.
 func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
-	it := phrase.Item{Text: u.Title, Names: pastFirstWord(u.Title) + " " + pastFirstWord(u.Content)}
+	it := phrase.Item{Text: u.Title, Names: phrase.NamesOf(u.Title, u.Content)}
 	if it.Text == "" {
 		it.Text = u.Content
 	}
@@ -256,15 +256,6 @@ func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
 		it.When = &phrase.Moment{At: local, DayOnly: atMidnight(local), Due: due}
 	}
 	return it
-}
-
-// pastFirstWord is text without its first word.
-func pastFirstWord(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return ""
-	}
-	return strings.Join(words[1:], " ")
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.

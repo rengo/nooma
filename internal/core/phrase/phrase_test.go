@@ -52,7 +52,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"Reminder": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
+		"PushFrame": 1, "TimerRing": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerToday": 1, "TimerOn": 2, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "RecallOne": 2, "RecallOnePast": 2, "RecallOneUndated": 1, "RecallMany": 1, "ItemWhen": 2,
 		"OnDate": 3, "YearSuffix": 1, "At": 1, "AtOne": 1, "OnDay": 1, "DueFuture": 1, "DuePast": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1, "VoiceHeard": 1, "VoiceTooLong": 1,
@@ -313,39 +313,20 @@ func TestSet_NamedLeads(t *testing.T) {
 	}
 }
 
-// TestPhraseSetsComplete pins the sentences a reminder is framed with
-// (ADR-0032 point 4) in every language: the frame carries its one verb, the
-// when-clause its two, and a date has no clock in it. The reflection test above
-// already fails an empty field; this one fails a frame that renders nonsense.
+// TestPhraseSetsComplete pins the sentence that joins a unit's words to its
+// day in every language: the words and the day are both in it, and a date has
+// no clock in it. The reflection test above already fails an empty field.
 func TestPhraseSetsComplete(t *testing.T) {
 	when := time.Date(2026, time.October, 15, 11, 0, 0, 0, time.UTC)
 	for _, l := range classify.AllLanguages() {
 		s := For(l)
-		got := s.Remind("dentist", s.Time(when))
 		if line := s.Line("dentist", s.Date(when)); !strings.Contains(line, "dentist") || !strings.Contains(line, s.Date(when)) {
 			t.Errorf("%s: Line = %q, want the words and the day", l, line)
-		}
-		if bare := s.Remind("dentist", ""); bare != fmt.Sprintf(s.Reminder, "dentist") {
-			t.Errorf("%s: a reminder with no instant = %q, want the frame around the words alone", l, bare)
-		}
-		for _, part := range []string{"dentist", s.Time(when)} {
-			if !strings.Contains(got, part) {
-				t.Errorf("%s: Reminder(AtWhen) = %q, missing %q", l, got, part)
-			}
-		}
-		if strings.Contains(got, "%!") {
-			t.Errorf("%s: Reminder(AtWhen) = %q renders a broken verb", l, got)
 		}
 		day := s.Date(when)
 		if strings.Contains(day, "11:00") || !strings.Contains(day, s.Weekdays[when.Weekday()]) {
 			t.Errorf("%s: Date = %q, want the weekday and day with no clock", l, day)
 		}
-	}
-	if got, want := For(classify.LanguageES).Remind("x", ""), "Recordatorio: x"; got != want {
-		t.Errorf("Spanish frame = %q, want %q", got, want)
-	}
-	if got, want := For(classify.LanguageEN).Remind("x", ""), "Reminder: x"; got != want {
-		t.Errorf("English frame = %q, want %q", got, want)
 	}
 }
 
@@ -384,7 +365,7 @@ func TestProactiveSentences(t *testing.T) {
 		es.DigestHeader(1):               "Hoy hay 1 cosa:",
 		es.DigestHeader(3):               "Hoy hay 3 cosas:",
 		es.Question("plan", "budget"):    `Relacioné "plan" con "budget". ¿Tienen relación?`,
-		es.Delayed("Recordatorio: x"):    "Recordatorio: x (Esto llega más tarde de lo previsto.)",
+		es.Delayed("Acordate: x."):       "Acordate: x. Perdón, te llega más tarde de lo previsto.",
 		es.SomethingYouAsked:             "Me pediste que te recordara algo.",
 		es.OneMore:                       "Una más — ",
 		es.DigestItem("x"):               "• x",
@@ -398,7 +379,7 @@ func TestProactiveSentences(t *testing.T) {
 	if got, want := en.Question("plan", "budget"), `I linked "plan" with "budget". Are they related?`; got != want {
 		t.Errorf("en.Question = %q, want %q", got, want)
 	}
-	if got, want := en.Delayed("x"), "x (This is later than intended.)"; got != want {
+	if got, want := en.Delayed("x"), "x Sorry, this is later than intended."; got != want {
 		t.Errorf("en.Delayed = %q, want %q", got, want)
 	}
 	if en.DigestHeader(1) != "Here is 1 thing for today:" || en.DigestHeader(2) != "Here are 2 things for today:" {

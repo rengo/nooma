@@ -116,9 +116,8 @@ func scanTimers(rows *sql.Rows) ([]ports.DueTimer, error) {
 // timer's firing IS its delivery, with no rendering step to wait on, so
 // surfaced_at is written here where a trigger's stays NULL.
 //
-// rendered_text is untouched, not defaulted. m3d's fire-time rephrasing
-// writes it when it has a caller; writing "" here would make the column's
-// own NULL meaning unrecoverable.
+// rendered_text is untouched, not defaulted: a ring is built by code and
+// nothing words it (ADR-0064 point 7), so the caller passes nil.
 func (r *TimerRepo) Fire(ctx context.Context, id string, at time.Time, rendered *string) error {
 	var current string
 	err := r.db.QueryRowContext(ctx, `SELECT status FROM timers WHERE id = ?`, id).Scan(&current)

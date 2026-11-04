@@ -265,8 +265,9 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
 2. **Arms it at capture** at now plus that span, resolved against your clock, and names that
    moment in the reply ("Te aviso a las 10:28."). It rings once, at that moment: a timer has no
    lead before it.
-3. **Fires it when due.** A background check scans every few minutes. At fire time the provider
-   rewords the reminder, with a generic nudge as the fallback if it cannot.
+3. **Fires it when due.** A background check scans every few minutes. At fire time the code
+   says "Es la hora: sacar la ropa." around your words, or a generic nudge if there are none;
+   no model words it.
 4. **Honors an explicit instruction over quiet hours.** You asked for that instant, so a timer
    is delivered even during quiet hours, unlike an inferred trigger
    ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
@@ -419,7 +420,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | A reminder is never sent once its event is past, by the push, the digest or Today | Shipped | doc 02 §7; ADR-0032 |
 | An event whose every reminder lapsed gets one catch-up at once (or at quiet end); a vault with no channel keeps its reminders (an overdue one-shot, a unit-less one included, stays listed on Today) | Shipped | doc 02 §7; ADR-0032 |
 | A reminder that could not be pushed is pushed again on a later pass while its event is ahead, once per pass, never twice for one outage report; the digest carries only recurring reminders | Shipped | doc 02 §7; ADR-0032 |
-| A reminder, pushed or in the digest, says its unit's current text and instant ("Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
+| A reminder, pushed or in the digest, says its unit's current text and instant ("Don't forget: Flight to Lisbon, 08:00, tomorrow at 8:00."), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
 | A task with a due date is named by the morning digest on its day, and two more mornings while open, never held by low energy; Today does not list it | Shipped | doc 02 §7 |
 | A chat answer that a task shown is done, or an event shown already happened, closes it (archived, reminders dropped), asks which when unclear, and says so when nothing closed | Shipped | doc 02 §5 step 4; ADR-0040, ADR-0046 |
 | A digest that would exceed one Telegram message drops its last lines, says "and N more", and the dropped reminders come in tomorrow's | Shipped | doc 02 §7; ADR-0032 |

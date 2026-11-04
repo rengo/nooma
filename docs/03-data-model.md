@@ -90,7 +90,7 @@ CREATE TABLE timers (                            -- ephemeral: NEVER units
   id            TEXT PRIMARY KEY,
   fire_at       TEXT NOT NULL,
   action_text   TEXT,                            -- NULL = generic nudge
-  rendered_text TEXT,                            -- LLM rephrasing at fire time
+  rendered_text TEXT,                            -- no longer written (ADR-0064): a ring is built by code
   status        TEXT NOT NULL DEFAULT 'pending', -- pending|fired|cancelled
   created_at    TEXT NOT NULL,
   fired_at      TEXT,

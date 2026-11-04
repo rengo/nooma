@@ -33,7 +33,7 @@ func TestRenderUsesCurrentContentAndInstant(t *testing.T) {
 
 	v.check(false)
 
-	want := "Reminder: Flight to Lisbon, 08:00 — Thu 15 Oct, 08:00"
+	want := "Don't forget: Flight to Lisbon, 08:00, tomorrow at 8:00."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}
@@ -50,7 +50,7 @@ func TestRenderUsesTheUnitsInstantWhenThePayloadNamesNone(t *testing.T) {
 
 	v.check(false)
 
-	want := "Reminder: Dentist \u2014 Thu 15 Oct, 11:00"
+	want := "Don't forget: Dentist, tomorrow at 11:00."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}
@@ -86,7 +86,7 @@ func TestDateOnlyEventRendersWithoutATime(t *testing.T) {
 
 	v.check(false)
 
-	want := "Reminder: Renew the passport — Fri 16 Oct"
+	want := "Don't forget: Renew the passport, the day after tomorrow."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}
@@ -107,7 +107,7 @@ func TestOneMessagePerUnitArmedSiblingUntouched(t *testing.T) {
 
 	report := v.checkAt(i37Day(14, 19, 0), false)
 
-	want := "Reminder: dentist — Wed 14 Oct, 20:00"
+	want := "Don't forget: dentist, today at 20:00."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Fatalf("sent %q, want exactly one message [%q]", v.ch.texts, want)
 	}
@@ -133,7 +133,7 @@ func TestMissingUnitFallsBackToAction(t *testing.T) {
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != "renew the passport" {
 		t.Errorf("sent %q, want the frozen text alone", v.ch.texts)
 	}
-	if strings.Contains(strings.Join(v.ch.texts, ""), "Reminder:") {
+	if strings.Contains(strings.Join(v.ch.texts, ""), "Don't forget:") {
 		t.Errorf("a reminder with no unit was framed from nothing: %q", v.ch.texts)
 	}
 }
@@ -299,7 +299,7 @@ func TestALongUnitCannotWedgeDelivery(t *testing.T) {
 		t.Fatalf("sent %d messages, want 1", len(v.ch.texts))
 	}
 	got := v.ch.texts[0]
-	if n := len([]rune(got)); n > 600 || !utf8.ValidString(got) || !strings.Contains(got, "é… —") {
+	if n := len([]rune(got)); n > 600 || !utf8.ValidString(got) || !strings.Contains(got, "é…,") {
 		t.Errorf("a %d-rune unit was sent as %d runes (valid %v): %.40q...", len([]rune(long)), n, utf8.ValidString(got), got)
 	}
 }
@@ -316,7 +316,7 @@ func TestRenderSaysTheLocalDayNotUTC(t *testing.T) {
 
 	v.checkAt(now, false)
 
-	want := "Reminder: late dinner — Wed 14 Oct, 22:30"
+	want := "Don't forget: late dinner, today at 22:30."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}
@@ -404,7 +404,7 @@ func TestTheClipNeverSplitsAMultiByteCharacter(t *testing.T) {
 
 	v.check(false)
 
-	want := "Reminder: " + strings.Repeat("\u20ac", 500) + "\u2026 \u2014 Thu 15 Oct, 11:00"
+	want := "Don't forget: " + strings.Repeat("\u20ac", 500) + "\u2026, tomorrow at 11:00."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		got := ""
 		if len(v.ch.texts) == 1 {

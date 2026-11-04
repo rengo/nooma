@@ -36,7 +36,7 @@ func TestRenderUsesTheTitleWhenPresent(t *testing.T) {
 
 	v.check(false)
 
-	want := "Recordatorio: Reunión con Juan — mié 14 oct, 22:30"
+	want := "Acordate: reunión con Juan, hoy a las 22:30."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}
@@ -52,7 +52,7 @@ func TestRenderFallsBackToContentWithoutTitle(t *testing.T) {
 
 	v.check(false)
 
-	want := "Recordatorio: Tengo reunión con Juan hoy a las 22:30 — mié 14 oct, 22:30"
+	want := "Acordate: tengo reunión con Juan hoy a las 22:30, hoy a las 22:30."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}

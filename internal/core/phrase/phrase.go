@@ -122,10 +122,12 @@ type Set struct {
 	Closed        string
 	NothingClosed string
 
-	// Reminder frames a pushed reminder (ADR-0032 point 4): one %s, the
-	// sentence. AtWhen joins a unit's words to its instant: two %s, in that order.
-	Reminder string
-	AtWhen   string
+	// PushFrame frames a pushed reminder (ADR-0064): one %s, the item's words
+	// with its day and time. TimerRing frames a ringing timer: one %s, its
+	// words. AtWhen joins a unit's words to its instant: two %s, in that order.
+	PushFrame string
+	TimerRing string
+	AtWhen    string
 
 	// The sentences Nooma says first, without being asked (ADR-0032 point 5).
 	// DigestLine frames one digest bullet: one %s, the line. DigestHeaderOne
@@ -279,22 +281,23 @@ var sets = map[classify.Language]Set{
 		Closed:         "Done, I closed \"%s\".",
 		NothingClosed:  "I found nothing open to close.",
 
-		Reminder: "Reminder: %s",
-		AtWhen:   "%s \u2014 %s",
+		PushFrame: "Don't forget: %s.",
+		TimerRing: "Time's up: %s.",
+		AtWhen:    "%s \u2014 %s",
 
 		DigestLine:        "\u2022 %s",
 		DigestHeaderOne:   "Here is 1 thing for today:",
 		DigestHeaderMany:  "Here are %d things for today:",
 		OneMore:           "One more \u2014 ",
 		RelationQuestion:  "I linked \"%s\" with \"%s\". Are they related?",
-		Late:              "(This is later than intended.)",
+		Late:              "Sorry, this is later than intended.",
 		SomethingYouAsked: "You asked me to remind you about something.",
 		AndMore:           "\u2026and %d more.",
 		AskAgain:          "Asking again:",
 		AskDone:           "Is \"%s\" done?",
 		AskGoal:           "Still on \"%s\"?",
 		TimerNudge:        "You asked me to remind you about something now.",
-		TimerLate:         "(This is later than you asked for.)",
+		TimerLate:         "Sorry, this is later than you asked for.",
 		LanguageName:      "English",
 
 		LeadImmediate: "right away",
@@ -383,22 +386,23 @@ var sets = map[classify.Language]Set{
 		Closed:         "Listo, saqué «%s».",
 		NothingClosed:  "No encontré nada pendiente para cerrar.",
 
-		Reminder: "Recordatorio: %s",
-		AtWhen:   "%s \u2014 %s",
+		PushFrame: "Acordate: %s.",
+		TimerRing: "Es la hora: %s.",
+		AtWhen:    "%s \u2014 %s",
 
 		DigestLine:        "\u2022 %s",
 		DigestHeaderOne:   "Hoy hay 1 cosa:",
 		DigestHeaderMany:  "Hoy hay %d cosas:",
 		OneMore:           "Una más \u2014 ",
 		RelationQuestion:  "Relacioné \"%s\" con \"%s\". ¿Tienen relación?",
-		Late:              "(Esto llega más tarde de lo previsto.)",
+		Late:              "Perdón, te llega más tarde de lo previsto.",
 		SomethingYouAsked: "Me pediste que te recordara algo.",
 		AndMore:           "\u2026y %d más.",
 		AskAgain:          "Te pregunto de nuevo:",
 		AskDone:           "¿Ya está «%s»?",
 		AskGoal:           "¿Seguís con «%s»?",
 		TimerNudge:        "Me pediste que te recordara algo ahora.",
-		TimerLate:         "(Esto llega más tarde de lo que pediste.)",
+		TimerLate:         "Perdón, te llega más tarde de lo que pediste.",
 		LanguageName:      "Spanish",
 
 		LeadImmediate: "ahora mismo",
@@ -536,14 +540,6 @@ func (s Set) Date(t time.Time) string {
 
 // Line joins a unit's words to its instant, for a digest line.
 func (s Set) Line(text, when string) string { return fmt.Sprintf(s.AtWhen, text, when) }
-
-// Remind frames text as a reminder, saying when if when is not empty.
-func (s Set) Remind(text, when string) string {
-	if when != "" {
-		text = s.Line(text, when)
-	}
-	return fmt.Sprintf(s.Reminder, text)
-}
 
 // DigestHeader heads a digest of n lines, in agreement with n.
 func (s Set) DigestHeader(n int) string {

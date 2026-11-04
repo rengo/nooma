@@ -123,7 +123,7 @@ func (v *i36Vault) unit(t *testing.T, id string) unit.Unit {
 func reminders(sent []string) []string {
 	var out []string
 	for _, s := range sent {
-		if strings.HasPrefix(s, "Recordatorio") {
+		if strings.HasPrefix(s, "Acordate") {
 			out = append(out, s)
 		}
 	}
@@ -157,7 +157,7 @@ func TestI36_TheObservedCoffeeRequestRingsOnce(t *testing.T) {
 	if got := reminders(v.pass(t, i36At(17, 9, 44))); len(got) != 0 {
 		t.Fatalf("at 09:44 sent %q, want nothing yet", got)
 	}
-	if got := reminders(v.pass(t, i36At(17, 9, 45))); len(got) != 1 || !strings.Contains(got[0], "Comprar café") {
+	if got := reminders(v.pass(t, i36At(17, 9, 45))); len(got) != 1 || !strings.Contains(got[0], "comprar café") {
 		t.Fatalf("at 09:45 sent %q, want the coffee reminder once", got)
 	}
 	for _, at := range []time.Time{i36At(17, 9, 50), i36At(17, 10, 0), i36At(17, 10, 30)} {

@@ -183,3 +183,30 @@ func (s Set) line(it Item, now time.Time) string {
 	text := strings.TrimSuffix(strings.TrimSpace(it.Text), ".")
 	return fmt.Sprintf(s.ItemWhen, text, s.When(*it.When, now))
 }
+
+// Push words a reminder: the item's words and, when it has an instant, its day
+// and time as a person says them (ADR-0064 point 1).
+func (s Set) Push(it Item, now time.Time) string {
+	words := s.Inline(it)
+	if it.When != nil {
+		words = fmt.Sprintf(s.ItemWhen, words, s.When(*it.When, now))
+	}
+	return fmt.Sprintf(s.PushFrame, words)
+}
+
+// Ring is a ringing timer's fixed sentence around its words (ADR-0064 point 7).
+func (s Set) Ring(words string) string {
+	return fmt.Sprintf(s.TimerRing, s.Inline(Item{Text: words}))
+}
+
+// NamesOf is Item.Names for a unit: its title and its content, each without
+// its own first word.
+func NamesOf(title, content string) string {
+	past := func(text string) string {
+		if words := strings.Fields(text); len(words) > 0 {
+			return strings.Join(words[1:], " ")
+		}
+		return ""
+	}
+	return past(title) + " " + past(content)
+}
