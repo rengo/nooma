@@ -260,8 +260,11 @@ func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
 
 // pastFirstWord is text without its first word.
 func pastFirstWord(text string) string {
-	_, rest, _ := strings.Cut(strings.TrimSpace(text), " ")
-	return rest
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+	return strings.Join(words[1:], " ")
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.

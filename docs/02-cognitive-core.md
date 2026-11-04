@@ -866,7 +866,8 @@ command, it is answered once.
      count. Spanish lowers an item's first letter inside a sentence unless its first word is an
      acronym or is written capitalised past the first word of the unit's title or of its content
      (each looked at on its own; a name the code cannot see, "Ana cumple", is lowered). English
-     keeps the words as stored and quotes them in a one-item sentence.
+     keeps the words as stored and quotes them in a one-item sentence that carries a day; an
+     undated one is not quoted.
    - **A reply that carries a fact is built by code**
      ([ADR-0064](adr/0064-replies-are-built-by-code.md), superseding ADR-0061). No model words
      a recall answer, a push, the digest, a confirmation or a correction: the code that found

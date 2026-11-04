@@ -301,6 +301,24 @@ func TestRenderReply_ARecallNamesEachItemByTitleAndDay(t *testing.T) {
 	}
 }
 
+// TestRenderReply_ANameRepeatedOnlyInTheTitleKeepsItsCapital: the unit's
+// first word is a name that appears again past the first word of the title
+// alone, and the content has no such word.
+//
+// Mutation: read only the content for names and "Ana" is lowered.
+func TestRenderReply_ANameRepeatedOnlyInTheTitleKeepsItsCapital(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	got := RenderReply(brain.CaptureResult{
+		Outcome:  brain.OutcomeRecalled,
+		Language: classify.LanguageES,
+		At:       time.Date(2026, 10, 21, 18, 30, 0, 0, zone),
+		Recalled: []unit.Unit{{Title: "Ana almuerza con Ana", Content: "Almuerzo familiar."}},
+	})
+	if want := "Tenés anotado: Ana almuerza con Ana."; got != want {
+		t.Errorf("reply = %q, want %q", got, want)
+	}
+}
+
 // TestRenderReply_ATimerNamesTheMomentItRings: "avisame en 20 minutos" at
 // 10:08 is told the one moment it rings, and nothing before it.
 func TestRenderReply_ATimerNamesTheMomentItRings(t *testing.T) {

@@ -169,7 +169,7 @@ func TestI59_RecallCallsNoWordingTask(t *testing.T) {
 			}
 			guard := &i59Guard{t: t, reading: tc.reading}
 			svc := brain.NewCaptureService(fixedClock{now: i59Now}, &counterIDs{}, units, embeddings, lexical, memrepo.NewRelations(),
-				memrepo.NewDecisionLog(), guard, nil, nil, embed, brain.NewIndex(idx),
+				memrepo.NewDecisionLog(), guard, guard, guard, embed, brain.NewIndex(idx),
 				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
 
 			res, err := svc.Capture(ctx, brain.CaptureInput{Text: tc.text, Channel: "telegram"})
