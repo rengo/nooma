@@ -93,7 +93,9 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
 - [ ] 4.3 GREEN: `saidNow` and `dueLines` render through `DigestLineOf`; `DigestHeader` with
       greeting; `AndMore`, `OneMore`, `RelationQuestion`; Today's preview follows (its pins
       updated).
-- [ ] 4.4 Doc 02 §7 digest and tasks-due examples, §4 question wording; `make check-all`.
+- [ ] 4.4 Doc 02 §7 digest and tasks-due examples, §4 question wording; restore the §7 sentence "A
+  digest line is the same words without the push's frame" that link 3 replaced with the
+  `AtWhen` caveat; `make check-all`.
 
 ## Link 5 — `feat/replies-confirmations`
 

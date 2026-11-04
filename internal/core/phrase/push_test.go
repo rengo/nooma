@@ -86,3 +86,27 @@ func TestNamesOf(t *testing.T) {
 		t.Errorf("NamesOf with single words = %q, want a bare separator", got)
 	}
 }
+
+// TestPush_RingAndRecall_NoSecondTerminator: words that end in ?, ! or a clipped
+// ellipsis are not followed by the frame's period.
+func TestPush_RingAndRecall_NoSecondTerminator(t *testing.T) {
+	for _, tc := range []struct{ words, esPush, esRing, esRecall string }{
+		{"¿llamaste a mamá?", "Acordate: ¿llamaste a mamá?", "Es la hora: ¿llamaste a mamá?", "Tenés anotado: ¿llamaste a mamá?"},
+		{"Llamar a mamá!", "Acordate: llamar a mamá!", "Es la hora: llamar a mamá!", "Tenés anotado: llamar a mamá!"},
+		{"Llamar a mamá y a papá…", "Acordate: llamar a mamá y a papá…", "Es la hora: llamar a mamá y a papá…", "Tenés anotado: llamar a mamá y a papá…"},
+	} {
+		it := Item{Text: tc.words}
+		if got := es.Push(it, now); got != tc.esPush {
+			t.Errorf("Push(%q) = %q, want %q", tc.words, got, tc.esPush)
+		}
+		if got := es.Ring(tc.words); got != tc.esRing {
+			t.Errorf("Ring(%q) = %q, want %q", tc.words, got, tc.esRing)
+		}
+		if got := es.Recall([]Item{it}, now); got != tc.esRecall {
+			t.Errorf("Recall(%q) = %q, want %q", tc.words, got, tc.esRecall)
+		}
+	}
+	if got, want := en.Push(Item{Text: "Did you call mom?"}, now), "Don't forget: Did you call mom?"; got != want {
+		t.Errorf("EN Push = %q, want %q", got, want)
+	}
+}

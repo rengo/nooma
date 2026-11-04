@@ -204,6 +204,14 @@ func (c *i59Sent) Send(_ context.Context, _ ports.ConversationID, text string) e
 // a provider that answers no task, and returns what the channel was sent.
 func i59Pass(t *testing.T, now time.Time, units []unit.Unit, triggers []ports.Trigger, timers []ports.Timer) []string {
 	t.Helper()
+	sent, _ := i59PassRepo(t, now, units, triggers, timers)
+	return sent
+}
+
+// i59PassRepo is i59Pass that also returns the timer repository, to read what a
+// firing stored.
+func i59PassRepo(t *testing.T, now time.Time, units []unit.Unit, triggers []ports.Trigger, timers []ports.Timer) ([]string, *memrepo.Timers) {
+	t.Helper()
 	ctx := context.Background()
 	unitRepo, triggerRepo, timerRepo := memrepo.NewUnits(), memrepo.NewTriggers(), memrepo.NewTimers()
 	for _, u := range units {
@@ -230,7 +238,7 @@ func i59Pass(t *testing.T, now time.Time, units []unit.Unit, triggers []ports.Tr
 	if len(guard.tasks) != 0 {
 		t.Errorf("a check pass called the provider for %v; it words nothing (I59)", guard.tasks)
 	}
-	return ch.texts
+	return ch.texts, timerRepo
 }
 
 // i59Reminder is a unit with an event, and its reminder due a minute ago.
@@ -284,6 +292,20 @@ func TestI59_PushIsBuiltByCode(t *testing.T) {
 	}
 }
 
+// TestI59_PushKeepsANamesCapital: a first word written capitalised elsewhere in
+// the unit is a name, so the push does not lower it (ADR-0064 point 3).
+func TestI59_PushKeepsANamesCapital(t *testing.T) {
+	now := time.Date(2026, 11, 4, 10, 0, 0, 0, i59Zone)
+	u, tr := i59Reminder("u1", "Pedro cumple años", "es", time.Date(2026, 11, 5, 21, 0, 0, 0, i59Zone), nil, nil, 120)
+	u.Content = "Cumpleaños de Pedro el jueves"
+	fire := now.Add(-time.Minute)
+	tr.FireAt = &fire
+	sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+	if want := "Acordate: Pedro cumple años, mañana a las 21:00."; len(sent) != 1 || sent[0] != want {
+		t.Errorf("sent %q, want exactly %q", sent, want)
+	}
+}
+
 // TestI59_CheckPassCallsNoWordingTask: a pass with a reminder due calls the
 // provider for nothing; i59Pass fails the test on any task.
 func TestI59_CheckPassCallsNoWordingTask(t *testing.T) {
@@ -312,9 +334,25 @@ func TestI59_TimerRingIsBuiltByCode(t *testing.T) {
 		{"on time", now.Add(-time.Minute), "Es la hora: sacar la ropa."},
 		{"late", now.Add(-lateBy), "Es la hora: sacar la ropa. Perdón, te llega más tarde de lo que pediste."},
 	} {
-		sent := i59Pass(t, now, []unit.Unit{newest}, nil, []ports.Timer{{ID: "tmr", FireAt: tc.fire, ActionText: &words, CreatedAt: now.Add(-time.Hour)}})
+		sent, timerRepo := i59PassRepo(t, now, []unit.Unit{newest}, nil, []ports.Timer{{ID: "tmr", FireAt: tc.fire, ActionText: &words, CreatedAt: now.Add(-time.Hour)}})
 		if len(sent) != 1 || sent[0] != tc.want {
 			t.Errorf("%s: sent %q, want exactly %q", tc.name, sent, tc.want)
 		}
+		if got := timerRepo.Rendered("tmr"); got != nil {
+			t.Errorf("%s: rendered_text = %q, want NULL: the ring is never stored", tc.name, *got)
+		}
+	}
+}
+
+// TestI59_TimerWithBlankWordsRingsTheNudge: a timer whose action_text is only
+// whitespace has no object, so it says the nudge.
+func TestI59_TimerWithBlankWordsRingsTheNudge(t *testing.T) {
+	now := time.Date(2026, 11, 4, 10, 0, 0, 0, i59Zone)
+	blank := "  \t "
+	newest := unit.Unit{ID: "n", Type: unit.TypeKnowledge, Status: unit.StatusPool, Source: "telegram", Content: "x", Language: "es",
+		CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour), LastTouchedAt: now.Add(-time.Hour)}
+	sent := i59Pass(t, now, []unit.Unit{newest}, nil, []ports.Timer{{ID: "tmr", FireAt: now.Add(-time.Minute), ActionText: &blank, CreatedAt: now.Add(-time.Hour)}})
+	if len(sent) != 1 || sent[0] != "Me pediste que te recordara algo ahora." {
+		t.Errorf("sent %q, want the nudge", sent)
 	}
 }

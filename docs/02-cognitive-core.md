@@ -1980,8 +1980,10 @@ box can audit it):
   oculista, hoy a las 11:00.` / `Don't forget: Appointment with the optician, today at 11:00.`;
   a day alone has no time (`Acordate: tomar las pastillas, hoy.`) and a unit with no instant
   says its words alone (`Acordate: llamar a mamá.`). Never a model call. A late push appends
-  `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` A digest
-  line is the same words without the push's frame. A recurring one
+  `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` Words that
+  already end in `?`, `!` or a clipped `…` get no second period. A digest line still says the
+  unit's words and `AtWhen` form (`Turno con el oculista — mié 4 nov, 11:00`) until
+  `warm-replies` link 4 moves it to the push's words without its frame. A recurring one
   names its occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked

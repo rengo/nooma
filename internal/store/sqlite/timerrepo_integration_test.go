@@ -28,7 +28,7 @@ func TestTimerRepo_Contract(t *testing.T) {
 // A timer's firing IS its delivery — there is no rendering step for it to
 // wait on — so Fire writes surfaced_at, where a trigger's Fire leaves it
 // NULL. rendered_text stays NULL because it is untouched, not because it
-// is defaulted: m3d's fire-time rephrasing writes it when it has a caller,
+// is defaulted: nothing writes it since the ring is built by code (ADR-0064),
 // and a repository that wrote "" here would have made that column's
 // meaning unrecoverable.
 func TestTimerRepo_FireWritesSurfacedAtAndLeavesRenderedTextNull(t *testing.T) {
