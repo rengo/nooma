@@ -30,7 +30,10 @@ import (
 // else.
 //
 // What it does not see, all named in docs/06-harness.md §3: a helper outside
-// test/support that runs a command; os.StartProcess, which needs only os; a
+// test/support that runs a command; a test/support helper that empties
+// NOOMA_VAULT (os.Setenv, os.Clearenv, an entry it builds) and returns the
+// result, since helper bodies are never parsed; syscall.ForkExec,
+// syscall.StartProcess and syscall.Exec, which need only syscall; os.StartProcess, which needs only os; a
 // package config calling ResolveVault directly, which imports nothing; os under
 // an import alias (Unsetenv, Clearenv); a key or value held in a variable, a
 // map-built environment, or a constant declared in another file; deliberate
@@ -126,8 +129,6 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 			need("import os/exec")
 		case importName(file, "internal/config") != "":
 			need("import internal/config")
-		case sb != "":
-			need("import the sandbox package")
 		case file.Name.Name == "main" && (rel == "cmd" || strings.HasPrefix(rel, "cmd/")):
 			need("are a package main under cmd/")
 		}
@@ -178,6 +179,9 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 		}
 	}
 	for rel, k := range pkgs {
+		if k.why == "" && execs[rel] {
+			k.why = "sit in a test/support package that runs commands"
+		}
 		if k.why == "" {
 			continue
 		}
@@ -191,13 +195,14 @@ func sandboxViolations(root string) (violations []string, needsSandbox map[strin
 }
 
 // execingHelpers returns the test/support packages (dirs relative to the
-// root) that import os/exec, or import another that does. That includes
-// test/support/sandbox itself, whose importers need a sandbox by their own rule.
+// root) that import os/exec or internal/config, or import another that does.
+// That includes test/support/sandbox itself (it imports os/exec), which is how
+// a test that only calls sandbox.Child is found.
 func execingHelpers(imports map[string][]string) map[string]bool {
 	out := map[string]bool{}
 	for dir, imps := range imports {
 		for _, path := range imps {
-			if path == "os/exec" {
+			if path == "os/exec" || path == "internal/config" || strings.HasSuffix(path, "/internal/config") {
 				out[dir] = true
 			}
 		}

@@ -68,13 +68,18 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	// A TestMain that does not call sandbox.Main does not count because Main is
 	// called from some other function.
 	write("mainelsewhere", "a_test.go", "package p\nimport (\"testing\"; sb \""+sbPath+"\")\nfunc TestMain(m *testing.M) { m.Run() }\nfunc other(m *testing.M) int { return sb.Main(m) }\n")
-	// A helper under test/support that runs commands, directly or through
-	// another, needs the sandbox of whoever imports it; the sandbox package and
-	// a helper that runs nothing do not count.
+	// A helper under test/support that runs commands or resolves a vault
+	// (imports os/exec or internal/config), directly or through another, needs
+	// the sandbox of whoever imports it, and of its own tests; the sandbox
+	// package counts as one. A helper that does neither does not.
 	write("test/support/execer", "e.go", "package execer\nimport \"os/exec\"\nvar Run = exec.Command\n")
 	write("test/support/viaexecer", "v.go", "package viaexecer\nimport _ \""+"github.com/rengo/nooma/test/support/execer\"\n")
 	write("test/support/plain", "p.go", "package plain\nimport \"strings\"\nvar F = strings.ToUpper\n")
 	write("test/support/sandbox", "s.go", "package sandbox\nimport \"os/exec\"\nvar R = exec.Command\n")
+	write("test/support/cfghelper", "c.go", "package cfghelper\nimport _ \""+cfgPath+"\"\n")
+	write("test/support/ownrunner", "r.go", "package ownrunner\nimport \"os/exec\"\nvar R = exec.Command\n")
+	write("test/support/ownrunner", "r_test.go", "package ownrunner\nimport \"testing\"\nfunc TestR(t *testing.T) { _ = R }\n")
+	write("usecfg", "a_test.go", test(`"github.com/rengo/nooma/test/support/cfghelper"`, `_ = 1`))
 	write("lib/runner", "r.go", "package runner\nimport \"os/exec\"\nvar R = exec.Command\n")
 	write("userunner", "a_test.go", test(`"github.com/rengo/nooma/lib/runner"`, `_ = runner.R`))
 	write("usehelper", "a_test.go", test(`"github.com/rengo/nooma/test/support/execer"`, `_ = execer.Run`))
@@ -129,7 +134,7 @@ func TestSandboxGate_FindsEachKindOfViolation(t *testing.T) {
 	}
 	for _, dir := range []string{"exec", "execpath", "execalias", "config", "childonly", "cmd/tool", "wrongmain",
 		"othermain", "dotimport", "split", "empties", "unsets", "clears", "constkey", "localconstkey",
-		"envliteral", "envappend", "envsplit", "mainelsewhere", "usehelper", "usevia", "tools/worktrees/x"} {
+		"envliteral", "envappend", "envsplit", "mainelsewhere", "usehelper", "usevia", "usecfg", "test/support/ownrunner", "tools/worktrees/x"} {
 		if !reported[dir] {
 			t.Errorf("the gate did not report %s:\n%s", dir, strings.Join(violations, "\n"))
 		}

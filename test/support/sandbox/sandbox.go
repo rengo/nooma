@@ -3,12 +3,13 @@
 // On 2026-10-30 a test ran `nooma reindex` with no vault argument; vault
 // resolution found the maintainer's ~/.nooma, and the command migrated and
 // rewrote a real vault. Main closes every road resolution takes to a real
-// vault before any test runs: NOOMA_VAULT names a folder that is not a vault,
-// so a command given none stops at resolution's first step, and HOME (with
-// its Windows and XDG relatives) is a throwaway folder in case anything looks
-// further. Under Main, NOOMA_VAULT is never empty in a test's own process: empty, resolution
-// would walk up the working directory's parents and could find a *.nooma
-// folder there before it reached HOME. The temporary directory moves into the
+// vault for the test's own process before any test runs (Child narrows them
+// for a child; see its comment): NOOMA_VAULT names a folder that is not a
+// vault, so a command given none stops at resolution's first step, and HOME
+// (with its Windows and XDG relatives) is a throwaway folder in case anything
+// looks further. Under Main, NOOMA_VAULT is never empty in a test's own
+// process: empty, resolution would walk up the working directory's parents and
+// could find a *.nooma folder there before it reached HOME. The temporary directory moves into the
 // sandbox too, and Child starts a child there, so a child given an empty
 // NOOMA_VAULT (with its own HOME) climbs through the sandbox first.
 // test/harness's sandbox gate checks every package follows this.
