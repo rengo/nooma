@@ -70,7 +70,7 @@ func TestRenderUsesCurrentContentInTheDigest(t *testing.T) {
 
 	report := v.check(false)
 
-	want := "Here is 1 thing for today:\n• Leo's birthday — Wed 21 Oct"
+	want := "Good morning. You have one thing:\n• Leo's birthday, on Wednesday 21 October"
 	if report.DigestCarried != 1 || len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("report %+v, sent %q, want the digest %q", report, v.ch.texts, want)
 	}
@@ -152,7 +152,7 @@ func TestDigestSaysOneLinePerUnit(t *testing.T) {
 
 	report := v.check(false)
 
-	want := "Here is 1 thing for today:\n• Leo's birthday — Wed 21 Oct"
+	want := "Good morning. You have one thing:\n• Leo's birthday, on Wednesday 21 October"
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want || len(v.undelivered()) != 0 {
 		t.Errorf("report %+v, sent %q, undelivered %v; want %q and both rows delivered", report, v.ch.texts, v.undelivered(), want)
 	}
@@ -276,7 +276,7 @@ func TestDigestSaysOneLinePerUnitNotPerText(t *testing.T) {
 
 	report := v.check(false)
 
-	want := "Here are 2 things for today:\n• Call mom — Wed 21 Oct\n• Call mom — Wed 21 Oct"
+	want := "Good morning. You have 2 things:\n• Call mom, on Wednesday 21 October\n• Call mom, on Wednesday 21 October"
 	if report.DigestCarried != 2 || len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("report %+v, sent %q, want %q", report, v.ch.texts, want)
 	}
@@ -387,7 +387,7 @@ func TestALongTextCannotWedgeAnyPath(t *testing.T) {
 			t.Errorf("%s: sent %d message(s), first of %d runes; want one bounded message", name, len(v.ch.texts), len([]rune(strings.Join(v.ch.texts, ""))))
 		}
 	}
-	if len(digest.ch.texts) == 1 && !strings.HasSuffix(digest.ch.texts[0], "… — Wed 21 Oct") {
+	if len(digest.ch.texts) == 1 && !strings.HasSuffix(digest.ch.texts[0], "…, on Wednesday 21 October") {
 		t.Errorf("digest line = %.20q...%q, want the ellipsis then the date", digest.ch.texts[0], digest.ch.texts[0][len(digest.ch.texts[0])-20:])
 	}
 }

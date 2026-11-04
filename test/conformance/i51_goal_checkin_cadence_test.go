@@ -26,8 +26,11 @@ const i51Chat ports.ConversationID = "12449194"
 
 const i51Goal = "correr una media maratón"
 
-// i51Asked is the whole morning digest that asks the goal alone.
+// i51Asked is the goal as the digest asks it.
 const i51Asked = "¿Seguís con «" + i51Goal + "»?"
+
+// i51Digest is the message that carries it: the digest greets, then asks.
+const i51Digest = "Buen día.\n\n" + i51Asked
 
 var i51Day0 = time.Date(2026, 11, 2, 0, 0, 0, 0, time.FixedZone("ART", -3*3600))
 
@@ -176,9 +179,9 @@ func TestI51_AStagnantGoalIsAskedAndAnsweredAtItsCadence(t *testing.T) {
 		t.Fatalf("%d goal check-ins armed on night 0, want 1", n)
 	}
 	// The morning digest asks it, in the user's language, as its own item:
-	// nothing else is due, so the digest is that question alone.
-	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Asked {
-		t.Fatalf("the morning digest sent %q, want exactly %q", sent, i51Asked)
+	// nothing else is due, so the digest is the greeting and that question.
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Digest {
+		t.Fatalf("the morning digest sent %q, want exactly %q", sent, i51Digest)
 	}
 	if open := v.openIDs(t); len(open) != 1 {
 		t.Fatalf("open check-ins after the digest = %v, want the goal's", open)
@@ -288,8 +291,8 @@ func TestI51_TheGoalIsAskedInTheDigestNeverAlone(t *testing.T) {
 			t.Errorf("Today lists the goal check-in under upcoming reminders: %+v", u)
 		}
 	}
-	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Asked {
-		t.Fatalf("the digest sent %q, want exactly %q", sent, i51Asked)
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Digest {
+		t.Fatalf("the digest sent %q, want exactly %q", sent, i51Digest)
 	}
 	if sent := v.check(t, 0, 7, 30); len(sent) != 0 {
 		t.Errorf("a pass after the digest sent %q", sent)
@@ -315,8 +318,8 @@ func TestI51_TheGoalIsAskedInTheDigestNeverAlone(t *testing.T) {
 	if sent := w.check(t, 0, 15, 5); len(sent) != 0 {
 		t.Errorf("a goal armed after the digest was pushed on its own: %q", sent)
 	}
-	if sent := w.morning(t, 1); len(sent) != 1 || sent[0] != i51Asked {
-		t.Errorf("the next digest sent %q, want exactly %q", sent, i51Asked)
+	if sent := w.morning(t, 1); len(sent) != 1 || sent[0] != i51Digest {
+		t.Errorf("the next digest sent %q, want exactly %q", sent, i51Digest)
 	}
 }
 
@@ -333,8 +336,8 @@ func TestI51_ALowEnergyMorningHoldsTheGoal(t *testing.T) {
 	if open := v.openIDs(t); len(open) != 0 {
 		t.Fatalf("a held goal check-in reads as delivered: %v", open)
 	}
-	if sent := v.morning(t, 1); len(sent) != 1 || sent[0] != i51Asked {
-		t.Errorf("the next morning sent %q, want exactly %q", sent, i51Asked)
+	if sent := v.morning(t, 1); len(sent) != 1 || sent[0] != i51Digest {
+		t.Errorf("the next morning sent %q, want exactly %q", sent, i51Digest)
 	}
 }
 
@@ -382,8 +385,8 @@ func TestI51_TheGoalIsWordedInTheDigestsLanguage(t *testing.T) {
 	if err != nil || today.Digest.Goal != want {
 		t.Errorf("Today previews %q (%v), want %q", today.Digest.Goal, err, want)
 	}
-	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != want {
-		t.Errorf("the digest sent %q, want exactly %q", sent, want)
+	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != "Good morning.\n\n"+want {
+		t.Errorf("the digest sent %q, want greeting then %q", sent, want)
 	}
 	// And the chat prompt lists it as it was asked.
 	prompt := v.answer(t, 0, "yes", "engaged")

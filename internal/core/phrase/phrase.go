@@ -130,14 +130,16 @@ type Set struct {
 	AtWhen    string
 
 	// The sentences Nooma says first, without being asked (ADR-0032 point 5).
-	// DigestLine frames one digest bullet: one %s, the line. DigestHeaderOne
-	// heads a digest of one line and takes nothing; DigestHeaderMany takes one
-	// %d, the number of lines. OneMore opens the digest's question when lines
-	// came before it. RelationQuestion takes two %s: what was linked, then
+	// DigestLine frames one digest bullet: one %s, the line. Morning greets
+	// the digest; DigestHeaderOne says it has one line and takes nothing,
+	// DigestHeaderMany takes one %d, the number of lines, and both follow
+	// Morning. OneMore opens the digest's question, on a line of its own, when
+	// lines came before it. RelationQuestion takes two %s: what was linked, then
 	// what it was linked with. Late is the note a reminder carries when it is
 	// sent later than intended, and SomethingYouAsked is what a reminder says
 	// when it has nothing of its own to say.
 	DigestLine        string
+	Morning           string
 	DigestHeaderOne   string
 	DigestHeaderMany  string
 	OneMore           string
@@ -286,13 +288,14 @@ var sets = map[classify.Language]Set{
 		AtWhen:    "%s \u2014 %s",
 
 		DigestLine:        "\u2022 %s",
-		DigestHeaderOne:   "Here is 1 thing for today:",
-		DigestHeaderMany:  "Here are %d things for today:",
-		OneMore:           "One more \u2014 ",
-		RelationQuestion:  "I linked \"%s\" with \"%s\". Are they related?",
+		Morning:           "Good morning.",
+		DigestHeaderOne:   "You have one thing:",
+		DigestHeaderMany:  "You have %d things:",
+		OneMore:           "One more question:\n",
+		RelationQuestion:  "I linked \u201c%s\u201d with \u201c%s\u201d. Are they related?",
 		Late:              "Sorry, this is later than intended.",
 		SomethingYouAsked: "You asked me to remind you about something.",
-		AndMore:           "\u2026and %d more.",
+		AndMore:           "And %d more I'll tell you about tomorrow.",
 		AskAgain:          "Asking again:",
 		AskDone:           "Is \"%s\" done?",
 		AskGoal:           "Still on \"%s\"?",
@@ -391,13 +394,14 @@ var sets = map[classify.Language]Set{
 		AtWhen:    "%s \u2014 %s",
 
 		DigestLine:        "\u2022 %s",
-		DigestHeaderOne:   "Hoy hay 1 cosa:",
-		DigestHeaderMany:  "Hoy hay %d cosas:",
-		OneMore:           "Una más \u2014 ",
-		RelationQuestion:  "Relacioné \"%s\" con \"%s\". ¿Tienen relación?",
+		Morning:           "Buen día.",
+		DigestHeaderOne:   "Tenés una cosa:",
+		DigestHeaderMany:  "Tenés %d cosas:",
+		OneMore:           "Una pregunta más:\n",
+		RelationQuestion:  "Relacioné «%s» con «%s». ¿Tienen que ver?",
 		Late:              "Perdón, te llega más tarde de lo previsto.",
 		SomethingYouAsked: "Me pediste que te recordara algo.",
-		AndMore:           "\u2026y %d más.",
+		AndMore:           "Y %d más que te cuento mañana.",
 		AskAgain:          "Te pregunto de nuevo:",
 		AskDone:           "¿Ya está «%s»?",
 		AskGoal:           "¿Seguís con «%s»?",
@@ -541,12 +545,13 @@ func (s Set) Date(t time.Time) string {
 // Line joins a unit's words to its instant, for a digest line.
 func (s Set) Line(text, when string) string { return fmt.Sprintf(s.AtWhen, text, when) }
 
-// DigestHeader heads a digest of n lines, in agreement with n.
+// DigestHeader heads a digest of n lines, in agreement with n, after the
+// morning greeting.
 func (s Set) DigestHeader(n int) string {
 	if n == 1 {
-		return s.DigestHeaderOne
+		return s.Morning + " " + s.DigestHeaderOne
 	}
-	return fmt.Sprintf(s.DigestHeaderMany, n)
+	return s.Morning + " " + fmt.Sprintf(s.DigestHeaderMany, n)
 }
 
 // DigestItem frames one digest line.

@@ -363,8 +363,9 @@ Directed edges between units: `type` (text: `same_topic`, `derived_from`, …), 
 - **Per-user, per-relation-type thresholds** (`relation_thresholds`):
   - `min_confidence_to_persist` (default 0.30) — below this, it is not even stored.
   - `min_confidence_to_surface` (default 0.50) — above this, it is asserted without asking.
-  - **Uncertain band [persist, surface)**: it is stored AND asked about in the digest ("I
-    linked X with Y, are they related?"). Confirming raises confidence
+  - **Uncertain band [persist, surface)**: it is stored AND asked about in the digest, naming
+    both ends (`Relacioné «X» con «Y». ¿Tienen que ver?` / `I linked “X” with “Y”. Are they
+    related?`). Confirming raises confidence
     (`GREATEST(current, confirmed_floor)`); rejecting deletes the relation and emits a
     `relation_reject` signal.
   - **`confirmed_floor` is an alias for the relation type's own resolved
@@ -863,7 +864,9 @@ command, it is answered once.
      anotadas:" / "• Cena con Ana, el viernes 13 de noviembre a las 21:00"; a past due day reads
      "era para ayer" / "was due yesterday"). Nothing admitted is "No tengo nada anotado sobre
      eso." / "I don't have anything noted about that.", and never names a topic, an item or a
-     count. Spanish lowers an item's first letter inside a sentence unless its first word is an
+     count. Words that already end in `?`, `!` or a clipped `…` get no second period. Spanish
+     lowers an item's first letter inside a sentence (after an opening `¿` or `¡`, the letter
+     that follows it: `Acordate: ¿llamaste a mamá?`) unless its first word is an
      acronym or is written capitalised past the first word of the unit's title or of its content
      (each looked at on its own; a name the code cannot see, "Ana cumple", is lowered). English
      keeps the words as stored and quotes them in a one-item sentence that carries a day; an
@@ -1981,22 +1984,34 @@ box can audit it):
   a day alone has no time (`Acordate: tomar las pastillas, hoy.`) and a unit with no instant
   says its words alone (`Acordate: llamar a mamá.`). Never a model call. A late push appends
   `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` Words that
-  already end in `?`, `!` or a clipped `…` get no second period. A digest line still says the
-  unit's words and `AtWhen` form (`Turno con el oculista — mié 4 nov, 11:00`) until
-  `warm-replies` link 4 moves it to the push's words without its frame. A recurring one
+  already end in `?`, `!` or a clipped `…` get no second period. A digest line is the same words
+  without the push's frame (below). A recurring one
   names its occurrence (its unit's `event_at` is an anchor); a bare date and any occurrence
   have no clock time. The reminders of one unit that a pass pushes are **one message** (a failed
   180-minute lead retried in the pass in which the 60-minute one fires), each row marked
   delivered. The text a reminder was armed with (the title the capture classified, else the
   content) is only the fallback when the unit cannot be read; a correction keeps it equal to
   what the unit says (§5 step 4).
-  The sentences (`phrase`: `PushFrame`, `TimerRing`, `AtWhen`, `DigestLine`, `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
+  **The digest is worded by code too** (ADR-0064, `phrase.DigestHeader`, `phrase.DigestLineOf`,
+  I59), never by a model. It opens with a morning greeting and the count of its lines (`Buen día.
+  Tenés 3 cosas:` / `Good morning. You have 3 things:`; one is `Tenés una cosa:` / `You have one
+  thing:`). Each line is its unit's words as stored, so a bullet keeps its capital, then its day
+  as a person says it, a day alone (the digest is a morning's list, so it carries no hour):
+  `• Tomar las pastillas, hoy`, `• Cumpleaños de Ana, mañana`. Today's preview, which does show
+  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and
+  past it `era para ayer` / `was due yesterday`. The check-ins asked again and the goal
+  check-in keep their wording (client, 2026-10-16). The relation question follows on a line of its
+  own after `Una pregunta más:` / `One more question:`. A digest with a question and nothing
+  else is the greeting alone, then the question, with no "one more".
+  The sentences (`phrase`: `PushFrame`, `TimerRing`, `DigestLine`, `Morning`,
+  `DigestHeaderOne/Many`, `AskAgain`, `AskDone`, `OneMore`,
   `RelationQuestion`, `Late`, `SomethingYouAsked`) are in the unit's language for a push and in the
   usual language for the digest (§5, ADR-0035); the glass box stays English.
   **A digest fits one message.** Telegram refuses a message over 4096 UTF-16 units, which would
   fail every pass, so a digest that would exceed it first leaves out its check-ins asked again
   ("An open check-in closes", below), the last first, and then drops its last lines (a unit's reminders are
-  one line), ends with one sentence saying how many more (`AndMore`: "and N more"), and never drops
+  one line), ends with one sentence saying how many more (`AndMore`: `Y 2 más que te cuento mañana.` /
+  `And 2 more I'll tell you about tomorrow.`), and never drops
   its question. The dropped reminders stay undelivered, so tomorrow's digest carries them; only the
   sent ones are marked delivered, `DigestCarried` and the `check.digest.sent` row count only those,
   and a dropped reminder is not a held one (no `check.digest.held` row, no deferral). A dry run counts
@@ -2059,8 +2074,8 @@ box can audit it):
     "el resumen alcanza"). A `task` arms nothing (ADR-0029, ADR-0030), so the digest is where its
     due date reaches the user: on the morning of its due day, a local calendar day in the user's
     zone, the digest names every live `task` whose `due_at` falls on it, as its unit's line (its
-    title, else its content, and the due day alone, `Renovar el pasaporte — mar 20 oct`). One still
-    live after its day is named again on the following mornings, `due_task_digest_days` mornings
+    title, else its content, and the due day alone, said as due: `Renovar el pasaporte, para hoy`).
+    One still live after its day is named again on the following mornings, `due_task_digest_days` mornings
     in all, and then no more. A task the user says is done in answer to the digest is closed and
     named no more (§5 step 4, ADR-0040); the bound is what stops the line of one nobody answers. A task the user asked to be reminded of
     (`remind_me`) is left out, since its own reminder speaks for it. `prospection.TasksDue`
@@ -2122,7 +2137,7 @@ re-asks, so **a bare answer reaches the last thing the pass showed**, whichever 
 **Viewing is not delivering.** `/ui`'s Today mirrors what the digest would carry if it ran right
 now, computed from the same reads and the same `Carry`, except for the message bound: Today is a
 page, so it lists every reminder waiting, while a digest that reaches the bound sends fewer and says
-"and N more". It does not list the tasks due the digest names (above). Rendering it writes nothing to the
+how many more wait for tomorrow. It does not list the tasks due the digest names (above). Rendering it writes nothing to the
 vault: `surfaced_at` and `asked_at` are set only by the digest pass above, never by a `GET`
 (I27, `docs/06-harness.md` §4). It does hold one thing in process memory: the focus it selected
 (§3), which the next digest then reads. Viewing `/ui` can therefore change a later low-energy
@@ -2156,7 +2171,7 @@ state; `m3b` implements the store-layer round trip.
   scan never fires it**: it would go out alone, as a late reminder. **The morning digest asks
   it as its own item, as it asks the relation question.**
   - It is appended after the ranked items and the check-ins asked again: at most one a
-    morning, the longest waiting first. It is the whole message when nothing else is due.
+    morning, the longest waiting first. When nothing else is due the message is the greeting and this question.
   - It is never asked on a low-energy morning, and waits armed for one that is not.
   - Only once the digest is sent is it fired and surfaced (`check.digest.goal_asked`), so an
     answer can reach it. Unanswered, it closes at the third morning, as ignored.
@@ -2220,7 +2235,8 @@ ISO dates, and a chat listed "Recordatorio para sacar la pizza del horno a las 1
 nudge, and a capture whose text could not be salvaged writes that same `NULL` rather than an
 empty string). On firing, the ring is a fixed sentence built by code around the stored words
 (`Es la hora: sacar la ropa.` / `Time's up: Take the clothes out.`, `phrase.TimerRing`,
-[ADR-0064](adr/0064-replies-are-built-by-code.md) point 7); no model words it. A ring late by
+[ADR-0064](adr/0064-replies-are-built-by-code.md) point 7); no model words it. Words that already
+end in `?`, `!` or a clipped `…` get no second period. A ring late by
 `DelayCaveat` appends `Perdón, te llega más tarde de lo que pediste.` / `Sorry, this is later than
 you asked for.`, and a timer with no words says its generic nudge. `rendered_text` is no longer
 written: it stays `NULL` and the column remains for old rows. Listable and cancellable from chat

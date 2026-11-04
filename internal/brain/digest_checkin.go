@@ -164,7 +164,7 @@ func reaskSaid(ctx context.Context, units ports.UnitRepo, reasks []ports.DueTrig
 	for i, t := range reasks {
 		out[i] = t
 		if u, ok := readUnit(ctx, units, t); ok {
-			out[i].Payload.ActionText, _ = unitWords(u, t, now, set)
+			out[i].Payload.ActionText = clip(shownText(u))
 		} else {
 			out[i].Payload.ActionText = clip(t.Payload.ActionText)
 		}

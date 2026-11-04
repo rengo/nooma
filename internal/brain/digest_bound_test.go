@@ -34,7 +34,7 @@ func TestDigestBoundKeepsTheQuestion(t *testing.T) {
 	if n := len(utf16.Encode([]rune(msg))); n > 4096 {
 		t.Errorf("the digest is %d units", n)
 	}
-	if !strings.Contains(msg, "plan the trip") || !strings.Contains(msg, "and ") {
+	if !strings.Contains(msg, "plan the trip") || !strings.Contains(msg, "more I'll tell you about tomorrow") {
 		t.Errorf("the question or the \"more\" note is missing:\n%.200s", msg)
 	}
 	if carried != len(triggers.surfaced) || carried >= 14 {
@@ -69,7 +69,7 @@ func TestDigestBoundEdge(t *testing.T) {
 	}{{"no question", nil}, {"with a question", &q}} {
 		t.Run(c.name, func(t *testing.T) {
 			text, sent := boundCase(t, c.q, 0)
-			if n := utf16Len(text); n != 4096 || len(sent) != 2 || !strings.HasPrefix(text, "Here are 2 things") {
+			if n := utf16Len(text); n != 4096 || len(sent) != 2 || !strings.HasPrefix(text, "Good morning. You have 2 things") {
 				t.Errorf("exactly 4096: %d units, %d items kept, want 4096 and both", n, len(sent))
 			}
 
@@ -77,7 +77,7 @@ func TestDigestBoundEdge(t *testing.T) {
 			if n := utf16Len(text); n > 4096 || len(sent) != 1 || sent[0].ID != "a" {
 				t.Errorf("4097: %d units, kept %+v, want it within the bound with only the first line", n, sent)
 			}
-			if !strings.HasPrefix(text, "Here is 1 thing for today:") || !strings.Contains(text, "and 1 more.") {
+			if !strings.HasPrefix(text, "Good morning. You have one thing:") || !strings.Contains(text, "And 1 more I'll tell you about tomorrow.") {
 				t.Errorf("the header counts the kept lines and the note the dropped:\n%.120s", text)
 			}
 			if c.q != nil && !strings.Contains(text, "plan the trip") {

@@ -117,7 +117,7 @@ func (f *fxH) digestOrder(t *testing.T) (order []string, carried int) {
 		t.Fatalf("the digest sent %d message(s), want 1", ch.count())
 	}
 	for _, line := range strings.Split(ch.sent[0], "\n• ")[1:] {
-		line, _, _ = strings.Cut(line, " \u2014 ")
+		line, _, _ = strings.Cut(line, ", ")
 		order = append(order, strings.TrimPrefix(line, "act on "))
 	}
 	return order, carried

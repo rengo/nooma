@@ -119,10 +119,18 @@ func (c *dpChannel) Send(_ context.Context, _ ports.ConversationID, text string)
 }
 
 // dpLine is one transcript line; a message of several lines continues
-// indented under its own text.
+// indented under its own text; a blank line of the message stays empty, so no
+// transcript line ends in spaces.
 func dpLine(at time.Time, arrow, text string) string {
 	prefix := at.In(dpZone).Format("Mon 2006-01-02 15:04") + " " + arrow + " "
-	return prefix + strings.ReplaceAll(text, "\n", "\n"+strings.Repeat(" ", len(prefix)-len(arrow)+1))
+	indent := strings.Repeat(" ", len(prefix)-len(arrow)+1)
+	parts := strings.Split(text, "\n")
+	for i := 1; i < len(parts); i++ {
+		if parts[i] != "" {
+			parts[i] = indent + parts[i]
+		}
+	}
+	return prefix + strings.Join(parts, "\n")
 }
 
 // live runs the scenario and returns its transcript.
@@ -418,7 +426,7 @@ func dpScenarios() []dpScenario {
 				// (ADR-0041). The reading names no date, so said later it is
 				// the one the model gave.
 				{at: dpAt(10, 20, 9, 0), id: "classify-done-ya-lo-hice-after-digest", late: true,
-					shows: `Tue 2026-10-20 07:00 Nooma, pushed (a reminder or check-in): "Hoy hay 1 cosa: • Renovar el pasaporte — mar 20 oct" [A]`},
+					shows: `Tue 2026-10-20 07:00 Nooma, pushed (a reminder or check-in): "Buen día. Tenés una cosa: • Renovar el pasaporte, para hoy" [A]`},
 			},
 		},
 		{

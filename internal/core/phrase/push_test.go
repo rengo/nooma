@@ -91,7 +91,8 @@ func TestNamesOf(t *testing.T) {
 // ellipsis are not followed by the frame's period.
 func TestPush_RingAndRecall_NoSecondTerminator(t *testing.T) {
 	for _, tc := range []struct{ words, esPush, esRing, esRecall string }{
-		{"¿llamaste a mamá?", "Acordate: ¿llamaste a mamá?", "Es la hora: ¿llamaste a mamá?", "Tenés anotado: ¿llamaste a mamá?"},
+		{"¿Llamaste a mamá?", "Acordate: ¿llamaste a mamá?", "Es la hora: ¿llamaste a mamá?", "Tenés anotado: ¿llamaste a mamá?"},
+		{"¡Llamá a mamá!", "Acordate: ¡llamá a mamá!", "Es la hora: ¡llamá a mamá!", "Tenés anotado: ¡llamá a mamá!"},
 		{"Llamar a mamá!", "Acordate: llamar a mamá!", "Es la hora: llamar a mamá!", "Tenés anotado: llamar a mamá!"},
 		{"Llamar a mamá y a papá…", "Acordate: llamar a mamá y a papá…", "Es la hora: llamar a mamá y a papá…", "Tenés anotado: llamar a mamá y a papá…"},
 	} {

@@ -192,7 +192,7 @@ of a black box.
 ## C. The morning digest, and the question it asks
 
 **Scenario.** At 07:00 your phone buzzes with the day's digest. Among the items is a question:
-*"I linked 'Laura's contract' with 'renewal terms' — are they related?"* You answer *"yes"*.
+*"I linked “Laura's contract” with “renewal terms”. Are they related?"* You answer *"yes"*.
 
 **What Nooma does**
 
@@ -211,6 +211,9 @@ of a black box.
    three days owes one digest, not three. If your last energy reading is low, it holds back
    the non-urgent items and lets only a few through, and it softens its wording. This is the
    product rule in [doc 00](00-vision.md): Nooma looks after your *load*, not your feelings.
+   The digest greets you and counts its lines ("Buen día. Tenés 2 cosas:"), then says each with
+   its day as a person says it ("• Tomar las pastillas, hoy", "• Renovar el
+   pasaporte, era para ayer"); the code writes every word, no model does.
    A task with a due date ("mañana renuevo el pasaporte") rings no reminder: the reply says so
    ("Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.", with its hour,
    "mar 20 oct, 10:00", when you told one), and the digest names it
@@ -307,7 +310,7 @@ learns what you consider a real connection (the learning itself is [M5](#the-lea
      there: **Yes, they are** confirms the link and **No, delete the link** deletes it, exactly as
      answering the digest would, and Today comes back saying what was done. A question already
      answered elsewhere is refused and changes nothing. Today is a page, so it lists every
-     reminder waiting; a digest that reaches Telegram's message bound sends fewer and says "and N more". Looking at it changes nothing in the vault: **viewing is not
+     reminder waiting; a digest that reaches Telegram's message bound sends fewer and says how many more wait for tomorrow. Looking at it changes nothing in the vault: **viewing is not
      delivering** ([doc 02 §7](02-cognitive-core.md#7-prospection--the-proactive-lobe)).
    - **System.** Last consolidation, the latest energy reading and where it came from, counts of
      undelivered items and open questions, and the bind address.
@@ -423,7 +426,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | A reminder, pushed or in the digest, says its unit's current text and instant ("Don't forget: Flight to Lisbon, tomorrow at 8:00."), one message per unit; a bare date has no clock time | Shipped | doc 02 §7; ADR-0032 |
 | A task with a due date is named by the morning digest on its day, and two more mornings while open, never held by low energy; Today does not list it | Shipped | doc 02 §7 |
 | A chat answer that a task shown is done, or an event shown already happened, closes it (archived, reminders dropped), asks which when unclear, and says so when nothing closed | Shipped | doc 02 §5 step 4; ADR-0040, ADR-0046 |
-| A digest that would exceed one Telegram message drops its last lines, says "and N more", and the dropped reminders come in tomorrow's | Shipped | doc 02 §7; ADR-0032 |
+| A digest that would exceed one Telegram message drops its last lines, says how many more wait for tomorrow, and the dropped reminders come in tomorrow's | Shipped | doc 02 §7; ADR-0032 |
 | What Nooma says first speaks the user's language: a pushed reminder, in its unit's; the digest (header, lines, question, lateness note, re-asks), in the language the user usually writes in (the most frequent among their 20 newest units); English when none is known; a timer's wording and Today follow the same | Shipped | doc 02 §5, §7; ADR-0032, ADR-0035 |
 | UI Today, cookie login, `--no-ui` | Shipped in `m4a` | [05 §M4](05-build-plan.md#m4--the-mirror-complete-ui), ADR-0007, ADR-0028 |
 | UI units browse, search, detail, capture and correct | Shipped in `m4b` | 05 §M4; doc 02 §5 |

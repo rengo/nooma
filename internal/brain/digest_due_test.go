@@ -63,7 +63,7 @@ func TestDigest_LowEnergyNeverHoldsADueTask(t *testing.T) {
 		t.Fatalf("sent %d digests, want 1", ch.count())
 	}
 	lines := strings.Split(ch.sent[0], "\n")
-	if want := prospection.LowEnergyDigestSize + 2; len(lines) != want || lines[1] != "• Renew the passport — Wed 5 Aug" {
+	if want := prospection.LowEnergyDigestSize + 2; len(lines) != want || lines[1] != "• Renew the passport, due today" {
 		t.Errorf("digest:\n%s\nwant a header, the task first, then the %d reminders", ch.sent[0], prospection.LowEnergyDigestSize)
 	}
 }
@@ -81,7 +81,7 @@ func TestDigest_ADueTaskAndItsUnitsReminderAreOneLine(t *testing.T) {
 		assembleDigest(context.Background(), digestNow, true); err != nil {
 		t.Fatal(err)
 	}
-	want := "Here is 1 thing for today:\n• Renew the passport — Wed 5 Aug"
+	want := "Good morning. You have one thing:\n• Renew the passport, due today"
 	if ch.count() != 1 || ch.sent[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", ch.sent, want)
 	}
