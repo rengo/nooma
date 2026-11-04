@@ -7,7 +7,8 @@
   ("Reminder: <text> — <when>"). ADR-0032 point 4's rule stands and is restored: a reminder says
   its unit as it is now, never through a model call.
 - **Superseded by**: —
-- **Extends** (none of them edited): [ADR-0022](0022-reply-language.md) (every sentence lives in
+- **Extends** (none of them edited): [ADR-0009](0009-scheduler-downtime.md) (the delay note of a
+  late timer moves into the delivered text), [ADR-0022](0022-reply-language.md) (every sentence lives in
   `internal/core/phrase`, per language; the glass box stays English),
   [ADR-0035](0035-nooma-speaks-first-in-the-usual-language.md) (which language a push and the
   digest speak), [ADR-0033](0033-the-model-understands-the-code-acts.md) (the model understands,
@@ -69,7 +70,9 @@ sentences in code. Model wording may return after 1.0, measured on recordings, u
    `timer_rephrase` task is retired: no provider call words a timer. `timers.rendered_text`
    stays in the schema (a published migration is never modified) and is no longer written; the
    decision-log action that recorded a failed rephrasing stays defined so old rows still label.
-   [ADR-0022](0022-reply-language.md)'s task table is read without `timer_rephrase`.
+   [ADR-0009](0009-scheduler-downtime.md)'s note that `rendered_text` mentions the delay now
+   rides in the delivered text instead. [ADR-0022](0022-reply-language.md)'s measurement of
+   which tasks ran is read without `timer_rephrase`.
 8. **`internal/core/voice` is retired**, with its four calibration rows (`reply_phrasing_timeout`,
    `reply_max_sentences`, `reply_min_runes`, `reply_runes_factor`). It has no caller; it stays in
    history (b3af1e82, and #435's branch) for the post-1.0 measurement.

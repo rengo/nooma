@@ -127,7 +127,7 @@ late note). The `timer_rephrase` task, `rephrasePrompt`, the `llm` dependency of
 stays in the schema (published migrations are never modified) and is written `NULL`; the
 `check.timer.rephrase_failed` action constant stays defined so existing `decision_log` rows still
 label in `/ui/activity`. Doc 02 §8's "the LLM rephrases the text" becomes the fixed sentence;
-`rendered_text` is described as no longer written. ADR-0022's task table is an Accepted text and
+`rendered_text` is described as no longer written. ADR-0022's table is a measurement in an Accepted text and
 is not edited; ADR-0064 point 7 says it is read without `timer_rephrase`.
 
 ### D5 — `internal/core/voice` and #433's path: retire
@@ -157,9 +157,13 @@ New invariant **I59** (I56 was ADR-0061's and never got a row; I57 is unassigned
 
 - an exact-text table per surface, both languages, fixed zone and now (§6's examples are its
   rows);
-- a guard: a recording fake provider that fails the test on any task other than `classify`,
-  `relation_evaluation` and `embedding` during a recall, a capture, a correction, a check pass
-  that rings a timer, and a digest.
+- a guard: a recording fake `LLMProvider` that fails the test on any task other than
+  `capture_processing` and `relation_evaluation` (the two tasks `internal/brain` sends for the
+  classification and the relation judge; `classify` is only a `testdata/llm` fixture label, and
+  embedding goes through `EmbeddingProvider`, which the guard leaves alone) during a recall, a capture, a correction, a check pass
+  that rings a timer, and a digest. Each case also asserts the exact pinned text and that the
+  classification was answered (the stored unit carries the model's classification), so a capture
+  degraded by the guard cannot pass on "a reply was sent".
 
 L1 tests in `phrase_test.go` cover `Day`, `When`, `Clock`, `Inline` edge cases: every offset
 -1..2 and 3, year change, hour 0, 1, 13, a day alone, a due day past and future, acronym, name
@@ -181,11 +185,14 @@ reminder/digest tests behind I15, I27 and I39–I44, `test/integration` reply pi
 | 4 | §7, §4 | Digest header, task-due line examples (`Renovar el pasaporte — mar 20 oct` → `, para hoy`), "and N more", the question's wording (§4's "I linked X with Y, are they related?" stays in meaning) |
 | 5 | §5 steps 4-5, §7, §8 | Every confirmation and correction example (`Anotado para el …`, `Movido al …`, `Te aviso ese día a las 09:00`, the timer's `Te aviso el mar 27 oct a las 00:20.`, the recurring `todos los años el 23 de octubre a las 09:00`) |
 
-Also, per link: `docs/07-functional.md`'s examples (lines ~64, 86, 106, 214, 265, 421, descriptive),
+Also, per link: `docs/07-functional.md`'s examples (lines ~64, 86, 106, 214, 265, 421, descriptive; link 3 also
+267-268, "At fire time the provider rewords the reminder"), link 3 also `docs/03-data-model.md:93`
+(`rendered_text`, "LLM rephrasing at fire time", described as no longer written),
 `docs/06-harness.md` §4's I59 row (link 2, grown per link).
 
-ADR bookkeeping, link 1 (the only edits allowed on an Accepted ADR): ADR-0061's and ADR-0032's
-`Superseded by` lines name ADR-0064; ADR-0061's README row becomes `Superseded`.
+ADR bookkeeping landed with this plan (link 0), as precedent fe26b35c did: ADR-0061's `Status`
+and `Superseded by`, ADR-0032's `Superseded by` line for point 4, and ADR-0061's README row. No
+link edits an Accepted ADR.
 
 ## 4. Risks
 
@@ -310,7 +317,7 @@ and a link over 400 is cut before it opens.
 | # | Branch | Content | Impl+docs | Tests | QA |
 |---|---|---|---|---|---|
 | 0 | `plan/warm-replies` | proposal, spec, design, tasks; ADR-0064 (Accepted) | planning | — | — |
-| 1 | `feat/replies-retire-voice` | Delete `internal/core/voice`; doc 02 §5 step 2 rule, §13 rows; ADR-0061/0032 superseded-by lines; README | ~350 (312 pure deletion) | −218 | none (no behavior) |
+| 1 | `feat/replies-retire-voice` | Delete `internal/core/voice`; doc 02 §5 step 2 rule, §13 rows | ~350 (312 pure deletion) | −218 | none (no behavior) |
 | 2 | `feat/replies-days-and-recall` | `Moment`, `Item`, `Day`, `When`, `Clock`, `Inline`, `Recall`; `reply.go` recall branch; I59 row and recall rows | ~260 | ~450 | per link |
 | 3 | `feat/replies-pushes` | `Push`, late note; `render.go` builds an `Item`; the timer's fixed ring (D4b: `rephrase.go` shrinks, `timer_rephrase` retired); doc 02 §7 frame, §8 | ~150 (the rephrase code is mostly deletion) | ~550 (churn) | per link |
 | 4 | `feat/replies-digest` | greeting, header, `DigestLineOf`, due lines, "and N more", question; Today follows | ~170 | ~400 | per link |

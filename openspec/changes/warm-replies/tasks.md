@@ -23,13 +23,15 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
       its README row.
 - [x] 0.2 ADR-0064 `Accepted`; client rulings Q1-Q3 (2026-11-04) folded into the ADR, spec, design
       and these tasks.
+- [x] 0.3 Supersession lines landed here (precedent fe26b35c): ADR-0061 `Status` and `Superseded
+      by`, ADR-0032 `Superseded by` for point 4, README row 0061. ADR-0064 names ADR-0009
+      (`rendered_text`). PM granted `size:exception`: a plan is judged as one piece.
 
 ## Link 1 — `feat/replies-retire-voice` (D5)
 
 - [ ] 1.1 Delete `internal/core/voice` (code and tests). `rg core/voice` finds nothing.
 - [ ] 1.2 Doc 02 §5 step 2: replace the ADR-0061 paragraph with ADR-0064's rule; §13: delete the
-      four `reply_*` rows. ADR-0061 and ADR-0032 `Superseded by` lines; README row 0061 →
-      Superseded.
+      four `reply_*` rows. (The ADR supersession lines landed in link 0.)
 - [ ] 1.3 `scripts/docs-sync.sh` satisfied (core and doc 02 change together); `make check-all`.
 
 ## Link 2 — `feat/replies-days-and-recall` (D1-D4, D6)
@@ -48,8 +50,9 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
       §6 recall rows, both languages, exact text.
 - [ ] 2.6 Doc 06 §4: I59 row. RED L2 `TestI59_RecallAnswerIsBuiltByCode`: the §6 recall rows
       through `channels.RenderReply` from a `CaptureResult`; and
-      `TestI59_RecallCallsNoWordingTask` (recording fake provider: only `classify`,
-      `embedding`).
+      `TestI59_RecallCallsNoWordingTask` (recording fake provider: only `capture_processing`
+      and `relation_evaluation` on `LLMProvider`; the embedder is a separate port). Both assert the exact pinned text and that
+      the classification was answered.
 - [ ] 2.7 GREEN: `phrase` fields and functions (D1); `reply.go` builds `Item`s
       (`recalledLine` → `recallItem`); delete `FoundOne`/`FoundMany`/`List`. Update I22, I26,
       `channel_reply_totality` and integration pins to the new text.
@@ -72,7 +75,8 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
       `timer_rephrase` task and its tests; `rendered_text` written `NULL`; keep the
       `check.timer.rephrase_failed` constant for old rows. Update the timer pins.
 - [ ] 3.6 Doc 02 §7 reminder frame and `phrase` field list; §8 timer ring, §5 language paragraph
-      and order sentence; doc 07 line ~421; `make check-all`.
+      and order sentence; doc 07 lines ~267-268 and ~421; doc 03 line 93 (`rendered_text`);
+      `make check-all`.
 
 ## Link 4 — `feat/replies-digest`
 

@@ -13,9 +13,14 @@ A recall answer, a reminder push, a ringing timer, the digest, a capture confirm
 correction's answer are built by code from what the code found or did. No provider call is made to word them, and
 none of them waits for one.
 
-- **Given** a vault whose providers fail any task but `classify`, `relation_evaluation` and
-  `embedding`, **when** a recall, a capture, a correction, a check pass that rings a timer and a
-  digest run, **then** each reply is sent and no other task was called.
+- **Given** a vault whose language provider answers only the tasks `capture_processing` and
+  `relation_evaluation` (the two the brain sends for classification and the relation judge) and
+  fails any other task (`chat` outside a chitchat, `timer_rephrase`, a wording task), with the
+  embedding provider untouched since it is a separate port, **when** a recall, a capture, a
+  correction, a check pass that rings a timer and a digest run, **then** each reply is sent with
+  the exact pinned text of R7, the classification of the capture and of the correction was
+  answered (the unit is stored as the model classified it, not degraded), and no other task was
+  called. A reply sent from a degraded capture does not satisfy this.
 
 ## R2 — Days and times read as a person says them
 
@@ -72,4 +77,4 @@ text in a conformance test, in both languages.
 ## R8 — No article guessed before an item's words
 
 A frame never puts a gendered article or adjective right before an item's own words. In Spanish,
-an item's words inside a sentence start lower-case unless they open with a name or an acronym.
+an item's words inside a sentence start lower-case unless the first word is an acronym or is written capitalised elsewhere in the item's own title or content (a name the code can see, such as "Pedro" in "Regalo para Pedro"). A name the code cannot see is lowered: "ana cumple años".
