@@ -212,7 +212,7 @@ of a black box.
    the non-urgent items and lets only a few through, and it softens its wording. This is the
    product rule in [doc 00](00-vision.md): Nooma looks after your *load*, not your feelings.
    The digest greets you and counts its lines ("Buen día. Tenés 2 cosas:"), then says each with
-   its day as a person says it ("• Turno con el oculista, hoy a las 11:00", "• Renovar el
+   its day as a person says it ("• Tomar las pastillas, hoy", "• Renovar el
    pasaporte, era para ayer"); the code writes every word, no model does.
    A task with a due date ("mañana renuevo el pasaporte") rings no reminder: the reply says so
    ("Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana.", with its hour,

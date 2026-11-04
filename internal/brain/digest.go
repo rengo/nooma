@@ -667,7 +667,7 @@ func composeDigest(set phrase.Set, lines []digestLine, keep int, asks []string, 
 		b.WriteString(set.AskAgain + "\n" + strings.Join(asks, "\n"))
 	}
 	// The goal check-in, its own paragraph after everything ranked, and the
-	// whole message when it is all the morning has to say.
+	// greeting's only company when it is all the morning has to say.
 	if goal != "" {
 		b.WriteString("\n\n" + goal)
 	}

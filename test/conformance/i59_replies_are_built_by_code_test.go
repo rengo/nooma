@@ -442,7 +442,10 @@ func (v *i59DigestVault) digest() string {
 // languages: the greeting and the count, one line per thing with its day as a
 // person says it, a task past its due day as "era para ayer", and the relation
 // question on a line of its own after "una pregunta más". The provider answers
-// nothing.
+// nothing. The block of check-ins asked again ("Te pregunto de nuevo:") is not a
+// row here: it needs an open check-in history this fixture does not build, and
+// its exact bytes in both languages are pinned by
+// TestRenderDigest_ReasksFollowTheDaysItems in internal/brain.
 func TestI59_DigestIsBuiltByCode(t *testing.T) {
 	for _, tc := range []struct {
 		name, lang, want string

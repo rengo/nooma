@@ -179,7 +179,7 @@ func TestI51_AStagnantGoalIsAskedAndAnsweredAtItsCadence(t *testing.T) {
 		t.Fatalf("%d goal check-ins armed on night 0, want 1", n)
 	}
 	// The morning digest asks it, in the user's language, as its own item:
-	// nothing else is due, so the digest is that question alone.
+	// nothing else is due, so the digest is the greeting and that question.
 	if sent := v.morning(t, 0); len(sent) != 1 || sent[0] != i51Digest {
 		t.Fatalf("the morning digest sent %q, want exactly %q", sent, i51Digest)
 	}

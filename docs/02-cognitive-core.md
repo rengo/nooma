@@ -1996,8 +1996,9 @@ box can audit it):
   I59), never by a model. It opens with a morning greeting and the count of its lines (`Buen día.
   Tenés 3 cosas:` / `Good morning. You have 3 things:`; one is `Tenés una cosa:` / `You have one
   thing:`). Each line is its unit's words as stored, so a bullet keeps its capital, then its day
-  and time as a person says them: `• Turno con el oculista, hoy a las 11:00`, `• Tomar las
-  pastillas, hoy`. A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and
+  as a person says it, a day alone (the digest is a morning's list, so it carries no hour):
+  `• Tomar las pastillas, hoy`, `• Cumpleaños de Ana, mañana`. Today's preview, which does show
+  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and
   past it `era para ayer` / `was due yesterday`. The check-ins asked again and the goal
   check-in keep their wording (client, 2026-10-16). The relation question follows on a line of its
   own after `Una pregunta más:` / `One more question:`. A digest with a question and nothing
@@ -2170,7 +2171,7 @@ state; `m3b` implements the store-layer round trip.
   scan never fires it**: it would go out alone, as a late reminder. **The morning digest asks
   it as its own item, as it asks the relation question.**
   - It is appended after the ranked items and the check-ins asked again: at most one a
-    morning, the longest waiting first. It is the whole message when nothing else is due.
+    morning, the longest waiting first. When nothing else is due the message is the greeting and this question.
   - It is never asked on a low-energy morning, and waits armed for one that is not.
   - Only once the digest is sent is it fired and surfaced (`check.digest.goal_asked`), so an
     answer can reach it. Unanswered, it closes at the third morning, as ignored.

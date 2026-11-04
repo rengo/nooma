@@ -962,3 +962,24 @@ func TestRenderDigest_ReasksFollowTheDaysItems(t *testing.T) {
 		t.Errorf("English digest =\n%q\nwant\n%q", got, want)
 	}
 }
+
+// TestRenderDigest_GoalAndQuestionWithNoLinesKeepsOneMore: a morning with no
+// lines and no re-asks, but a goal check-in and a relation question, opens with
+// the greeting alone, then the goal, then the question as "one more": the goal
+// is already something before the question, so the question is not the only
+// one. Without the goal in that condition the "one more" would vanish.
+func TestRenderDigest_GoalAndQuestionWithNoLinesKeepsOneMore(t *testing.T) {
+	q := ports.RelationQuestion{FromContent: "plan", ToContent: "budget"}
+	es := phrase.For(classify.LanguageES)
+	got, _, _, _ := digestMessageGoal(es, nil, nil, nil, nil, &q, es.Goal("correr"))
+	want := "Buen día.\n\n¿Seguís con «correr»?\n\nUna pregunta más:\nRelacioné «plan» con «budget». ¿Tienen que ver?"
+	if got != want {
+		t.Errorf("Spanish digest =\n%q\nwant\n%q", got, want)
+	}
+	en := sentences()
+	got, _, _, _ = digestMessageGoal(en, nil, nil, nil, nil, &q, en.Goal("running"))
+	want = "Good morning.\n\nStill on \"running\"?\n\nOne more question:\nI linked “plan” with “budget”. Are they related?"
+	if got != want {
+		t.Errorf("English digest =\n%q\nwant\n%q", got, want)
+	}
+}
