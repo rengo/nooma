@@ -77,6 +77,8 @@ Chained PRs: yes (5 links + plan). Decision needed before apply: none; Q1-Q3 are
 - [ ] 3.5 GREEN: `renderTimer` builds the sentence (`Set.TimerRing`), drops `rephrasePrompt`, the
       `timer_rephrase` task and its tests; `rendered_text` written `NULL`; keep the
       `check.timer.rephrase_failed` constant for old rows. Update the timer pins.
+      Remove the §5 "ringing timer is still reworded by the model" exception clause together
+      with the §8 sentence that says so.
 - [ ] 3.6 Doc 02 §7 reminder frame and `phrase` field list; §8 timer ring, §5 language paragraph
       and order sentence; doc 07 lines ~267-268 and ~421; doc 03 line 93 (`rendered_text`);
       `make check-all`.
