@@ -88,7 +88,7 @@ func (r correctionRunner) attemptName(ctx context.Context, u unit.Unit, action p
 		return "", "", fmt.Errorf("naming: record %s for unit %q: %w", action, u.ID, err)
 	}
 	if r.triggers != nil {
-		if err := r.retextReminders(ctx, u, *decoded, now); err != nil {
+		if err := r.retextReminders(ctx, u, *decoded, now, retextAfterNaming(action)); err != nil {
 			return "", "", err
 		}
 	}

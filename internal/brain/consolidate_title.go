@@ -16,9 +16,12 @@ import (
 // the step capture and correction use, so the same rule text, the same
 // ResolveTitle and the same "never over a title" write apply.
 //
-// A unit the model could not name is logged as consolidate.title.unnamed and the
-// pass goes on: a provider error is one unit's, not the night's. A store or log
-// failure is not, and aborts the phase as it does every other. With no provider
+// A unit that could not be named is logged as consolidate.title.unnamed and the
+// pass goes on: a provider error, an unusable answer and a failed title write are
+// one unit's, not the night's. A failed read of the candidates or their reminders,
+// a failed log row or a failed rewrite of a reminder's text is not, and aborts the
+// phase as it does every other. A reminder rewritten after the title is a
+// consolidate.title.reminder_retexted row, never a correction's. With no provider
 // the phase writes nothing, as connect does.
 func (r consolidateRunner) title(ctx context.Context, now time.Time) error {
 	if r.namer == nil {

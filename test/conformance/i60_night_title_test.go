@@ -194,6 +194,23 @@ func TestI60_NightWritesOnlyTheTitleAndLogsIt(t *testing.T) {
 			t.Errorf("reminder says %q, want the new title", tr.Payload.ActionText)
 		}
 	}
+	// The exact set of rows the night wrote: the title, then the rewrite of the
+	// reminder's text under the naming's own action. Never a correction's: the
+	// user corrected nothing, and /ui/activity would say "Reminder moved".
+	all, err := v.decisions.Since(context.Background(), time.Time{}, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actions []ports.DecisionAction
+	for _, d := range all {
+		actions = append(actions, d.Action)
+	}
+	if want := []ports.DecisionAction{ports.ActionTitleNamed, ports.ActionTitleReminderRetexted}; !reflect.DeepEqual(actions, want) {
+		t.Fatalf("the night wrote rows %v, want exactly %v", actions, want)
+	}
+	if c := string(all[1].Context); !strings.Contains(c, `"action_text"`) || !strings.Contains(c, "content-u1.") || !strings.Contains(c, "Reunión con Juan") {
+		t.Errorf("retext row %s, want the action_text change from the old text to the title", c)
+	}
 }
 
 // TestI60_NightProviderFailureDoesNotAbortThePass: one unit's provider error and

@@ -496,3 +496,38 @@ func TestI60_AFailedReminderRewriteAfterNamingIsReportedAndTheTitleStays(t *test
 		t.Errorf("unit title = %q, %v; want the written title to stay", got.Title, gerr)
 	}
 }
+
+// TestI60_ACorrectionThatNamesRewritesReminderTextUnderTheNamingsOwnAction: a date
+// correction names an untitled unit, and the reminder it moved then says the title.
+// That second rewrite is the naming's: one correction.title.reminder_retexted row with only
+// action_text, and the one correction.reminder.moved row is the date's own.
+func TestI60_ACorrectionThatNamesRewritesReminderTextUnderTheNamingsOwnAction(t *testing.T) {
+	llm := &i60LLM{classify: i60DateOnlyCorrection, title: `{"title":"Reunión con Juan"}`}
+	v := newI60(t, llm)
+	u, original := i60Meeting()
+	if err := v.units.Create(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	unitID := u.ID
+	if err := v.triggers.Create(context.Background(), ports.Trigger{ID: "t1", UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: "Reunión del jueves", About: original}, FireAt: &original}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := v.svc.Capture(context.Background(), brain.CaptureInput{Text: "no, es el viernes", Channel: "ui", ReferentID: "meeting"}); err != nil {
+		t.Fatalf("Capture: %v", err)
+	}
+
+	if rows := v.rows(t, ports.ActionCorrectionReminderMoved); len(rows) != 1 || !strings.Contains(string(rows[0].Context), `"event_at"`) {
+		t.Errorf("correction.reminder.moved rows = %d, want the one date move and nothing for the naming", len(rows))
+	}
+	rows := v.rows(t, ports.ActionCorrectionTitleReminderRetexted)
+	if armed := v.triggers.All(); len(rows) == 0 || len(rows) != len(armed) {
+		t.Fatalf("%d correction.title.reminder_retexted rows for %d armed reminders, want one each", len(rows), len(armed))
+	}
+	for _, r := range rows {
+		if c := string(r.Context); !strings.Contains(c, `"fields":["action_text"]`) || !strings.Contains(c, "Reunión con Juan") {
+			t.Errorf("retext row %s, want only action_text changed to the title", c)
+		}
+	}
+}

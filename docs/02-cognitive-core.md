@@ -1150,7 +1150,12 @@ command, it is answered once.
      `correction.reminder.moved` row whose only field is `action_text`. It never changes when the
      reminder fires, and a row is compared with the unit's text *now*, not with what it said
      before, so a correction the unit already holds repairs a row a failed step left stale. A
-     reminder moved with a date takes the unit's text now by the same rule.
+     reminder moved with a date takes the unit's text now by the same rule. The rewrite that
+     follows Nooma naming a unit is not a correction's: it is a
+     `correction.title.reminder_retexted` row (`capture.title.reminder_retexted` at capture,
+     where naming precedes arming and none exists to rewrite;
+     `consolidate.title.reminder_retexted` at night), with the same single `action_text` field
+     and the same order, so /ui/activity says Nooma named the entry, never "Reminder moved".
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`
@@ -1681,12 +1686,17 @@ boot catch-up — the two are one body of work behind two triggers.
    first; ties by id. Each is named by the capture step (the `unit_title` task through the
    provider bound to `capture_processing`, `ResolveTitle`, written only where the title is
    still `NULL`, so a title written meanwhile is never overwritten and a lost race logs
-   nothing) and its armed reminders then say the title. A title written is a
+   nothing) and its armed reminders then say the title, each rewrite recorded first as a
+   `consolidate.title.reminder_retexted` row (field `action_text` only). A title written is a
    `consolidate.title.named` row with `previous` null and the `next` title; a unit the model
    was asked about and gave nothing usable for (provider error included) is a
    `consolidate.title.unnamed` row with its reason, keeps its slot, and is tried again the next
    night, one call a night that is accepted over an attempt counter. A failure on one unit
-   never ends the pass; a store or log failure does, as in every phase. With no provider
+   never ends the pass: a provider error, an unusable answer and a failed title write (a store
+   error in `NameIfUntitled`) are each logged `consolidate.title.unnamed` and the pass
+   continues. A failed read of the candidates or of a unit's reminders, a failed
+   `decision_log` row and a failed rewrite of a reminder's text end it, as in every phase
+   (the title, if already written, stays). With no provider
    bound the phase writes nothing. Content, instants and status are never touched. It sits
    before `learn`, which reads what the others wrote; it is a ninth phase beside the eight
    [ADR-0005](adr/0005-v1-scope.md)'s v1 scope names, a scope statement and not a supersession.
