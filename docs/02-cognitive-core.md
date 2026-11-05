@@ -690,11 +690,12 @@ command, it is answered once.
      through the provider bound to `capture_processing`; it words no reply (I59), it names a
      stored field. A failure of the provider or an unusable answer (read leniently, as a
      capture's classification is: the title is salvaged from a truncated reply) leaves the unit
-     untitled and the capture whole; an undated unit is not named here. The one failure that
+     untitled and the capture whole, and so does a failed title write (a store error in
+     `NameIfUntitled`); an undated unit is not named here. The one failure that
      does not leave it whole: the title is written before its row, since only the write says
-     whether this call won, so if the `decision_log` row (or the later rewrite of a
-     correction's reminder text) then fails, the title stays written and the error is returned
-     to the caller rather than hidden.
+     whether this call won, so if the `decision_log` row (or the later rewrite of the
+     reminder text, on either path; it is a no-op at capture) then fails, the title stays
+     written and the error is returned to the caller rather than hidden.
      Each write is a `capture.title.named` row with `previous` null and the `next` title.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",

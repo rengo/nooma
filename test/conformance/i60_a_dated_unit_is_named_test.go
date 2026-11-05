@@ -71,6 +71,26 @@ var i60Now = time.Date(2026, 11, 4, 10, 0, 0, 0, time.FixedZone("ART", -3*60*60)
 
 func newI60(t *testing.T, llm *i60LLM) i60Vault {
 	t.Helper()
+	return newI60Logged(t, llm, nil)
+}
+
+// failingNamingLog refuses only the rows the naming step writes, so a capture
+// or correction's own rows land and the title row alone fails.
+type failingNamingLog struct {
+	*memrepo.DecisionLog
+}
+
+func (l failingNamingLog) Record(ctx context.Context, d ports.Decision) error {
+	if d.Action == ports.ActionCaptureTitleNamed || d.Action == ports.ActionCorrectionTitleNamed {
+		return errors.New("log down")
+	}
+	return l.DecisionLog.Record(ctx, d)
+}
+
+// newI60Logged is newI60 with the brain writing through wrap(the vault's log)
+// when wrap is set; the vault still reads the underlying log back.
+func newI60Logged(t *testing.T, llm *i60LLM, wrap func(*memrepo.DecisionLog) ports.DecisionLog) i60Vault {
+	t.Helper()
 	llm.t = t
 	v := i60Vault{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: memrepo.NewDecisionLog(), llm: llm}
 	embeddings := memrepo.NewEmbeddings()
@@ -78,8 +98,12 @@ func newI60(t *testing.T, llm *i60LLM) i60Vault {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var log ports.DecisionLog = v.decisions
+	if wrap != nil {
+		log = wrap(v.decisions)
+	}
 	v.svc = brain.NewCaptureService(fixedClock{now: i60Now}, &counterIDs{}, v.units, embeddings, memrepo.NewLexical(),
-		memrepo.NewRelations(), v.decisions, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
+		memrepo.NewRelations(), log, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
 		brain.NewIndex(idx), memrepo.NewSignals(), v.triggers, memrepo.NewTimers(), 0.5, nil)
 	return v
 }
@@ -375,5 +399,46 @@ func TestI60_ACorrectionThatFailsToNameStillCorrects(t *testing.T) {
 	got, err := v.units.ByID(context.Background(), "meeting")
 	if err != nil || got.Title != "" || got.EventAt == nil || got.EventAt.Day() != 6 {
 		t.Errorf("unit title %q, event_at %v, %v; want it moved with the title still cleared", got.Title, got.EventAt, err)
+	}
+}
+
+func wrapFailingNaming(l *memrepo.DecisionLog) ports.DecisionLog { return failingNamingLog{l} }
+
+// TestI60_AFailedTitleRowAtCaptureIsReportedAndTheTitleStays: the title is
+// written before its row (only the write says whether this call won), so a row
+// that then fails leaves the title written and the error reaches the caller.
+func TestI60_AFailedTitleRowAtCaptureIsReportedAndTheTitleStays(t *testing.T) {
+	llm := &i60LLM{classify: i60DroppedTitle, title: `{"title":"Reunión con Juan"}`}
+	v := newI60Logged(t, llm, wrapFailingNaming)
+
+	// The failed capture returns no result; the first id the vault hands out is
+	// the unit's.
+	_, err := v.svc.Capture(context.Background(), brain.CaptureInput{Text: "Tengo reunión con Juan hoy a las 22:30", Channel: "cli"})
+	if err == nil {
+		t.Fatal("Capture error = nil, want the failed title row returned")
+	}
+	u, gerr := v.units.ByID(context.Background(), "id-1")
+	if gerr != nil || u.Title != "Reunión con Juan" {
+		t.Errorf("unit title = %q, %v; want the written title to stay", u.Title, gerr)
+	}
+}
+
+// TestI60_AFailedTitleRowAtCorrectionIsReportedAndTheTitleStays is the same on
+// the correction path.
+func TestI60_AFailedTitleRowAtCorrectionIsReportedAndTheTitleStays(t *testing.T) {
+	llm := &i60LLM{classify: i60DateOnlyCorrection, title: `{"title":"Reunión con Juan"}`}
+	v := newI60Logged(t, llm, wrapFailingNaming)
+	u, _ := i60Meeting()
+	if err := v.units.Create(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := v.svc.Capture(context.Background(), brain.CaptureInput{Text: "no, es el viernes", Channel: "ui", ReferentID: "meeting"})
+	if err == nil {
+		t.Fatal("Capture error = nil, want the failed title row returned")
+	}
+	got, gerr := v.units.ByID(context.Background(), "meeting")
+	if gerr != nil || got.Title != "Reunión con Juan" {
+		t.Errorf("unit title = %q, %v; want the written title to stay", got.Title, gerr)
 	}
 }
