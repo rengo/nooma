@@ -1,0 +1,53 @@
+# Tasks — untitled-units
+
+Stacked to main, one link at a time (design §5). Strict TDD: every RED test is written and watched
+failing for the stated reason before its GREEN code. `make check-all` before every push. A link
+measured over 400 impl+docs is cut before it opens.
+
+## Review Workload Forecast
+
+| Link | Impl+docs | Tests | Risk |
+|---|---|---|---|
+| 0 | plan only | none | None |
+| 1 | ~170 | ~180 | Low: pure phrase plus four callers |
+| 2 | ~300 | ~250 | Medium: a new model task and a decision-log action |
+| 3 | ~260 | ~220 | Medium: an unattended nightly write |
+
+Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are ruled (design §6).
+
+## Link 0 — `plan/untitled-units`
+
+- [x] 0.1 proposal.md, spec.md (PM-owned drafts), design.md, tasks.md.
+- [x] 0.2 ADR-0065 `Accepted`, README row; client rulings of 2026-11-05 folded into design.
+
+## Link 1 — `feat/untitled-fallback` (D2)
+
+- [ ] 1.1 RED L1 `phrase.ItemOf`: titled as today; no title + instant is `Unnamed`; no title and
+      no instant keeps the content; `Names` built by it (replaces `NamesOf`, `pastFirstWord`).
+- [ ] 1.2 RED L1 exact text of every unnamed frame in ES and EN (push, recall one ahead, recall
+      one past, list line), today / tomorrow / due / past, the late note.
+- [ ] 1.3 RED L2 I59 extension: an untitled dated unit's push, recall and digest line contain
+      neither its content nor an ISO date.
+- [ ] 1.4 GREEN `Set` fields and `ItemOf`; the four callers (`pushItem`, `recallItem`,
+      `dueLines`, Today). Completeness test covers the new fields.
+- [ ] 1.5 Doc 02 §5 recall, §8 push, digest and Today: the unnamed frames. `make check-all`.
+- [ ] 1.6 Mutation probe: route an unnamed item back to its content; a named test goes red.
+
+## Link 2 — `feat/untitled-naming` (D1, D4 capture and correction, ADR-0065 in force)
+
+- [ ] 2.1 RED L1 `classify.TitleRule`, `BuildTitlePrompt`, `DecodeTitle`.
+- [ ] 2.2 RED L3 `UnitRepo.NameIfUntitled` on memrepo and SQLite (title still NULL only).
+- [ ] 2.3 RED L2 I60: capture with a dropped title is named before arming; provider failure
+      leaves NULL and captures; a date-only correction ends titled; a concurrent title survives.
+- [ ] 2.4 GREEN `nameUnit`, the two call sites, decision actions `unit.title.named`.
+- [ ] 2.5 Doc 02 §5 (title paragraph, "the title follows the body"). Mutation: drop the NULL guard.
+
+## Link 3 — `feat/untitled-night` (D3, D4 night)
+
+- [ ] 3.1 RED L1 `consolidation.SelectToName` order, cut, ties, empty.
+- [ ] 3.2 RED L3 `UnitRepo.UntitledDated`.
+- [ ] 3.3 RED L2 I60 night: cap and order, `previous`/`next` logged, titled units, content and
+      instants untouched, a provider error does not abort, no provider writes nothing.
+- [ ] 3.4 GREEN the `title` phase after `learn`; `consolidate.title.*` actions.
+- [ ] 3.5 Doc 02 §9 and §13 (`title_backfill_per_pass` = 50), doc 03 `units.title`, doc 06 §4
+      I60, doc 07. Mutation: reverse the order.

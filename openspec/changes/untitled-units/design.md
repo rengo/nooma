@@ -1,8 +1,8 @@
 # Design — untitled-units
 
-> **nooma-dev-owned.** Base: `origin/main` at 62d579fc (2026-11-04), plus PR #440
-> (`feat/replies-pushes`, 1203b438) for the push code. No proposal or spec exists yet; the PM's
-> direction of 2026-11-04 stands in for them. Doc 02 governs; every doc 02 change below lands in
+> **nooma-dev-owned.** Base: `origin/main` at dd6b6a8e (2026-11-05), warm-replies merged and
+> archived. The client's rulings of 2026-11-05 (ADR-0065 accepted; Q1, Q2) are folded in; proposal.md
+> and spec.md are PM-owned drafts from them. Doc 02 governs; every doc 02 change below lands in
 > the same PR as its code.
 
 ## 1. The defect
@@ -95,22 +95,20 @@ by exact texts in I59):
 The day and time come from the same `When`/`said` the titled frames use, so due days read
 `para mañana` / `due tomorrow` as D3 of warm-replies says. The late note still appends.
 
-Trade-off: the user learns that something is due and when, not what. The alternative is the
-generic sentence followed by the content as a quote (`… Lo anotaste así: «Tengo reunión con Juan
-el 2026-11-04 a las 22:30.»`): it says what, but repeats the date and can quote a stale "mañana".
-A third option, cutting the content at its first date token, needs per-language glue-word
-stripping ("el", "a las", "on") and still reads in the first person ("Acordate: tengo
-reunión…"); it is a free-text parser of the kind ADR-0064's context rejected. **Recommended: the
-table above**, since D1 makes the case rare. The PM decides (Q1).
+Ruled (client, 2026-11-05): the plain sentence alone, no content quoted, texts exactly as in the
+table. Trade-off accepted: the user learns that something is due and when, not what. The rejected alternatives were
+the sentence followed by the content quoted (repeats the date, can quote a stale "mañana") and
+cutting the content at its first date token (a free-text parser of the kind ADR-0064's context
+rejects); D1 makes the case rare.
 
 Out of scope, recorded: a closed task's confirmation (`task_close.go`) and a correction's answer
 say `shownText` with no instant beside it, so they do not repeat a date; they can still state a
-content's stale relative word. They get `ItemOf` for free if Q1 is answered "never the content".
+content's stale relative word. They are not touched by slice 1.
 
 ### D3 — The night's `title` phase
 
 - Core (`internal/core/consolidation`): `SelectToName(cands []Untitled, now time.Time, limit
-  int) []string`, pure. Order: units with a pending trigger, soonest fire first; then future
+  int) []string`, pure. Past instants are named too (ruled, Q2). Order: units with a pending trigger, soonest fire first; then future
   instants, nearest first; then past instants, most recent first. Ties by id. Cut at `limit`.
 - Calibration: `title_backfill_per_pass` = 50 (doc 02 §13). It bounds the night's provider cost;
   a production vault with hundreds of legacy units drains over a few nights, the units that will
@@ -138,7 +136,7 @@ goes from NULL to a value; content, instants and triggers' instants are untouche
 
 ### D5 — ADR
 
-**Yes: a new ADR-0065**, "A dated unit is named", extending ADR-0064, ADR-0032 and ADR-0033 and
+**ADR-0065, Accepted by the client on 2026-11-05**, "A dated unit is named", extending ADR-0064, ADR-0032 and ADR-0033 and
 superseding none. It records what no Accepted ADR says: the night makes an unattended model call
 that writes a field of the user's units (a new kind of nightly write, beside relations and
 beliefs); a dated unit is not said by its content beside its instant; and the fallback frames.
@@ -174,16 +172,17 @@ turn a named test red.
 
 | # | Branch | Content | Est. impl+doc / tests | Depends on |
 |---|---|---|---|---|
-| 1 | `fix/untitled-units-fallback` | D2: `ItemOf`, unnamed frames, the four callers, I59 extension, doc 02 frame lines | ~170 / ~180 | #440 merged |
-| 2 | `feat/untitled-units-naming` | D1 + D4 for capture and correction, ADR-0065, doc 02 §5 | ~300 / ~250 | 1 |
-| 3 | `feat/untitled-units-night` | D3 + its D4 rows, repo `UntitledDated`, §9/§13, doc 03, I60 night cases | ~260 / ~220 | 2 |
+| 1 | `feat/untitled-fallback` | D2: `ItemOf`, unnamed frames, the four callers, I59 extension, doc 02 frame lines | ~170 / ~180 | main |
+| 2 | `feat/untitled-naming` | D1 + D4 for capture and correction, ADR-0065, doc 02 §5 | ~300 / ~250 | 1 |
+| 3 | `feat/untitled-night` | D3 + its D4 rows, repo `UntitledDated`, §9/§13, doc 03, I60 night cases | ~260 / ~220 | 2 |
 
 Slice 1 alone fixes the reported symptom on main and on the production vault (the replies stop
 repeating dates) at the cost of vaguer items; slices 2-3 then make the vague text rare.
 
-## 6. Open questions for the PM
+## 6. Rulings (client, 2026-11-05)
 
-- **Q1** — Fallback for a dated unit with no title: the generic sentence alone (recommended), or
-  the generic sentence followed by the content quoted as written?
-- **Q2** — Should the night also name past dated units (they reach recall as "Tenías…"), or only
-  units still ahead or with a pending reminder? Recommended: all, ahead first, under the cap.
+- **Q1** — The fallback for a dated unit with no title is the plain sentence only, no content
+  quoted (D2).
+- **Q2** — The night names past dated units too, future first, under the cap (D3).
+
+No open questions remain.
