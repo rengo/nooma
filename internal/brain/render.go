@@ -155,7 +155,7 @@ func pushItem(u unit.Unit, t ports.DueTrigger, now time.Time) phrase.Item {
 // instant and no title is unnamed: it is not said by its content, which
 // already carries the date (ADR-0065 point 5).
 func itemFor(u unit.Unit, when *phrase.Moment) phrase.Item {
-	it := phrase.ItemOf(u.Title, u.Content, when)
+	it := phrase.ItemOf(u.Title, u.Content, when, u.EventAt != nil || u.DueAt != nil)
 	it.Text = clip(it.Text)
 	return it
 }

@@ -8,7 +8,7 @@ import "testing"
 func TestItemOf(t *testing.T) {
 	when := moment(at(11, 4, 22, 30), false, false)
 
-	titled := ItemOf("Reunión con Juan", "tengo reunión con Juan el 2026-11-04 a las 22:30", when)
+	titled := ItemOf("Reunión con Juan", "tengo reunión con Juan el 2026-11-04 a las 22:30", when, true)
 	if titled.Unnamed || titled.Text != "Reunión con Juan" || titled.When != when {
 		t.Errorf("titled item = %+v, want its title, named, with its instant", titled)
 	}
@@ -16,14 +16,22 @@ func TestItemOf(t *testing.T) {
 		t.Errorf("titled Names = %q, want %q", titled.Names, want)
 	}
 
-	unnamed := ItemOf("", "tengo reunión con Juan el 2026-11-04 a las 22:30", when)
+	unnamed := ItemOf("", "tengo reunión con Juan el 2026-11-04 a las 22:30", when, true)
 	if !unnamed.Unnamed || unnamed.Text != "" {
 		t.Errorf("untitled dated item = %+v, want Unnamed and none of the content", unnamed)
 	}
 
-	undated := ItemOf("", "La clave del wifi es 1234.", nil)
+	undated := ItemOf("", "La clave del wifi es 1234.", nil, false)
 	if undated.Unnamed || undated.Text != "La clave del wifi es 1234." {
 		t.Errorf("untitled undated item = %+v, want its content, named", undated)
+	}
+
+	// A recurring reminder with no title and no instant of its own is pushed
+	// with a day the reply computed: that day is the reply's, not the unit's,
+	// and the unit's words are all it has.
+	recurring := ItemOf("", "tomar las pastillas", moment(at(11, 4, 0, 0), true, false), false)
+	if recurring.Unnamed || recurring.Text != "tomar las pastillas" || recurring.When == nil {
+		t.Errorf("untitled undated unit with the reply's day = %+v, want its content, named, with the day", recurring)
 	}
 }
 

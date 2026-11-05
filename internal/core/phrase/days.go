@@ -31,13 +31,15 @@ type Item struct {
 }
 
 // ItemOf is the item a reply names for a unit: its title, else its content. A
-// unit with an instant and no title is Unnamed; one with neither keeps its
-// content, which states no instant, so nothing repeats.
-func ItemOf(title, content string, when *Moment) Item {
+// unit that carries an instant of its own (dated: an event_at or a due_at) and
+// has no title is Unnamed: its content embeds that date. One that does not keeps
+// its content, whatever day the reply computes for it (a recurring reminder's
+// words are all it has), so nothing is lost.
+func ItemOf(title, content string, when *Moment, dated bool) Item {
 	it := Item{Text: title, When: when, Names: NamesOf(title, content)}
 	switch {
 	case it.Text != "":
-	case when != nil:
+	case when != nil && dated:
 		it.Unnamed = true
 	default:
 		it.Text = content

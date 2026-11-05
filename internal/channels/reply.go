@@ -243,7 +243,7 @@ func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
 		local := at.In(zone)
 		when = &phrase.Moment{At: local, DayOnly: atMidnight(local), Due: due}
 	}
-	return phrase.ItemOf(u.Title, u.Content, when)
+	return phrase.ItemOf(u.Title, u.Content, when, u.EventAt != nil || u.DueAt != nil)
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.

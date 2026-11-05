@@ -860,12 +860,12 @@ command, it is answered once.
      turno con el oculista el jueves 26 de noviembre a las 8:30." / "You had “Dinner with Ana”
      yesterday at 21:00." A `due_at` is said as a due day: "Tenés anotado renovar el pasaporte
      para mañana." One with no instant quotes what is noted: "Tenés anotado: la clave del wifi
-     es 1234." **A unit with an instant and no title is never said by its content**
+     es 1234." **A unit with an `event_at` or a `due_at` of its own and no title is never said by its content**
      ([ADR-0065](adr/0065-a-dated-unit-is-named.md), `phrase.ItemOf`): the content already carries
      the date, so saying both repeated it. It is said as something noted at that instant, with none
      of the unit's words: "Tenés algo anotado el jueves 26 de noviembre a las 8:30." / "You had
      something noted yesterday at 9:00."; in a list, "• Algo anotado, hoy a las 22:30" /
-     "• Something noted, today at 22:30". Several are a line with the count, then a bullet each with its day ("Tenés 3 cosas
+     "• Something noted, today at 22:30". A title-less unit with neither keeps its words. Several are a line with the count, then a bullet each with its day ("Tenés 3 cosas
      anotadas:" / "• Cena con Ana, el viernes 13 de noviembre a las 21:00"; a past due day reads
      "era para ayer" / "was due yesterday"). Nothing admitted is "No tengo nada anotado sobre
      eso." / "I don't have anything noted about that.", and never names a topic, an item or a
@@ -1995,9 +1995,11 @@ box can audit it):
   clock's zone, said as a person says them (§5 step 2, ADR-0064): `Acordate: turno con el
   oculista, hoy a las 11:00.` / `Don't forget: Appointment with the optician, today at 11:00.`;
   a day alone has no time (`Acordate: tomar las pastillas, hoy.`) and a unit with no instant
-  says its words alone (`Acordate: llamar a mamá.`). A unit with an instant and no title is not
-  said by its content (ADR-0065): `Acordate: tenés algo anotado hoy a las 22:30.` / `Don't forget:
-  you have something noted today at 22:30.` Never a model call. A late push appends
+  says its words alone (`Acordate: llamar a mamá.`). A unit with an `event_at` or a `due_at` and no
+  title is not said by its content (ADR-0065): `Acordate: tenés algo anotado hoy a las 22:30.` / `Don't forget:
+  you have something noted today at 22:30.` The day a pass computes for a
+  recurring unit is the reply's, not the unit's: a recurring `Tomar las pastillas` with no title
+  and no `event_at` keeps its words (`Acordate: tomar las pastillas, hoy.`). Never a model call. A late push appends
   `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` Words that
   already end in `?`, `!` or a clipped `…` get no second period. A digest line is the same words
   without the push's frame (below). A recurring one
@@ -2013,7 +2015,7 @@ box can audit it):
   thing:`). Each line is its unit's words as stored, so a bullet keeps its capital, then its day
   as a person says it, a day alone (the digest is a morning's list, so it carries no hour):
   `• Tomar las pastillas, hoy`, `• Cumpleaños de Ana, mañana`. Today's preview, which does show
-  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A line for a unit with no title is `• Algo anotado, hoy` /
+  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A line for a unit with a `due_at` and no title is `• Algo anotado, hoy` /
   `• Something noted, today` (ADR-0065). A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and
   past it `era para ayer` / `was due yesterday`. The check-ins asked again and the goal
   check-in keep their wording (client, 2026-10-16). The relation question follows on a line of its

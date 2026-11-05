@@ -759,3 +759,28 @@ func TestI59_UntitledDatedUnitIsNeverSaidByItsContent(t *testing.T) {
 		}
 	})
 }
+
+// TestI59_UntitledRecurringUnitWithNoInstantKeepsItsWords: the unit is dated
+// for the fallback only when it carries an event_at or a due_at of its own.
+// A recurring reminder with no title and neither (the commonest old shape) is
+// pushed with the day the pass computes, but that day is the reply's, not the
+// unit's: its words are all it has, so the push says them, not "something
+// noted" (ADR-0065 point 5).
+func TestI59_UntitledRecurringUnitWithNoInstantKeepsItsWords(t *testing.T) {
+	daily := prospection.RuleYearly
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)
+	for _, tc := range []struct{ lang, content, want string }{
+		{"es", "tomar las pastillas", "Acordate: tomar las pastillas, hoy."},
+		{"en", "take the pills", "Don't forget: take the pills, today."},
+	} {
+		u, tr := i59Reminder("u1", "", tc.lang, time.Date(2026, 10, 29, 0, 0, 0, 0, i59Zone),
+			&daily, &prospection.Anchor{Month: now.Month(), Day: now.Day()}, 120)
+		u.Content, u.EventAt, u.DueAt = tc.content, nil, nil
+		fire := now.Add(-time.Minute)
+		tr.FireAt = &fire
+		sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+		if len(sent) != 1 || sent[0] != tc.want {
+			t.Errorf("push (%s) sent %q, want exactly %q", tc.lang, sent, tc.want)
+		}
+	}
+}
