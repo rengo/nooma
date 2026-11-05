@@ -58,6 +58,15 @@ import (
 // repeating a correction repairs a reminder a failed step left behind
 // (I29).
 func PlanEdit(c classify.Classification, target unit.Unit, zone *time.Location) ([]Edit, bool) {
+	// A bare date on the unit's own local day is the unit's own instant, read
+	// the way MovesDate reads it: kept as midnight it would drop a time of day
+	// the user never touched.
+	if echoes(c.EventAt, c.EventAtDayOnly, target.EventAt) {
+		c.EventAt = target.EventAt
+	}
+	if echoes(c.DueAt, c.DueAtDayOnly, target.DueAt) {
+		c.DueAt = target.DueAt
+	}
 	eventEcho, dueEcho := echoes(c.EventAt, false, target.EventAt), echoes(c.DueAt, false, target.DueAt)
 	newDate := MovesDate(c, target)
 	// Leads say when to be reminded, not what the unit says (I40): beside a new

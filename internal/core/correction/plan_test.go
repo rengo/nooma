@@ -102,6 +102,9 @@ func TestPlanEdit_AnEchoedDateIsNoEdit(t *testing.T) {
 	newDue := time.Date(2026, 10, 21, 9, 0, 0, 0, art)
 	dueOnly := unit.Unit{Content: "Pagar el 2026-10-20 a las 09:00.", DueAt: &due}
 	dueContent := "Pagar la luz el 2026-10-20 a las 09:00."
+	dayOf := time.Date(2026, 10, 20, 0, 0, 0, 0, art)
+	dayAfter := dayOf.AddDate(0, 0, 1)
+	eventDay := time.Date(2026, 10, 11, 0, 0, 0, 0, art)
 
 	tests := []struct {
 		name   string
@@ -119,6 +122,12 @@ func TestPlanEdit_AnEchoedDateIsNoEdit(t *testing.T) {
 		{"a moved event_at still wins over content", classify.Classification{EventAt: timePtr(moved), NormalizedContent: strPtr(content)}, []Edit{NewEventAtEdit(moved)}, true, &eventOnly},
 		{"echoed event_at beside a new due_at -> due_at", classify.Classification{EventAt: timePtr(event), DueAt: timePtr(newDue), NormalizedContent: strPtr(content)}, []Edit{NewDueAtEdit(newDue)}, true, nil},
 		{"echoed due_at alone beside a text change -> content", classify.Classification{DueAt: timePtr(due), NormalizedContent: strPtr(dueContent)}, []Edit{NewContentEdit(dueContent)}, true, &dueOnly},
+		// A bare date restating the unit's own local day is an echo too (MovesDate
+		// agrees): taking it at face value moved a 09:00 task to midnight.
+		{"bare day of a timed task alone stands as the task's own instant", classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, []Edit{NewDueAtEdit(due)}, true, &dueOnly},
+		{"bare day of a timed task beside a text change -> content", classify.Classification{DueAt: &dayOf, DueAtDayOnly: true, NormalizedContent: strPtr(dueContent)}, []Edit{NewContentEdit(dueContent)}, true, &dueOnly},
+		{"bare day of a timed event stands as the event's own instant", classify.Classification{EventAt: &eventDay, EventAtDayOnly: true}, []Edit{NewEventAtEdit(event)}, true, &eventOnly},
+		{"a bare day that is another day is a new date", classify.Classification{DueAt: &dayAfter, DueAtDayOnly: true}, []Edit{NewDueAtEdit(dayAfter)}, true, &dueOnly},
 		{"a date the unit lacks is never an echo", classify.Classification{DueAt: timePtr(due), NormalizedContent: strPtr(content)}, []Edit{NewDueAtEdit(due)}, true, &eventOnly},
 	}
 	for _, tt := range tests {
