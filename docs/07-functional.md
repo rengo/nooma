@@ -50,7 +50,8 @@ is on the 15th.
    message, or the `/ui/capture` form. All of them run the same pipeline
    ([doc 02 §5](02-cognitive-core.md#5-capture)). A Telegram voice note is transcribed and read
    as if you had typed it; the audio is not kept, and the reply repeats what it heard only
-   when it did nothing with it (ADR-0062).
+   when it did nothing with it and the transcript explains the answer: not for small talk
+   (ADR-0062, ADR-0066).
 2. **Classifies it with one provider call.** The message becomes one or more units, each with a
    type (`task`, `event`, `mental_load`, `knowledge`, …), normalized text, dates resolved against
    your local day ("Friday", "the 14th"), and an initial weight. The dentist visit gets an

@@ -278,11 +278,12 @@ func (c *replyChannel) Send(_ context.Context, _ ports.ConversationID, text stri
 
 // TestI58_TheTranscriptIsEchoedOnlyWhenTheReadingIsNotActionable: the
 // reply to a voice note is the reply to the same text typed, prefixed with
-// what was heard exactly for a chitchat, an out-of-scope request, an ask
-// and a which-timer question. Typed text is never prefixed.
+// what was heard exactly for an out-of-scope request, an ask and a
+// which-timer question (ADR-0066: a chitchat is answered without the echo).
+// Typed text is never prefixed.
 func TestI58_TheTranscriptIsEchoedOnlyWhenTheReadingIsNotActionable(t *testing.T) {
 	echoed := map[brain.CaptureOutcome]bool{
-		brain.OutcomeConversed: true, brain.OutcomeOutOfScope: true, brain.OutcomeAsked: true,
+		brain.OutcomeOutOfScope: true, brain.OutcomeAsked: true,
 	}
 	which := &brain.TimersAnswer{Which: true}
 	results := map[string]brain.CaptureResult{"timers which": {Outcome: brain.OutcomeTimers, Timers: which}}
@@ -290,25 +291,27 @@ func TestI58_TheTranscriptIsEchoedOnlyWhenTheReadingIsNotActionable(t *testing.T
 		results[string(o)] = brain.CaptureResult{Outcome: o}
 	}
 	const heard = "comprá pan"
-	for name, result := range results {
-		result.Language = classify.LanguageES
-		want := echoed[result.Outcome] || name == "timers which"
-		if got := channels.EchoesTranscript(result); got != want {
-			t.Errorf("%s: EchoesTranscript = %v, want %v", name, got, want)
-		}
-		for _, voice := range []bool{false, true} {
-			capture := &echoCapturer{result: result}
-			ch := &replyChannel{}
-			msg := ports.ChannelMessage{ID: "1", Conversation: "42", Text: heard, Channel: "telegram", Voice: voice}
-			if err := channels.CaptureHandler(capture, ch, nil, nil)(context.Background(), msg); err != nil {
-				t.Fatal(err)
+	for _, lang := range []classify.Language{classify.LanguageES, classify.LanguageEN} {
+		for name, result := range results {
+			result.Language = lang
+			want := echoed[result.Outcome] || name == "timers which"
+			if got := channels.EchoesTranscript(result); got != want {
+				t.Errorf("%s %s: EchoesTranscript = %v, want %v", lang, name, got, want)
 			}
-			if capture.got.Text != heard || capture.got.Voice != voice {
-				t.Errorf("%s: captured %+v, want the transcript with Voice=%v", name, capture.got, voice)
-			}
-			prefix := strings.Replace(phrase.For(classify.LanguageES).VoiceHeard, "%s", heard, 1)
-			if got := strings.HasPrefix(ch.sent[0], prefix+"\n"); got != (voice && want) {
-				t.Errorf("%s voice=%v: reply %q echoes the transcript = %v", name, voice, ch.sent[0], got)
+			for _, voice := range []bool{false, true} {
+				capture := &echoCapturer{result: result}
+				ch := &replyChannel{}
+				msg := ports.ChannelMessage{ID: "1", Conversation: "42", Text: heard, Channel: "telegram", Voice: voice}
+				if err := channels.CaptureHandler(capture, ch, nil, nil)(context.Background(), msg); err != nil {
+					t.Fatal(err)
+				}
+				if capture.got.Text != heard || capture.got.Voice != voice {
+					t.Errorf("%s: captured %+v, want the transcript with Voice=%v", name, capture.got, voice)
+				}
+				prefix := strings.Replace(phrase.For(lang).VoiceHeard, "%s", heard, 1)
+				if got := strings.HasPrefix(ch.sent[0], prefix+"\n"); got != (voice && want) {
+					t.Errorf("%s %s voice=%v: reply %q echoes the transcript = %v", lang, name, voice, ch.sent[0], got)
+				}
 			}
 		}
 	}
