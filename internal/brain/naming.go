@@ -24,9 +24,10 @@ const taskUnitTitle = "unit_title"
 func dated(u unit.Unit) bool { return u.EventAt != nil || u.DueAt != nil }
 
 // nameUnit asks the model for u's title and writes it where the unit still has
-// none (ADR-0065). It returns the title it wrote, or "" when it wrote none: the
-// provider failed, the answer was not a usable title, or someone else named the
-// unit first. None of those is an error, since a unit with no title is the state
+// none (ADR-0065). It returns the title the unit carries after the attempt that
+// the caller should say: the one it wrote, or, when someone else named the unit
+// first, theirs (so a capture arms its reminders with the title that stands); ""
+// when the provider failed or the answer was not a usable title. None of those is an error, since a unit with no title is the state
 // the step improves on and a failed attempt leaves it exactly as it was. A write
 // that lands is logged as action, with the previous (null) and next title the way
 // a correction's title edit is, and the text of the unit's armed reminders then
@@ -51,8 +52,19 @@ func (r correctionRunner) nameUnit(ctx context.Context, u unit.Unit, action port
 		return "", nil
 	}
 	if !named {
-		return "", nil // someone titled it meanwhile; theirs stands
+		// Someone titled it meanwhile; theirs stands, and is what a reminder armed
+		// next should say. A failed read leaves the caller with the content.
+		if cur, err := r.units.ByID(ctx, u.ID); err == nil {
+			return cur.Title, nil
+		}
+		return "", nil
 	}
+	// The title is written before its decision_log row, not after: NameIfUntitled
+	// is what says whether this call won, and a lost race must log nothing, so the
+	// row cannot come first (ADR-0016's record-first order has no outcome to
+	// condition on here). A failure of the row or of the reminder rewrite below
+	// therefore leaves a title that is written and, for the row, unlogged; it is
+	// returned as an error so the caller does not report a clean run.
 	contextJSON, err := json.Marshal(struct {
 		UnitID   string         `json:"unit_id"`
 		Fields   []string       `json:"fields"`

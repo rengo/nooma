@@ -158,6 +158,31 @@ func TestI60_CaptureNamesADroppedTitleBeforeArming(t *testing.T) {
 			t.Errorf("trigger %s says %q, want the title it was named with before arming", tr.ID, tr.Payload.ActionText)
 		}
 	}
+	// "Before arming" is a property of order, not of the final text: naming after
+	// the arming would also end with the title on every trigger, by rewriting
+	// them. So no reminder-text change may be logged, and the naming row
+	// precedes the first arming row.
+	if moved := v.rows(t, ports.ActionCorrectionReminderMoved); len(moved) != 0 {
+		t.Errorf("%d correction.reminder.moved rows: the reminders were armed with another text and rewritten", len(moved))
+	}
+	all, err := v.decisions.Since(context.Background(), time.Time{}, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	namedAt, armedAt := -1, -1
+	for i, d := range all {
+		switch d.Action {
+		case ports.ActionCaptureTitleNamed:
+			namedAt = i
+		case ports.ActionCaptureArmedTrigger:
+			if armedAt < 0 {
+				armedAt = i
+			}
+		}
+	}
+	if namedAt < 0 || armedAt < 0 || namedAt > armedAt {
+		t.Errorf("capture.title.named at %d, first capture.armed.trigger at %d: the naming must come first", namedAt, armedAt)
+	}
 	rows := v.rows(t, ports.ActionCaptureTitleNamed)
 	if len(rows) != 1 {
 		t.Fatalf("%d capture.title.named rows, want one", len(rows))
@@ -241,6 +266,16 @@ func TestI60_ATitleWrittenMeanwhileSurvives(t *testing.T) {
 	}
 	if rows := v.rows(t, ports.ActionCaptureTitleNamed); len(rows) != 0 {
 		t.Errorf("%d capture.title.named rows for a lost naming, want none", len(rows))
+	}
+	// The reminders armed in that capture say the title that is on the unit.
+	armed := v.triggers.All()
+	if len(armed) == 0 {
+		t.Fatalf("nothing was armed: %+v", res)
+	}
+	for _, tr := range armed {
+		if tr.Payload.ActionText != "Cita con Juan" {
+			t.Errorf("trigger %s says %q, want the title that won the race", tr.ID, tr.Payload.ActionText)
+		}
 	}
 }
 
