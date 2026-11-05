@@ -1060,7 +1060,8 @@ command, it is answered once.
      content, is an ask**, the same ask-shaped result an ambiguous referent already produces —
      ambiguity over *what* to write is exactly the ambiguity the product rule below blocks on,
      the same way ambiguity over *which* unit is.
-     **A date equal to the unit's current value is an echo, not a new date** (I30): the
+     **A date equal to the unit's current value is an echo, not a new date** (I30), and so is a
+     bare date on its current local day, read in the user's frame, not the store's UTC: the
      correction prompt shows the model the unit's instants, so a text-only correction can come
      back with them repeated. An echo yields to content that differs from the body and still
      states the instant the unit keeps — that content is the edit — and otherwise stands as a

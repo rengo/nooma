@@ -102,6 +102,14 @@ func TestPlanEdit_AnEchoedDateIsNoEdit(t *testing.T) {
 	newDue := time.Date(2026, 10, 21, 9, 0, 0, 0, art)
 	dueOnly := unit.Unit{Content: "Pagar el 2026-10-20 a las 09:00.", DueAt: &due}
 	dueContent := "Pagar la luz el 2026-10-20 a las 09:00."
+	dayOf := time.Date(2026, 10, 20, 0, 0, 0, 0, art)
+	dayAfter := dayOf.AddDate(0, 0, 1)
+	eventDay := time.Date(2026, 10, 11, 0, 0, 0, 0, art)
+	// Stored in UTC the way the store returns it: 22:30 on the 20th in ART, but
+	// already the 21st in UTC. The bare day is read in the user's frame.
+	lateDue := time.Date(2026, 10, 21, 1, 30, 0, 0, time.UTC)
+	lateTask := unit.Unit{Content: "Pagar el 2026-10-20 a las 22:30.", DueAt: &lateDue}
+	lateUTCDay := time.Date(2026, 10, 21, 0, 0, 0, 0, art)
 
 	tests := []struct {
 		name   string
@@ -119,6 +127,14 @@ func TestPlanEdit_AnEchoedDateIsNoEdit(t *testing.T) {
 		{"a moved event_at still wins over content", classify.Classification{EventAt: timePtr(moved), NormalizedContent: strPtr(content)}, []Edit{NewEventAtEdit(moved)}, true, &eventOnly},
 		{"echoed event_at beside a new due_at -> due_at", classify.Classification{EventAt: timePtr(event), DueAt: timePtr(newDue), NormalizedContent: strPtr(content)}, []Edit{NewDueAtEdit(newDue)}, true, nil},
 		{"echoed due_at alone beside a text change -> content", classify.Classification{DueAt: timePtr(due), NormalizedContent: strPtr(dueContent)}, []Edit{NewContentEdit(dueContent)}, true, &dueOnly},
+		// A bare date restating the unit's own local day is an echo too (MovesDate
+		// agrees): taking it at face value moved a 09:00 task to midnight.
+		{"bare day of a timed task alone stands as the task's own instant", classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, []Edit{NewDueAtEdit(due)}, true, &dueOnly},
+		{"bare day of a timed task beside a text change -> content", classify.Classification{DueAt: &dayOf, DueAtDayOnly: true, NormalizedContent: strPtr(dueContent)}, []Edit{NewContentEdit(dueContent)}, true, &dueOnly},
+		{"bare day of a timed event stands as the event's own instant", classify.Classification{EventAt: &eventDay, EventAtDayOnly: true}, []Edit{NewEventAtEdit(event)}, true, &eventOnly},
+		{"a bare day that is another day is a new date", classify.Classification{DueAt: &dayAfter, DueAtDayOnly: true}, []Edit{NewDueAtEdit(dayAfter)}, true, &dueOnly},
+		{"bare day on the local day of a task whose UTC date differs stands as its own instant", classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, []Edit{NewDueAtEdit(lateDue)}, true, &lateTask},
+		{"bare day equal to the UTC date of that task moves it", classify.Classification{DueAt: &lateUTCDay, DueAtDayOnly: true}, []Edit{NewDueAtEdit(lateUTCDay)}, true, &lateTask},
 		{"a date the unit lacks is never an echo", classify.Classification{DueAt: timePtr(due), NormalizedContent: strPtr(content)}, []Edit{NewDueAtEdit(due)}, true, &eventOnly},
 	}
 	for _, tt := range tests {
@@ -297,6 +313,9 @@ func TestMovesDate(t *testing.T) {
 	dayOf := time.Date(2026, 10, 17, 0, 0, 0, 0, zone)
 	dayAfter := dayOf.AddDate(0, 0, 1)
 	eventDay := time.Date(2026, 10, 14, 0, 0, 0, 0, zone)
+	lateDue := time.Date(2026, 10, 18, 1, 30, 0, 0, time.UTC) // 22:30 on the 17th at -03
+	lateTask := unit.Unit{DueAt: &lateDue}
+	lateDayUTC := time.Date(2026, 10, 18, 0, 0, 0, 0, zone)
 	for name, tc := range map[string]struct {
 		c    classify.Classification
 		u    unit.Unit
@@ -310,11 +329,13 @@ func TestMovesDate(t *testing.T) {
 		// A bare date restating the item's own local day is an echo (review
 		// B1 on #382): "recordámelo" restated a task due 17 Oct 10:00 as
 		// "2026-10-17", and the task moved to midnight.
-		"a bare date on its own day":     {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, timedTask, false},
-		"a bare date on another day":     {classify.Classification{DueAt: &dayAfter, DueAtDayOnly: true}, timedTask, true},
-		"a timed midnight on its day":    {classify.Classification{DueAt: &dayOf}, timedTask, true},
-		"a bare event date on its day":   {classify.Classification{EventAt: &eventDay, EventAtDayOnly: true}, event, false},
-		"a bare date for an undated one": {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, unit.Unit{}, true},
+		"a bare date on its own day":                  {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, timedTask, false},
+		"a bare date on another day":                  {classify.Classification{DueAt: &dayAfter, DueAtDayOnly: true}, timedTask, true},
+		"a timed midnight on its day":                 {classify.Classification{DueAt: &dayOf}, timedTask, true},
+		"a bare event date on its day":                {classify.Classification{EventAt: &eventDay, EventAtDayOnly: true}, event, false},
+		"a bare date on the local day of a late task": {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, lateTask, false},
+		"a bare date on the UTC day of a late task":   {classify.Classification{DueAt: &lateDayUTC, DueAtDayOnly: true}, lateTask, true},
+		"a bare date for an undated one":              {classify.Classification{DueAt: &dayOf, DueAtDayOnly: true}, unit.Unit{}, true},
 	} {
 		if got := MovesDate(tc.c, tc.u); got != tc.want {
 			t.Errorf("%s: MovesDate = %v, want %v", name, got, tc.want)
