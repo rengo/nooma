@@ -53,7 +53,7 @@ func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
 		"PushFrame": 1, "TimerRing": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
-		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "RecallOne": 2, "RecallOnePast": 2, "RecallOneUndated": 1, "RecallMany": 1, "ItemWhen": 2,
+		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "RecallOne": 2, "RecallOnePast": 2, "RecallOneUndated": 1, "PushUnnamed": 1, "RecallOneUnnamed": 1, "RecallOnePastUnnamed": 1, "LineUnnamed": 1, "RecallMany": 1, "ItemWhen": 2,
 		"OnDate": 3, "YearSuffix": 1, "At": 1, "AtOne": 1, "OnDay": 1, "DueFuture": 1, "DuePast": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1, "VoiceHeard": 1, "VoiceTooLong": 1,
 	}

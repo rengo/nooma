@@ -197,7 +197,7 @@ func seedUnit(t *testing.T, db *sqlite.Vault, id, content string) {
 
 	at := time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC)
 	if err := sqlite.NewUnitRepo(db).Create(context.Background(), unit.Unit{
-		ID: id, Type: unit.TypeTask, Content: content, Status: unit.StatusPool,
+		ID: id, Type: unit.TypeTask, Title: content, Content: content, Status: unit.StatusPool,
 		Weight: 1.0, WeightDecayRate: 0.01, LastTouchedAt: at,
 		Source: "chat", CreatedAt: at, UpdatedAt: at,
 	}); err != nil {

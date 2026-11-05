@@ -670,3 +670,92 @@ func TestI59_TimersListNamesEachClockAsCodeSaysIt(t *testing.T) {
 		t.Errorf("list\n%q\nwant\n%q", got, want)
 	}
 }
+
+// TestI59_UntitledDatedUnitIsNeverSaidByItsContent: a unit with an instant and
+// no title is said as something noted at that instant, on every surface that
+// puts an instant beside an item's words (ADR-0065 point 5). Its content
+// carries the date already (the capture writes it as YYYY-MM-DD), so saying
+// both repeated it and could say a relative word that is no longer true.
+func TestI59_UntitledDatedUnitIsNeverSaidByItsContent(t *testing.T) {
+	const contentES = "tengo reunión con Juan el 2026-11-04 a las 22:30, hoy"
+	const contentEN = "meeting with John on 2026-11-04 at 22:30, today"
+	notTheContent := func(t *testing.T, got string) {
+		t.Helper()
+		for _, leak := range []string{"2026-", "Juan", "John", "reunión", "meeting"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("%q says the unit's content (%q)", got, leak)
+			}
+		}
+	}
+
+	t.Run("recall", func(t *testing.T) {
+		for _, tc := range []struct {
+			lang    classify.Language
+			content string
+			event   *time.Time
+			want    string
+		}{
+			{classify.LanguageES, contentES, i59At(11, 26, 8, 30), "Tenés algo anotado el jueves 26 de noviembre a las 8:30."},
+			{classify.LanguageEN, contentEN, i59At(11, 26, 8, 30), "You have something noted on Thursday 26 November at 8:30."},
+			{classify.LanguageES, contentES, i59At(11, 3, 9, 0), "Tenías algo anotado ayer a las 9:00."},
+			{classify.LanguageEN, contentEN, i59At(11, 3, 9, 0), "You had something noted yesterday at 9:00."},
+		} {
+			res := brain.CaptureResult{Outcome: brain.OutcomeRecalled, Language: tc.lang, At: i59Now,
+				Recalled: []unit.Unit{{Content: tc.content, EventAt: tc.event}}}
+			got := channels.RenderReply(res)
+			if got != tc.want {
+				t.Errorf("recall (%s) = %q, want %q", tc.lang, got, tc.want)
+			}
+			notTheContent(t, got)
+		}
+	})
+
+	t.Run("recall, several", func(t *testing.T) {
+		res := brain.CaptureResult{Outcome: brain.OutcomeRecalled, Language: classify.LanguageES, At: i59Now,
+			Recalled: []unit.Unit{
+				{Content: contentES, EventAt: i59At(11, 4, 22, 30)},
+				{Title: "Cena con Ana", EventAt: i59At(11, 13, 21, 0)}}}
+		want := "Tenés 2 cosas anotadas:\n• Algo anotado, hoy a las 22:30\n• Cena con Ana, el viernes 13 de noviembre a las 21:00"
+		if got := channels.RenderReply(res); got != want {
+			t.Errorf("recall many =\n%q\nwant\n%q", got, want)
+		}
+	})
+
+	t.Run("push", func(t *testing.T) {
+		now := time.Date(2026, 11, 4, 22, 0, 0, 0, i59Zone)
+		event := time.Date(2026, 11, 4, 22, 30, 0, 0, i59Zone)
+		for _, tc := range []struct{ lang, content, want string }{
+			{"es", contentES, "Acordate: tenés algo anotado hoy a las 22:30."},
+			{"en", contentEN, "Don't forget: you have something noted today at 22:30."},
+		} {
+			u, tr := i59Reminder("u1", "", tc.lang, event, nil, nil, 120)
+			u.Content = tc.content
+			fire := now.Add(-time.Minute)
+			tr.FireAt = &fire
+			sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+			if len(sent) != 1 || sent[0] != tc.want {
+				t.Errorf("push (%s) sent %q, want exactly %q", tc.lang, sent, tc.want)
+			}
+			for _, s := range sent {
+				notTheContent(t, s)
+			}
+		}
+	})
+
+	t.Run("digest", func(t *testing.T) {
+		for _, tc := range []struct{ lang, content, want string }{
+			{"es", "renovar el pasaporte el 2026-11-03", "Buen día. Tenés una cosa:\n• Algo anotado, era para ayer"},
+			{"en", "renew the passport on 2026-11-03", "Good morning. You have one thing:\n• Something noted, was due yesterday"},
+		} {
+			v := newI59DigestVault(t, tc.lang)
+			v.unit(unit.Unit{ID: "passport", Type: unit.TypeTask, Content: tc.content, DueAt: i59At(11, 3, 0, 0)})
+			got := v.digest()
+			if got != tc.want {
+				t.Errorf("digest (%s) =\n%q\nwant\n%q", tc.lang, got, tc.want)
+			}
+			if strings.Contains(got, "2026-") || strings.Contains(got, "pasaporte") || strings.Contains(got, "passport") {
+				t.Errorf("digest says the unit's content: %q", got)
+			}
+		}
+	})
+}

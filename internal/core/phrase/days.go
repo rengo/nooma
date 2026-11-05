@@ -24,6 +24,25 @@ type Item struct {
 	Text  string
 	When  *Moment
 	Names string
+	// Unnamed marks a unit with an instant and no title: it is said as
+	// something noted at that instant, never by its content, which already
+	// carries the date (ADR-0065 point 5). Text is empty.
+	Unnamed bool
+}
+
+// ItemOf is the item a reply names for a unit: its title, else its content. A
+// unit with an instant and no title is Unnamed; one with neither keeps its
+// content, which states no instant, so nothing repeats.
+func ItemOf(title, content string, when *Moment) Item {
+	it := Item{Text: title, When: when, Names: NamesOf(title, content)}
+	switch {
+	case it.Text != "":
+	case when != nil:
+		it.Unnamed = true
+	default:
+		it.Text = content
+	}
+	return it
 }
 
 // dayOffset counts calendar days from now to t in now's zone.
@@ -177,9 +196,12 @@ func (s Set) Recall(items []Item, now time.Time) string {
 		if it.When == nil {
 			return settled(fmt.Sprintf(s.RecallOneUndated, s.Inline(it)))
 		}
-		frame := s.RecallOne
+		frame, unnamed := s.RecallOne, s.RecallOneUnnamed
 		if past(*it.When, now) {
-			frame = s.RecallOnePast
+			frame, unnamed = s.RecallOnePast, s.RecallOnePastUnnamed
+		}
+		if it.Unnamed {
+			return settled(fmt.Sprintf(unnamed, s.said(*it.When, now, false)))
 		}
 		return settled(fmt.Sprintf(frame, s.Inline(it), s.said(*it.When, now, false)))
 	}
@@ -195,6 +217,9 @@ func (s Set) Recall(items []Item, now time.Time) string {
 // as stored, so the bullet keeps the capital, then its day and time, a due day
 // as due (ADR-0064).
 func (s Set) DigestLineOf(it Item, now time.Time) string {
+	if it.Unnamed {
+		return fmt.Sprintf(s.LineUnnamed, s.When(*it.When, now))
+	}
 	if it.When == nil {
 		return strings.TrimSpace(it.Text)
 	}
@@ -205,6 +230,9 @@ func (s Set) DigestLineOf(it Item, now time.Time) string {
 // Push words a reminder: the item's words and, when it has an instant, its day
 // and time as a person says them (ADR-0064 point 1).
 func (s Set) Push(it Item, now time.Time) string {
+	if it.Unnamed {
+		return settled(fmt.Sprintf(s.PushUnnamed, s.When(*it.When, now)))
+	}
 	words := s.Inline(it)
 	if it.When != nil {
 		words = fmt.Sprintf(s.ItemWhen, words, s.When(*it.When, now))

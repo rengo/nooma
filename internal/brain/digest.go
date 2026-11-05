@@ -372,7 +372,7 @@ func dueLines(tasks []unit.Unit, now time.Time, set phrase.Set) []dueLine {
 	lines := make([]dueLine, 0, len(tasks))
 	for _, u := range tasks {
 		due := phrase.Moment{At: u.DueAt.In(now.Location()), DayOnly: true, Due: true}
-		lines = append(lines, dueLine{unitID: u.ID, text: set.DigestLineOf(phrase.Item{Text: clip(shownText(u)), When: &due}, now)})
+		lines = append(lines, dueLine{unitID: u.ID, text: set.DigestLineOf(itemFor(u, &due), now)})
 	}
 	return lines
 }

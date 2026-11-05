@@ -75,7 +75,7 @@ func (v *i39Vault) deliverKind(t *testing.T, id string, kind unit.Type, content 
 		Payload: ports.TriggerPayload{ActionText: "armed text"}}
 	if content != "" {
 		unitID := "u-" + id
-		if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: kind, Status: unit.StatusPool, Content: content,
+		if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: kind, Status: unit.StatusPool, Title: content, Content: content,
 			Source: "chat", Weight: 1, LastTouchedAt: at, CreatedAt: at, UpdatedAt: at}); err != nil {
 			t.Fatal(err)
 		}
@@ -338,7 +338,7 @@ func TestI39_AnExpiredRecurringCheckinLeavesTheNextOccurrence(t *testing.T) {
 	unitID := "u-t-birthday"
 	yearly := prospection.RuleYearly
 	anchor := &prospection.Anchor{Month: time.October, Day: 25}
-	if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeEvent, Status: unit.StatusPool, Content: "Ana's birthday",
+	if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeEvent, Status: unit.StatusPool, Title: "Ana's birthday", Content: "Ana's birthday",
 		Source: "chat", Weight: 1, LastTouchedAt: i39Delivered, CreatedAt: i39Delivered, UpdatedAt: i39Delivered}); err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +399,7 @@ func TestI39_ABareAnswerReachesTheLastThingThePassSent(t *testing.T) {
 
 			dueAt := time.Date(2026, 10, 15, 7, 30, 0, 0, time.UTC)
 			unitID := "u-" + pushed
-			if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeTask, Status: unit.StatusPool, Content: "day item",
+			if err := v.units.Create(ctx, unit.Unit{ID: unitID, Type: unit.TypeTask, Status: unit.StatusPool, Title: "day item", Content: "day item",
 				Source: "chat", Weight: 1, LastTouchedAt: i39Delivered, CreatedAt: i39Delivered, UpdatedAt: i39Delivered}); err != nil {
 				t.Fatal(err)
 			}

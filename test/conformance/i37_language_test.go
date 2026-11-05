@@ -17,7 +17,7 @@ import (
 func (v *i37Vault) speaks(id, language string, created time.Time, at *time.Time) {
 	v.t.Helper()
 	if err := v.units.Create(context.Background(), unit.Unit{
-		ID: id, Type: unit.TypeEvent, Status: unit.StatusPool, Content: id, Weight: 1, Language: language,
+		ID: id, Type: unit.TypeEvent, Status: unit.StatusPool, Title: id, Content: id, Weight: 1, Language: language,
 		EventAt: at, LastTouchedAt: created, CreatedAt: created, UpdatedAt: created,
 	}); err != nil {
 		v.t.Fatalf("seed unit %s: %v", id, err)

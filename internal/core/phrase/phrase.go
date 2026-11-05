@@ -190,6 +190,14 @@ type Set struct {
 	RecallOnePast    string
 	RecallOneUndated string
 	RecallMany       string
+	// The unnamed frames (ADR-0065 point 5) say a unit that has an instant and
+	// no title as something noted, with the instant and none of its words: the
+	// push, the one-item recall ahead and past (each one %s, the day and
+	// time) and the list line (one %s).
+	PushUnnamed          string
+	RecallOneUnnamed     string
+	RecallOnePastUnnamed string
+	LineUnnamed          string
 	// ItemWhen joins an item's words and its day on a list line.
 	ItemWhen string
 
@@ -317,8 +325,13 @@ var sets = map[classify.Language]Set{
 		RecallOne:        "You have \u201c%s\u201d %s.",
 		RecallOnePast:    "You had \u201c%s\u201d %s.",
 		RecallOneUndated: "You have this noted: %s.",
-		RecallMany:       "You have %d things noted:",
-		ItemWhen:         "%s, %s",
+
+		PushUnnamed:          "Don't forget: you have something noted %s.",
+		RecallOneUnnamed:     "You have something noted %s.",
+		RecallOnePastUnnamed: "You had something noted %s.",
+		LineUnnamed:          "Something noted, %s",
+		RecallMany:           "You have %d things noted:",
+		ItemWhen:             "%s, %s",
 
 		Yesterday: "yesterday", TodayWord: "today", Tomorrow: "tomorrow", DayAfter: "the day after tomorrow",
 		OnDate: "%s %d %s", YearSuffix: " %d",
@@ -422,8 +435,13 @@ var sets = map[classify.Language]Set{
 		RecallOne:        "Tenés anotado %s %s.",
 		RecallOnePast:    "Tenías anotado %s %s.",
 		RecallOneUndated: "Tenés anotado: %s.",
-		RecallMany:       "Tenés %d cosas anotadas:",
-		ItemWhen:         "%s, %s",
+
+		PushUnnamed:          "Acordate: tenés algo anotado %s.",
+		RecallOneUnnamed:     "Tenés algo anotado %s.",
+		RecallOnePastUnnamed: "Tenías algo anotado %s.",
+		LineUnnamed:          "Algo anotado, %s",
+		RecallMany:           "Tenés %d cosas anotadas:",
+		ItemWhen:             "%s, %s",
 
 		Yesterday: "ayer", TodayWord: "hoy", Tomorrow: "mañana", DayAfter: "pasado mañana",
 		OnDate: "el %s %d de %s", YearSuffix: " de %d",

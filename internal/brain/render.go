@@ -142,12 +142,21 @@ func occasionOf(u unit.Unit, t ports.DueTrigger, now time.Time) (at time.Time, d
 }
 
 // pushItem is what a reminder names of u: its title, else its content, and the
-// instant it is about now (ADR-0064 point 1).
+// instant it is about now (ADR-0064 point 1, ADR-0065).
 func pushItem(u unit.Unit, t ports.DueTrigger, now time.Time) phrase.Item {
-	it := phrase.Item{Text: clip(shownText(u)), Names: phrase.NamesOf(u.Title, u.Content)}
+	var when *phrase.Moment
 	if at, dayOnly, known := occasionOf(u, t, now); known {
-		it.When = &phrase.Moment{At: at, DayOnly: dayOnly}
+		when = &phrase.Moment{At: at, DayOnly: dayOnly}
 	}
+	return itemFor(u, when)
+}
+
+// itemFor is u as a reply names it beside an instant. A unit with that
+// instant and no title is unnamed: it is not said by its content, which
+// already carries the date (ADR-0065 point 5).
+func itemFor(u unit.Unit, when *phrase.Moment) phrase.Item {
+	it := phrase.ItemOf(u.Title, u.Content, when)
+	it.Text = clip(it.Text)
 	return it
 }
 

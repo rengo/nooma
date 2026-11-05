@@ -72,7 +72,7 @@ func newI37Vault(t *testing.T) *i37Vault {
 func (v *i37Vault) event(id string, at *time.Time) {
 	v.t.Helper()
 	if err := v.units.Create(context.Background(), unit.Unit{
-		ID: id, Type: unit.TypeEvent, Status: unit.StatusPool, Content: id, Weight: 1,
+		ID: id, Type: unit.TypeEvent, Status: unit.StatusPool, Title: id, Content: id, Weight: 1,
 		EventAt: at, LastTouchedAt: i37Now, CreatedAt: i37Now.AddDate(0, 0, -7), UpdatedAt: i37Now,
 	}); err != nil {
 		v.t.Fatalf("seed unit %s: %v", id, err)
@@ -95,6 +95,9 @@ func (v *i37Vault) row(id, unitID, text string, fireAt time.Time, mutate func(*p
 	if u, err := v.units.ByID(context.Background(), unitID); err == nil && u.Content == unitID {
 		if err := v.units.UpdateContent(context.Background(), unitID, text, i37Now); err != nil {
 			v.t.Fatalf("seed content of %s: %v", unitID, err)
+		}
+		if err := v.units.UpdateTitle(context.Background(), unitID, text, i37Now); err != nil {
+			v.t.Fatalf("seed title of %s: %v", unitID, err)
 		}
 	}
 	if err := v.triggers.Create(context.Background(), tr); err != nil {
