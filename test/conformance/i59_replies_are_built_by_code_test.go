@@ -453,10 +453,14 @@ func (v *i59DigestVault) task(id, title string, d int) {
 
 // recurring stores a daily-style reminder fired for today and waiting for the
 // digest, as a recurring row armed before ADR-0034 does.
-func (v *i59DigestVault) recurring(id, title string) {
+func (v *i59DigestVault) recurring(id, title string) { v.recurringOf(id, title, title) }
+
+// recurringOf is recurring for a unit whose title and content differ, or that
+// has no title.
+func (v *i59DigestVault) recurringOf(id, title, content string) {
 	v.t.Helper()
 	ctx := context.Background()
-	v.unit(unit.Unit{ID: id, Type: unit.TypeEvent, Title: title, Content: title, EventAt: i59At(11, 4, 0, 0)})
+	v.unit(unit.Unit{ID: id, Type: unit.TypeEvent, Title: title, Content: content, EventAt: i59At(11, 4, 0, 0)})
 	fire := time.Date(2026, 11, 4, 0, 0, 0, 0, i59Zone)
 	yearly := prospection.RuleYearly
 	if err := v.triggers.Create(ctx, ports.Trigger{ID: "trg-" + id, Kind: ports.TriggerKindTimeBased, FireAt: &fire, UnitID: &id,
@@ -710,6 +714,28 @@ func TestI59_UntitledDatedUnitIsNeverSaidByItsContent(t *testing.T) {
 		}
 	})
 
+	t.Run("recall, due day only", func(t *testing.T) {
+		for _, tc := range []struct {
+			lang    classify.Language
+			content string
+			want    string
+		}{
+			{classify.LanguageES, "renovar el pasaporte el 2026-11-09", "Tenés algo anotado para el lunes 9 de noviembre."},
+			{classify.LanguageEN, "renew the passport on 2026-11-09", "You have something noted due Monday 9 November."},
+		} {
+			res := brain.CaptureResult{Outcome: brain.OutcomeRecalled, Language: tc.lang, At: i59Now,
+				Recalled: []unit.Unit{{Type: unit.TypeTask, Content: tc.content, DueAt: i59At(11, 9, 0, 0)}}}
+			got := channels.RenderReply(res)
+			if got != tc.want {
+				t.Errorf("recall of a due day (%s) = %q, want %q", tc.lang, got, tc.want)
+			}
+			notTheContent(t, got)
+			if strings.Contains(got, "pasaporte") || strings.Contains(got, "passport") {
+				t.Errorf("%q says the unit's content", got)
+			}
+		}
+	})
+
 	t.Run("recall, several", func(t *testing.T) {
 		res := brain.CaptureResult{Outcome: brain.OutcomeRecalled, Language: classify.LanguageES, At: i59Now,
 			Recalled: []unit.Unit{
@@ -762,19 +788,19 @@ func TestI59_UntitledDatedUnitIsNeverSaidByItsContent(t *testing.T) {
 
 // TestI59_UntitledRecurringUnitWithNoInstantKeepsItsWords: the unit is dated
 // for the fallback only when it carries an event_at or a due_at of its own.
-// A recurring reminder with no title and neither (the commonest old shape) is
-// pushed with the day the pass computes, but that day is the reply's, not the
+// A recurring reminder with no title and neither (a shape the code allows, not
+// the usual one: a recurring unit is born with its event_at) is pushed with the day the pass computes, but that day is the reply's, not the
 // unit's: its words are all it has, so the push says them, not "something
 // noted" (ADR-0065 point 5).
 func TestI59_UntitledRecurringUnitWithNoInstantKeepsItsWords(t *testing.T) {
-	daily := prospection.RuleYearly
+	yearly := prospection.RuleYearly
 	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)
 	for _, tc := range []struct{ lang, content, want string }{
 		{"es", "tomar las pastillas", "Acordate: tomar las pastillas, hoy."},
 		{"en", "take the pills", "Don't forget: take the pills, today."},
 	} {
 		u, tr := i59Reminder("u1", "", tc.lang, time.Date(2026, 10, 29, 0, 0, 0, 0, i59Zone),
-			&daily, &prospection.Anchor{Month: now.Month(), Day: now.Day()}, 120)
+			&yearly, &prospection.Anchor{Month: now.Month(), Day: now.Day()}, 120)
 		u.Content, u.EventAt, u.DueAt = tc.content, nil, nil
 		fire := now.Add(-time.Minute)
 		tr.FireAt = &fire
@@ -782,5 +808,139 @@ func TestI59_UntitledRecurringUnitWithNoInstantKeepsItsWords(t *testing.T) {
 		if len(sent) != 1 || sent[0] != tc.want {
 			t.Errorf("push (%s) sent %q, want exactly %q", tc.lang, sent, tc.want)
 		}
+	}
+}
+
+// TestI59_UntitledDatedUnitIsNotSaidByItsContentInTheDigestAndToday: the lines
+// a fired reminder waiting for the digest becomes, in the digest and in Today's
+// preview of it, and Today's upcoming reminders, are the unit's instant and
+// none of its words (ADR-0065 point 5). They go through brain's saidNow, which
+// the due-task lines do not.
+func TestI59_UntitledDatedUnitIsNotSaidByItsContentInTheDigestAndToday(t *testing.T) {
+	const contentES = "cumpleaños de Ana el 2026-11-04"
+	const contentEN = "Ana's birthday on 2026-11-04"
+	for _, tc := range []struct {
+		lang, content, wantLine string
+	}{
+		{"es", contentES, "• Algo anotado, hoy"},
+		{"en", contentEN, "• Something noted, today"},
+	} {
+		t.Run("digest, "+tc.lang, func(t *testing.T) {
+			v := newI59DigestVault(t, tc.lang)
+			v.recurringOf("birthday", "", tc.content)
+			got := v.digest()
+			if !strings.Contains(got, tc.wantLine) {
+				t.Errorf("digest\n%q\nwant it to hold %q", got, tc.wantLine)
+			}
+			if strings.Contains(got, "2026-") || strings.Contains(got, "Ana") {
+				t.Errorf("digest says the unit's content: %q", got)
+			}
+		})
+		t.Run("today, "+tc.lang, func(t *testing.T) {
+			v := newI59DigestVault(t, tc.lang)
+			v.recurringOf("birthday", "", tc.content)
+			today := v.today()
+			if len(today.Digest.Items) != 1 || !strings.HasSuffix(tc.wantLine, today.Digest.Items[0].Text) {
+				t.Errorf("Today's digest preview = %+v, want one item that %q ends with", today.Digest.Items, tc.wantLine)
+			}
+		})
+	}
+
+	t.Run("today, upcoming", func(t *testing.T) {
+		for _, tc := range []struct{ lang, content, want string }{
+			{"es", "reunión con Juan el 2026-11-04 a las 11:00", "Algo anotado, hoy a las 11:00"},
+			{"en", "meeting with John on 2026-11-04 at 11:00", "Something noted, today at 11:00"},
+		} {
+			v := newI59DigestVault(t, tc.lang)
+			event := time.Date(2026, 11, 4, 11, 0, 0, 0, i59Zone)
+			v.unit(unit.Unit{ID: "meeting", Type: unit.TypeEvent, Content: tc.content, EventAt: &event})
+			fire := i59Morning.Add(time.Hour)
+			id := "meeting"
+			if err := v.triggers.Create(context.Background(), ports.Trigger{ID: "trg-meeting", UnitID: &id, Kind: ports.TriggerKindTimeBased,
+				FireAt: &fire, CreatedAt: i59Morning.Add(-time.Hour), Payload: ports.TriggerPayload{LeadMinutes: 120}}); err != nil {
+				t.Fatal(err)
+			}
+			up := v.today().Upcoming
+			if len(up) != 1 || up[0].Text != tc.want {
+				t.Errorf("Today upcoming (%s) = %+v, want one line %q", tc.lang, up, tc.want)
+			}
+		}
+	})
+}
+
+// today runs Today over the vault at the digest's morning.
+func (v *i59DigestVault) today() brain.Today {
+	v.t.Helper()
+	cfg := memrepo.NewConfig()
+	svc := brain.NewTodayService(fixedClock{now: i59Morning}, v.units, cfg, memrepo.NewState(), v.triggers, v.questions, memrepo.NewDecisionLog(),
+		brain.NewFocusKeeper(v.units, cfg, memrepo.NewRelations()), nil)
+	out, err := svc.Today(context.Background())
+	if err != nil {
+		v.t.Fatalf("Today: %v", err)
+	}
+	return out
+}
+
+// TestI59_UntitledRecurringUnitWithAnEventIsSaidAsSomethingNoted: the common
+// shape of a recurring reminder with no title is born with an event_at (its
+// anchor), so it is dated by its own instant: it is pushed as something noted
+// today, with none of its words. Until the title is named at capture (slice 3
+// of ADR-0065), that is what it says.
+func TestI59_UntitledRecurringUnitWithAnEventIsSaidAsSomethingNoted(t *testing.T) {
+	yearly := prospection.RuleYearly
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)
+	for _, tc := range []struct{ lang, content, want string }{
+		{"es", "cumpleaños de Ana el 2026-10-29", "Acordate: tenés algo anotado hoy."},
+		{"en", "Ana's birthday on 2026-10-29", "Don't forget: you have something noted today."},
+	} {
+		u, tr := i59Reminder("u1", "", tc.lang, time.Date(2026, 10, 29, 0, 0, 0, 0, i59Zone),
+			&yearly, &prospection.Anchor{Month: now.Month(), Day: now.Day()}, 120)
+		u.Content = tc.content
+		fire := now.Add(-time.Minute)
+		tr.FireAt = &fire
+		sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+		if len(sent) != 1 || sent[0] != tc.want {
+			t.Errorf("push (%s) sent %q, want exactly %q", tc.lang, sent, tc.want)
+		}
+	}
+}
+
+// TestI59_UntitledDatedUnitWithNoComputedInstantSaysItsOwnDate: a push that
+// cannot compute the instant (an old-style trigger with no lead and no event,
+// a recurring row with no anchor) says the unit's own date, never its content,
+// which carries that date as YYYY-MM-DD (ADR-0065 point 5).
+func TestI59_UntitledDatedUnitWithNoComputedInstantSaysItsOwnDate(t *testing.T) {
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)
+	yearly := prospection.RuleYearly
+	for _, tc := range []struct {
+		name, lang, content string
+		due                 *time.Time
+		event               *time.Time
+		rule                *prospection.Rule
+		want                string
+	}{
+		{"task due, es", "es", "renovar el pasaporte el 2026-11-05", i59At(11, 5, 0, 0), nil, nil,
+			"Acordate: tenés algo anotado para el jueves 5 de noviembre."},
+		{"task due, en", "en", "renew the passport on 2026-11-05", i59At(11, 5, 0, 0), nil, nil,
+			"Don't forget: you have something noted due Thursday 5 November."},
+		{"event of a recurring row with no anchor, es", "es", "turno el 2026-11-26 a las 8:30", nil, i59At(11, 26, 8, 30), &yearly,
+			"Acordate: tenés algo anotado el jueves 26 de noviembre a las 8:30."},
+		{"event of a recurring row with no anchor, en", "en", "appointment on 2026-11-26 at 8:30", nil, i59At(11, 26, 8, 30), &yearly,
+			"Don't forget: you have something noted on Thursday 26 November at 8:30."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u, tr := i59Reminder("u1", "", tc.lang, time.Date(2026, 11, 5, 0, 0, 0, 0, i59Zone), tc.rule, nil, 0)
+			u.Content, u.EventAt, u.DueAt = tc.content, tc.event, tc.due
+			if tc.due != nil {
+				u.Type = unit.TypeTask
+			}
+			fire := now.Add(-time.Minute)
+			tr.FireAt = &fire
+			tr.Payload.ActionText = ""
+			sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+			if len(sent) != 1 || sent[0] != tc.want {
+				t.Errorf("push sent %q, want exactly %q", sent, tc.want)
+			}
+		})
 	}
 }
