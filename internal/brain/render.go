@@ -142,12 +142,40 @@ func occasionOf(u unit.Unit, t ports.DueTrigger, now time.Time) (at time.Time, d
 }
 
 // pushItem is what a reminder names of u: its title, else its content, and the
-// instant it is about now (ADR-0064 point 1).
+// instant it is about now (ADR-0064 point 1, ADR-0065). When the reminder
+// cannot compute that instant (an old-style row with no lead, a recurring one
+// with no anchor), a unit with no title and a date of its own is said by that
+// date, since its content would repeat it.
 func pushItem(u unit.Unit, t ports.DueTrigger, now time.Time) phrase.Item {
-	it := phrase.Item{Text: clip(shownText(u)), Names: phrase.NamesOf(u.Title, u.Content)}
+	var when *phrase.Moment
 	if at, dayOnly, known := occasionOf(u, t, now); known {
-		it.When = &phrase.Moment{At: at, DayOnly: dayOnly}
+		when = &phrase.Moment{At: at, DayOnly: dayOnly}
+	} else if u.Title == "" {
+		when = ownMoment(u, now)
 	}
+	return itemFor(u, when)
+}
+
+// ownMoment is the instant u carries of its own, its event else its due day, in
+// now's zone; nil when it has neither.
+func ownMoment(u unit.Unit, now time.Time) *phrase.Moment {
+	at, due := u.EventAt, false
+	if at == nil {
+		at, due = u.DueAt, u.DueAt != nil
+	}
+	if at == nil {
+		return nil
+	}
+	local := at.In(now.Location())
+	return &phrase.Moment{At: local, DayOnly: atMidnight(at, now), Due: due}
+}
+
+// itemFor is u as a reply names it beside an instant. A unit with that
+// instant and no title is unnamed: it is not said by its content, which
+// already carries the date (ADR-0065 point 5).
+func itemFor(u unit.Unit, when *phrase.Moment) phrase.Item {
+	it := phrase.ItemOf(u.Title, u.Content, when, u.EventAt != nil || u.DueAt != nil)
+	it.Text = clip(it.Text)
 	return it
 }
 

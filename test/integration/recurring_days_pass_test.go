@@ -71,7 +71,7 @@ func TestRecurringReminder_DaysPassOverSQLite(t *testing.T) {
 	cases := t.TempDir()
 	raw, err := json.Marshal(map[string]string{
 		"id": "daily-pills", "provider": "openai", "model": "gpt-4o-mini", "task": "classify", "message": "Take the pills",
-		"response": `{"type":"recurring_reminder","normalized_content":"Take the pills","weight":0.6,"decay_rate":0.02,` +
+		"response": `{"type":"recurring_reminder","normalized_content":"Take the pills","title":"Take the pills","weight":0.6,"decay_rate":0.02,` +
 			`"event_at":"2026-10-15T20:00:00-03:00","recurrence_rule":"daily","interrupt_level":0.8}`,
 	})
 	if err != nil {

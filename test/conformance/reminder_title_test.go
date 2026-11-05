@@ -42,9 +42,10 @@ func TestRenderUsesTheTitleWhenPresent(t *testing.T) {
 	}
 }
 
-// TestRenderFallsBackToContentWithoutTitle: a unit from before titles, or whose
-// title the check dropped, reads its content.
-func TestRenderFallsBackToContentWithoutTitle(t *testing.T) {
+// TestRenderSaysAnUntitledDatedUnitAsSomethingNoted: a unit from before titles,
+// or whose title the check dropped, is not read by its content when it has an
+// instant: the content already says it, and the push said it twice (ADR-0065).
+func TestRenderSaysAnUntitledDatedUnitAsSomethingNoted(t *testing.T) {
 	v := newI37Vault(t)
 	event := i37Day(14, 22, 30)
 	v.titled("meeting", "", "Tengo reunión con Juan hoy a las 22:30", &event)
@@ -52,7 +53,7 @@ func TestRenderFallsBackToContentWithoutTitle(t *testing.T) {
 
 	v.check(false)
 
-	want := "Acordate: tengo reunión con Juan hoy a las 22:30, hoy a las 22:30."
+	want := "Acordate: tenés algo anotado hoy a las 22:30."
 	if len(v.ch.texts) != 1 || v.ch.texts[0] != want {
 		t.Errorf("sent %q, want exactly [%q]", v.ch.texts, want)
 	}

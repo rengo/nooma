@@ -22,19 +22,19 @@ Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are
 
 ## Link 1 — `feat/untitled-fallback` (D2)
 
-- [ ] 1.1 RED L1 `phrase.ItemOf`: titled as today; no title + instant is `Unnamed`; no title and
+- [x] 1.1 RED L1 `phrase.ItemOf`: titled as today; no title + instant is `Unnamed`; no title and
       no instant of its own keeps the content (also when the reply computes a day for it); `Names` built by it (replaces `NamesOf`).
-- [ ] 1.2 RED L1 exact text of every unnamed frame in ES and EN (push, recall one ahead, recall
+- [x] 1.2 RED L1 exact text of every unnamed frame in ES and EN (push, recall one ahead, recall
       one past, list line), today / tomorrow / due / past, the late note.
-- [ ] 1.3 RED L2 I59 extension: an untitled dated unit's push, recall and digest line contain
+- [x] 1.3 RED L2 I59 extension: an untitled dated unit's push, recall and digest line contain
       neither its content nor an ISO date; a title-less recurring reminder with an `event_at` is
       said "something noted" (spec R1), one with neither instant keeps its words.
-- [ ] 1.4 GREEN `Set` fields and `ItemOf`; the four callers (`pushItem`, `recallItem`,
+- [x] 1.4 GREEN `Set` fields and `ItemOf`; the four callers (`pushItem`, `recallItem`,
       `dueLines`, Today). Completeness test covers the new fields.
-- [ ] 1.5 Doc 02 §5 recall, §8 push, digest and Today: the unnamed frames, and the fallback half of
+- [x] 1.5 Doc 02 §5 recall, §8 push, digest and Today: the unnamed frames, and the fallback half of
       the "read by its content" lines (`:677`, `:855`, `:1989`, `:2085`): a dated unit with no title
       is said as something noted. PR #446 (this link) is amended for it. `make check-all`.
-- [ ] 1.6 Mutation probe: route an unnamed item back to its content; a named test goes red.
+- [x] 1.6 Mutation probe: route an unnamed item back to its content; a named test goes red.
 
 ## Link 2 — `feat/untitled-naming` (D1, D4 capture and correction; ADR-0065 already Accepted by link 0)
 

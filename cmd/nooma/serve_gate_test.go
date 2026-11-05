@@ -430,7 +430,7 @@ func gateSeeder(t *testing.T, units *sqlite.UnitRepo, at time.Time) func(id stri
 	return func(id string, typ unit.Type, w float64) {
 		t.Helper()
 		if err := units.Create(context.Background(), unit.Unit{
-			ID: id, Type: typ, Status: unit.StatusPool, Content: id, Source: "chat",
+			ID: id, Type: typ, Status: unit.StatusPool, Title: id, Content: id, Source: "chat",
 			Weight: w, WeightDecayRate: 0.01,
 			LastTouchedAt: at, CreatedAt: at, UpdatedAt: at,
 		}); err != nil {
@@ -583,6 +583,9 @@ func carryOrderAfterToday(t *testing.T, digestKeeper func(shared *brain.FocusKee
 		// A digest line says its unit's words (ADR-0032 point 4).
 		if err := units.UpdateContent(ctx, p.unit, "act on "+p.trig, seededAt); err != nil {
 			t.Fatalf("say %s: %v", p.unit, err)
+		}
+		if err := units.UpdateTitle(ctx, p.unit, "act on "+p.trig, seededAt); err != nil {
+			t.Fatalf("title %s: %v", p.unit, err)
 		}
 		uid, fireAt, yearly := p.unit, digestAt.Add(-time.Hour), prospection.RuleYearly
 		if err := triggers.Create(ctx, ports.Trigger{

@@ -226,6 +226,7 @@ func atMidnight(t time.Time) bool {
 // and when it is — its event, else its due day — in zone, the capture's own,
 // with no hour for a day alone.
 //
+// A unit with an instant and no title is not said by its content (ADR-0065).
 // Not the content alone: the classification writes a resolved date into it
 // as YYYY-MM-DD, the one form a correction can find (doc 02 §5), which is
 // what the vault needs and not what a reader in a chat does.
@@ -233,19 +234,16 @@ func atMidnight(t time.Time) bool {
 // Names is what phrase reads to tell a name from an ordinary first word: the
 // title and the content, each without its own first word.
 func recallItem(u unit.Unit, zone *time.Location) phrase.Item {
-	it := phrase.Item{Text: u.Title, Names: phrase.NamesOf(u.Title, u.Content)}
-	if it.Text == "" {
-		it.Text = u.Content
-	}
+	var when *phrase.Moment
 	at, due := u.EventAt, false
 	if at == nil {
 		at, due = u.DueAt, u.DueAt != nil
 	}
 	if at != nil {
 		local := at.In(zone)
-		it.When = &phrase.Moment{At: local, DayOnly: atMidnight(local), Due: due}
+		when = &phrase.Moment{At: local, DayOnly: atMidnight(local), Due: due}
 	}
-	return it
+	return phrase.ItemOf(u.Title, u.Content, when, u.EventAt != nil || u.DueAt != nil)
 }
 
 // askedLeads names when an armed one-shot reminder rings, every ring of it.

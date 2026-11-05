@@ -13,10 +13,14 @@ import (
 	"github.com/rengo/nooma/internal/ports"
 )
 
-// say sets what the unit now says, as a correction of its text would.
+// say sets what the unit now says, as a correction of its text would: the new
+// words as its content and as its title, which a reply says first.
 func (v *i37Vault) say(unitID, content string) {
 	v.t.Helper()
 	if err := v.units.UpdateContent(context.Background(), unitID, content, i37Now); err != nil {
+		v.t.Fatalf("say %s: %v", unitID, err)
+	}
+	if err := v.units.UpdateTitle(context.Background(), unitID, content, i37Now); err != nil {
 		v.t.Fatalf("say %s: %v", unitID, err)
 	}
 }

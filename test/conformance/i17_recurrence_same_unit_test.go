@@ -155,8 +155,8 @@ func (c i17Case) live(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response := fmt.Sprintf(`{"type":"recurring_reminder","normalized_content":%q,"weight":0.6,"decay_rate":0.02,`+
-		`"event_at":%q,"recurrence_rule":%q,"interrupt_level":%v}`, c.text, c.eventAt, c.rule, c.interrupt)
+	response := fmt.Sprintf(`{"type":"recurring_reminder","normalized_content":%q,"title":%q,"weight":0.6,"decay_rate":0.02,`+
+		`"event_at":%q,"recurrence_rule":%q,"interrupt_level":%v}`, c.text, c.text, c.eventAt, c.rule, c.interrupt)
 	llm := fakeprovider.New(t, i28Case(t, "i17", c.text, response), "i17")
 	ids, log := &counterIDs{}, memrepo.NewDecisionLog()
 	ch := &i17Channel{clock: clock, fail: c.failSends}

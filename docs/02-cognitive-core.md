@@ -674,7 +674,8 @@ command, it is answered once.
    - **`title` is the short, date-free name a reminder says** (optional, in the message's
      language; spec R12). `classify.ResolveTitle` trims it and drops one that is blank, holds
      any non-graphic character (a control, a line or paragraph separator, a format character:
-     U+2028, U+200B, U+202E…), exceeds `max_title_runes`, or holds an ISO date or an `HH:MM`; a dropped title degrades the field (I14) and the unit is then read by its content.
+     U+2028, U+200B, U+202E…), exceeds `max_title_runes`, or holds an ISO date or an `HH:MM`; a dropped title degrades the field (I14) and the unit is then read by its content, or, if it
+     carries an `event_at` or a `due_at`, said as something noted at that instant (§5 step 2, ADR-0065).
      Relative words ("mañana", "jueves", "3pm") are a known limit: catching them takes a word
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
@@ -852,7 +853,7 @@ command, it is answered once.
      person as a fact. So the answering entrance keeps only what clears
      `recall_min_similarity`, and candidate search keeps everything both legs found.
    - **A recall answer is a sentence built by code** (ADR-0064, `phrase.Recall`, I59). It names
-     each unit by its title, else its content, and when it is — its `event_at`, else its
+     each unit by its title, else (with no instant) its content, and when it is — its `event_at`, else its
      `due_at` — in the user's zone, with no hour for a day alone. Not the content alone: the
      content carries a resolved date as `YYYY-MM-DD`, the form a correction needs to find it
      (step 1), not the form a person reads. One unit with an instant is one sentence, in the
@@ -860,7 +861,14 @@ command, it is answered once.
      turno con el oculista el jueves 26 de noviembre a las 8:30." / "You had “Dinner with Ana”
      yesterday at 21:00." A `due_at` is said as a due day: "Tenés anotado renovar el pasaporte
      para mañana." One with no instant quotes what is noted: "Tenés anotado: la clave del wifi
-     es 1234." Several are a line with the count, then a bullet each with its day ("Tenés 3 cosas
+     es 1234." **A unit with an `event_at` or a `due_at` of its own and no title is never said
+     by its content** ([ADR-0065](adr/0065-a-dated-unit-is-named.md), `phrase.ItemOf`): the
+     content already carries the date, so saying both repeated it. It is said as something noted
+     at that instant, with none of the unit's words: "Tenés algo anotado el jueves 26 de
+     noviembre a las 8:30." / "You had something noted yesterday at 9:00."; in a list,
+     "• Algo anotado, hoy a las 22:30" / "• Something noted, today at 22:30". A title-less unit
+     with neither keeps its words. Several are a line with the count, then a bullet each with its
+     day ("Tenés 3 cosas
      anotadas:" / "• Cena con Ana, el viernes 13 de noviembre a las 21:00"; a past due day reads
      "era para ayer" / "was due yesterday"). Nothing admitted is "No tengo nada anotado sobre
      eso." / "I don't have anything noted about that.", and never names a topic, an item or a
@@ -1107,8 +1115,9 @@ command, it is answered once.
      `fields` with `previous` and `next` like any other). A valid title the model answered for
      the unit it was shown, when it differs from the unit's, is written. **Otherwise a plan that
      really changes the unit (a moved date, or a rewritten body) clears the title** (`next` is
-     `null`): it names a day or a body that is gone, and the unit then reads its content, which
-     already follows the new date. That covers a date-only edit with no fresh title, and the
+     `null`): it names a day or a body that is gone, and the unit is then said by what it has: as
+     something noted at its new date while it carries a date of its own (ADR-0065 point 5), by
+     its content only when it carries none. That covers a date-only edit with no fresh title, and the
      chat path, where the referent is found after the model answered: a title it wrote names the
      utterance and is never taken. A title equal to the unit's, a unit with none, and a
      correction that changes nothing (a date the unit already holds) write and clear nothing.
@@ -1986,11 +1995,20 @@ box can audit it):
   marked delivered fails the pass, and the process never sends it again (a restart, which forgets,
   may once more).
   **A reminder says its unit as it is now** (ADR-0032 point 4): a push and a digest line carry the
-  unit's current `title`, else its current `content` (spec R12), and current instant in the
+  unit's current `title`, else its current `content` unless it is dated and untitled (below; spec
+  R12), and current instant in the
   clock's zone, said as a person says them (§5 step 2, ADR-0064): `Acordate: turno con el
   oculista, hoy a las 11:00.` / `Don't forget: Appointment with the optician, today at 11:00.`;
   a day alone has no time (`Acordate: tomar las pastillas, hoy.`) and a unit with no instant
-  says its words alone (`Acordate: llamar a mamá.`). Never a model call. A late push appends
+  says its words alone (`Acordate: llamar a mamá.`). A unit with an `event_at` or a `due_at` and
+  no title is not said by its content (ADR-0065): `Acordate: tenés algo anotado hoy a las
+  22:30.` / `Don't forget: you have something noted today at 22:30.` When the pass cannot
+  compute the instant (an old-style row with no lead, a recurring one with no anchor), the
+  unit's own date is said: `Acordate: tenés algo anotado para el jueves 5 de noviembre.`, never
+  its content. The day a pass computes for a recurring unit is the reply's, not the unit's: a
+  recurring unit with an `event_at` (its anchor) and no title is `Acordate: tenés algo anotado
+  hoy.`, and one with neither keeps its words (`Acordate: tomar las pastillas, hoy.`). Never a
+  model call. A late push appends
   `Perdón, te llega más tarde de lo previsto.` / `Sorry, this is later than intended.` Words that
   already end in `?`, `!` or a clipped `…` get no second period. A digest line is the same words
   without the push's frame (below). A recurring one
@@ -2006,8 +2024,9 @@ box can audit it):
   thing:`). Each line is its unit's words as stored, so a bullet keeps its capital, then its day
   as a person says it, a day alone (the digest is a morning's list, so it carries no hour):
   `• Tomar las pastillas, hoy`, `• Cumpleaños de Ana, mañana`. Today's preview, which does show
-  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and
-  past it `era para ayer` / `was due yesterday`. The check-ins asked again and the goal
+  a timed item, says its hour: `• Turno con el oculista, hoy a las 11:00`. A line for a unit
+  with an instant of its own and no title is `• Algo anotado, hoy` / `• Something noted, today`
+  (ADR-0065). A task due says its due day as due, `• Renovar el pasaporte, para hoy`, and past it `era para ayer` / `was due yesterday`. The check-ins asked again and the goal
   check-in keep their wording (client, 2026-10-16). The relation question follows on a line of its
   own after `Una pregunta más:` / `One more question:`. A digest with a question and nothing
   else is the greeting alone, then the question, with no "one more".
@@ -2082,7 +2101,8 @@ box can audit it):
     "el resumen alcanza"). A `task` arms nothing (ADR-0029, ADR-0030), so the digest is where its
     due date reaches the user: on the morning of its due day, a local calendar day in the user's
     zone, the digest names every live `task` whose `due_at` falls on it, as its unit's line (its
-    title, else its content, and the due day alone, said as due: `Renovar el pasaporte, para hoy`).
+    title, else `Algo anotado` / `Something noted` (its content repeats the due day, ADR-0065), and the
+    due day alone, said as due: `Renovar el pasaporte, para hoy`).
     One still live after its day is named again on the following mornings, `due_task_digest_days` mornings
     in all, and then no more. A task the user says is done in answer to the digest is closed and
     named no more (§5 step 4, ADR-0040); the bound is what stops the line of one nobody answers. A task the user asked to be reminded of

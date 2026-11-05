@@ -51,7 +51,7 @@ func (f *fxH) carryTrigger(t *testing.T, trigID, unitID string, w float64) {
 	t.Helper()
 	ctx := context.Background()
 	if err := f.units.Create(ctx, unit.Unit{
-		ID: unitID, Type: unit.TypeKnowledge, Status: unit.StatusPool, Content: "act on " + trigID,
+		ID: unitID, Type: unit.TypeKnowledge, Status: unit.StatusPool, Title: "act on " + trigID, Content: "act on " + trigID,
 		Weight: w, LastTouchedAt: todayNow, CreatedAt: todayNow, UpdatedAt: todayNow,
 	}); err != nil {
 		t.Fatalf("seed unit %s: %v", unitID, err)
