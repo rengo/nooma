@@ -195,7 +195,9 @@ func TestRecall(t *testing.T) {
 
 // TestDated_ReadsTheInstantInNowsZone: an instant stored in UTC is said in the
 // user's zone, the clock and the day both. 2026-11-05 01:30 UTC is Wednesday
-// 22:30 at -03:00, which is today, not tomorrow.
+// 22:30 at -03:00, which is today, not tomorrow. The far date, past the
+// relative words, is named from the same zone: 2026-11-27 01:30 UTC is
+// Thursday 26 at -03:00, so Day's own conversion decides its weekday and number.
 func TestDated_ReadsTheInstantInNowsZone(t *testing.T) {
 	utc := time.Date(2026, 11, 5, 1, 30, 0, 0, time.UTC)
 	m := Moment{At: utc}
@@ -204,5 +206,12 @@ func TestDated_ReadsTheInstantInNowsZone(t *testing.T) {
 	}
 	if got, want := en.Dated(m, now), "today at 22:30"; got != want {
 		t.Errorf("EN Dated = %q, want %q", got, want)
+	}
+	far := Moment{At: time.Date(2026, 11, 27, 1, 30, 0, 0, time.UTC)}
+	if got, want := es.Day(far, now), "el jueves 26 de noviembre"; got != want {
+		t.Errorf("ES Day = %q, want %q", got, want)
+	}
+	if got, want := en.Day(far, now), "Thursday 26 November"; got != want {
+		t.Errorf("EN Day = %q, want %q", got, want)
 	}
 }
