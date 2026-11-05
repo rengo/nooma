@@ -109,6 +109,11 @@ type UnitRepo interface {
 	// pre-image rule.
 	NameIfUntitled(ctx context.Context, id, title string, at time.Time) (bool, error)
 
+	// UntitledDated returns every live unit with no title and an event_at or a
+	// due_at, ordered by id: the night's candidates for naming (ADR-0065). The
+	// caller orders and cuts them, so it takes no limit here.
+	UntitledDated(ctx context.Context) ([]unit.Unit, error)
+
 	// UpdateReminderLeads rewrites id's ReminderLeads to minutes and UpdatedAt
 	// to at, leaving every other column unchanged (I40). It returns
 	// ErrUnitNotFound if no unit with id exists. Like the other Update*

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Phase is one of doc 02 §6's eight nightly phases. Its VALUE is its
+// Phase is one of doc 02 §6's nine nightly phases. Its VALUE is its
 // position: Phase(0) runs first and phaseCount-1 runs last. The order is
 // not data the sequence carries, it is the type's own numbering.
 type Phase int
@@ -18,6 +18,7 @@ const (
 	PhaseDerive
 	PhaseReweight
 	PhasePatternEval
+	PhaseTitle
 	PhaseLearn
 
 	phaseCount // not a phase: the count, and Order's upper bound
@@ -35,7 +36,10 @@ const (
 // every editor and every CI job at once, not merely a test that could be
 // skipped, weakened or deleted.
 //
-// Does NOT prove: that there are exactly eight phases (leg 3's doc-parse
+// PhaseTitle (ADR-0065) is declared before PhaseLearn: learn reads what the
+// other phases wrote, so a phase added later goes ahead of it, never after.
+//
+// Does NOT prove: that there are exactly nine phases (leg 3's doc-parse
 // half — test/conformance/i11_consolidation_phase_order_test.go, checked
 // against docs/02-cognitive-core.md §6's own arrow line) or that a runner
 // ever executes Order()'s sequence (I11's behavioural half, m2c's).
@@ -59,15 +63,16 @@ func phaseNames() [phaseCount]string {
 		PhaseDerive:           "derive",
 		PhaseReweight:         "reweight",
 		PhasePatternEval:      "pattern_eval",
+		PhaseTitle:            "title",
 		PhaseLearn:            "learn",
 	}
 }
 
-// Order returns a fresh slice holding the eight Phase vocabulary members,
-// ascending from Phase(0), with Order()[7] == PhaseLearn (R1.1).
+// Order returns a fresh slice holding the nine Phase vocabulary members,
+// ascending from Phase(0), with Order()[8] == PhaseLearn (R1.1).
 //
 // Generated from [0, phaseCount), never a slice literal: there is no list
-// of eight names anywhere in this package for a reorder to leave stale —
+// of nine names anywhere in this package for a reorder to leave stale —
 // permuting the sequence means renumbering the constants above, which
 // simultaneously changes every String() output and ParsePhase round-trip
 // (design.md §3.2 leg 2).
@@ -90,7 +95,7 @@ func (p Phase) String() string {
 
 // ParsePhase is the sole entry point from untrusted text — a CLI flag —
 // into the Phase vocabulary. It returns ErrUnknownPhase, naming the
-// rejected value, for anything that is not one of Order()'s eight names.
+// rejected value, for anything that is not one of Order()'s nine names.
 func ParsePhase(s string) (Phase, error) {
 	for _, p := range Order() {
 		if p.String() == s {

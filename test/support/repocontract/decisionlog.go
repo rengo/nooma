@@ -372,6 +372,8 @@ func RunDecisionLog(t *testing.T, newRepo func(t *testing.T) ports.DecisionLog) 
 			ports.ActionConfigRemindersFollowed:         true,
 			ports.ActionCaptureTitleNamed:               true,
 			ports.ActionCorrectionTitleNamed:            true,
+			ports.ActionTitleNamed:                      true,
+			ports.ActionTitleUnnamed:                    true,
 		}
 
 		got := ports.AllDecisionActions()

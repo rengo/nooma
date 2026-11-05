@@ -6,21 +6,21 @@ import (
 	"testing"
 )
 
-// TestOrder_HasExactlyEightPhasesAscendingWithLearnLast is the C14 length
+// TestOrder_HasExactlyNinePhasesAscendingWithLearnLast is the C14 length
 // guard: it must fail on Order()'s length before any name assertion runs,
 // against a zero-value stub that returns nil.
-func TestOrder_HasExactlyEightPhasesAscendingWithLearnLast(t *testing.T) {
+func TestOrder_HasExactlyNinePhasesAscendingWithLearnLast(t *testing.T) {
 	order := Order()
-	if len(order) != 8 {
-		t.Fatalf("Order() returned %d phases, want 8: %v", len(order), order)
+	if len(order) != 9 {
+		t.Fatalf("Order() returned %d phases, want 9: %v", len(order), order)
 	}
 	for i, p := range order {
 		if int(p) != i {
 			t.Fatalf("Order()[%d] = %v (int %d), want ascending from Phase(0): %v", i, p, int(p), order)
 		}
 	}
-	if order[7] != PhaseLearn {
-		t.Fatalf("Order()[7] = %v, want PhaseLearn — I11: learn is always last", order[7])
+	if order[len(order)-1] != PhaseLearn {
+		t.Fatalf("Order()[%d] = %v, want PhaseLearn — I11: learn is always last", len(order)-1, order[len(order)-1])
 	}
 }
 
@@ -71,7 +71,7 @@ func TestPhaseString_IsTotalAndNeverPanics(t *testing.T) {
 func TestPhaseString_PinsTheOutOfRangeRendering(t *testing.T) {
 	cases := map[Phase]string{
 		Phase(-1):              "Phase(-1)",
-		Phase(int(phaseCount)): "Phase(8)",
+		Phase(int(phaseCount)): "Phase(9)",
 		Phase(99):              "Phase(99)",
 	}
 
@@ -106,7 +106,7 @@ func TestParsePhase_RejectsUnknownText(t *testing.T) {
 	}
 }
 
-// TestParsePhase_IsExactMatchOnly pins R1.1's "one of the eight names" to
+// TestParsePhase_IsExactMatchOnly pins R1.1's "one of the nine names" to
 // mean exactly that: byte-for-byte, no case folding and no surrounding
 // whitespace tolerated. Judgment Day round 1 mutated the comparison to
 // strings.EqualFold and the whole suite stayed green — the behaviour was
@@ -140,9 +140,9 @@ func TestParsePhase_IsExactMatchOnly(t *testing.T) {
 }
 
 // TestPhase_NamedConstantsMatchTheirPositionAndName pins each of the
-// eight named constants to both its expected position in Order() and its
+// nine named constants to both its expected position in Order() and its
 // expected String() name — a relative oracle (ascending, as
-// TestOrder_HasExactlyEightPhasesAscendingWithLearnLast checks) cannot
+// TestOrder_HasExactlyNinePhasesAscendingWithLearnLast checks) cannot
 // tell a correct sequence from two adjacent phase names swapped in the
 // const block, since either arrangement is still "ascending". This table
 // pins against the computed literal instead.
@@ -159,6 +159,7 @@ func TestPhase_NamedConstantsMatchTheirPositionAndName(t *testing.T) {
 		{PhaseDerive, "PhaseDerive", "derive"},
 		{PhaseReweight, "PhaseReweight", "reweight"},
 		{PhasePatternEval, "PhasePatternEval", "pattern_eval"},
+		{PhaseTitle, "PhaseTitle", "title"},
 		{PhaseLearn, "PhaseLearn", "learn"},
 	}
 

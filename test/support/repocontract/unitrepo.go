@@ -1385,6 +1385,41 @@ func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 			t.Fatalf("UpdateTitle on a missing id: %v, want ErrUnitNotFound", err)
 		}
 	})
+	t.Run("UntitledDated returns the live units with no title and an instant, by id", func(t *testing.T) {
+		repo := newRepo(t)
+		at := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+		mk := func(id string, status unit.Status, title string, event, due *time.Time) {
+			u := fixtureUnit(id, status)
+			u.Title, u.EventAt, u.DueAt = title, event, due
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mk("c-event", unit.StatusPool, "", &at, nil)
+		mk("a-due", unit.StatusPool, "", nil, &at)
+		mk("b-both", unit.StatusPool, "", &at, &at)
+		mk("titled", unit.StatusPool, "Reunión", &at, nil)
+		mk("undated", unit.StatusPool, "", nil, nil)
+		mk("archived", unit.StatusArchived, "", &at, nil)
+		mk("incomplete", unit.StatusIncomplete, "", &at, nil)
+
+		got, err := repo.UntitledDated(ctx)
+		if err != nil {
+			t.Fatalf("UntitledDated: %v", err)
+		}
+		if want := []string{"a-due", "b-both", "c-event"}; !reflect.DeepEqual(idsOf(got), want) {
+			t.Fatalf("UntitledDated ids = %v, want %v", idsOf(got), want)
+		}
+		if got[2].EventAt == nil || !got[2].EventAt.Equal(at) || got[0].DueAt == nil {
+			t.Fatalf("UntitledDated lost an instant: %+v", got)
+		}
+		if err := repo.UpdateTitle(ctx, "c-event", "Named", at); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := repo.UntitledDated(ctx); len(got) != 2 {
+			t.Fatalf("a titled unit is still returned: %v", idsOf(got))
+		}
+	})
 	t.Run("NameIfUntitled writes a title only where it is still NULL", func(t *testing.T) {
 		repo := newRepo(t)
 		bare := fixtureUnit("bare", unit.StatusPool)

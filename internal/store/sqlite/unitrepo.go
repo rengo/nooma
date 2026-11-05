@@ -300,6 +300,30 @@ func (r *UnitRepo) NameIfUntitled(ctx context.Context, id, title string, at time
 	return false, err
 }
 
+// UntitledDated implements ports.UnitRepo.
+func (r *UnitRepo) UntitledDated(ctx context.Context) ([]unit.Unit, error) {
+	rows, err := r.db.QueryContext(ctx,
+		unitSelectColumns+` FROM units WHERE status = ? AND title IS NULL AND (event_at IS NOT NULL OR due_at IS NOT NULL) ORDER BY id`,
+		string(unit.StatusPool))
+	if err != nil {
+		return nil, fmt.Errorf("select untitled dated units: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query, nothing left to clean up on error
+
+	out := []unit.Unit{}
+	for rows.Next() {
+		u, err := scanUnit(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan untitled dated unit: %w", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("select untitled dated units: %w", err)
+	}
+	return out, nil
+}
+
 // SetStatus implements ports.UnitRepo. from is an optimistic-concurrency
 // precondition, not a validation — unit.ValidateTransition already decided
 // legality (design D5).

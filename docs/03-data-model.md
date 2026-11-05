@@ -38,7 +38,7 @@ CREATE TABLE units (
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
   language           TEXT,                       -- en|es|NULL: the language the capture was written in (ADR-0032); never changed by a correction
-  title              TEXT,                       -- NULL or the short, date-free name a reminder says (spec R12); rewritten by a re-classifying correction
+  title              TEXT,                       -- NULL or the short, date-free name a reminder says (spec R12); rewritten by a re-classifying correction; named by the model where a dated unit has none, at capture, at correction and nightly (ADR-0065, which overtakes migration 0009's "no backfill")
   remind_me          INTEGER NOT NULL DEFAULT 0, -- 1: the user's words asked to be reminded (ADR-0031); a fact about the capture, never edited
   reminder_leads     TEXT                        -- NULL or a JSON array of minutes before event_at: the event's own reminder leads, set by a correction (I40, ADR-0038)
 );

@@ -38,24 +38,24 @@ Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are
 
 ## Link 2 — `feat/untitled-naming` (D1, D4 capture and correction; ADR-0065 already Accepted by link 0)
 
-- [ ] 2.1 RED L1 `classify.TitleRule`, `BuildTitlePrompt`, `DecodeTitle`.
-- [ ] 2.2 RED L3 `UnitRepo.NameIfUntitled` on memrepo and SQLite (title still NULL only).
-- [ ] 2.3 RED L2 I60: capture with a dropped title is named before arming; provider failure
+- [x] 2.1 RED L1 `classify.TitleRule`, `BuildTitlePrompt`, `DecodeTitle`.
+- [x] 2.2 RED L3 `UnitRepo.NameIfUntitled` on memrepo and SQLite (title still NULL only).
+- [x] 2.3 RED L2 I60: capture with a dropped title is named before arming; provider failure
       leaves NULL and captures; a date-only correction ends titled; a concurrent title survives.
-- [ ] 2.4 GREEN `nameUnit`, the two call sites, decision actions `capture.title.named`, `correction.title.named`.
-- [ ] 2.5 Doc 02 §5 (title paragraph retry sentence, "the title follows the body"). Mutation: drop the NULL guard.
+- [x] 2.4 GREEN `nameUnit`, the two call sites, decision actions `capture.title.named`, `correction.title.named`.
+- [x] 2.5 Doc 02 §5 (title paragraph retry sentence, "the title follows the body"). Mutation: drop the NULL guard.
 
 ## Link 3 — `feat/untitled-night` (D3, D4 night)
 
-- [ ] 3.1 RED L1 `consolidation.SelectToName` order, cut, ties, empty.
-- [ ] 3.2 RED L3 `UnitRepo.UntitledDated`.
-- [ ] 3.3 RED L2 I60 night: cap and order, `previous`/`next` logged, titled units, content and
+- [x] 3.1 RED L1 `consolidation.SelectToName` order, cut, ties, empty.
+- [x] 3.2 RED L3 `UnitRepo.UntitledDated`.
+- [x] 3.3 RED L2 I60 night: cap and order, `previous`/`next` logged, titled units, content and
       instants untouched, a provider error does not abort, no provider writes nothing.
-- [ ] 3.4 RED then GREEN `PhaseTitle` declared between `pattern_eval` and `learn`: update
+- [x] 3.4 RED then GREEN `PhaseTitle` declared between `pattern_eval` and `learn`: update
       `TestOrder_HasExactlyEightPhasesAscendingWithLearnLast` (renamed for nine; still asserts
       `learn` is the last index), the `phase.go` proof comment and the I11 conformance's arrow-line
       parse; the `title` phase; `consolidate.title.*` actions.
-- [ ] 3.5 Doc 02 §6 (pipeline line, phase item) and §13 (`title_backfill_per_pass` = 50), doc 03
+- [x] 3.5 Doc 02 §6 (pipeline line, phase item) and §13 (`title_backfill_per_pass` = 50), doc 03
       `units.title`, doc 06 §4 I11 ("9"; doc 02 has no I11 row) and I60, doc 07 (status row and
       `docs/07-functional.md:156-157`, "eight phases" to nine), the `phase.go:8` type comment, and
       a line that ADR-0065 adds a ninth phase to ADR-0005's eight (no supersession). Mutation:

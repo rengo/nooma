@@ -240,6 +240,27 @@ func resolveConsolidateProviders(cfg *config.Config, lookup func(string) (string
 	return judge, embed, embedModel, nil
 }
 
+// resolveNamer is the provider bound to capture_processing, which the night's
+// title phase names units with (ADR-0065), or nil when none can be built. It is
+// optional where connect's judge is not: a vault without it still sleeps and the
+// phase writes nothing, so no consolidation task list gains it.
+func resolveNamer(cfg *config.Config, lookup func(string) (string, bool)) ports.LLMProvider {
+	binding, bound := cfg.Tasks["capture_processing"]
+	if !bound {
+		return nil
+	}
+	provider, present := cfg.Providers[binding.Provider]
+	if !present {
+		return nil
+	}
+	client, err := buildProvider(provider, lookup)
+	if err != nil {
+		return nil
+	}
+	llm, _ := client.(ports.LLMProvider)
+	return llm
+}
+
 // wireConsolidate builds the real ConsolidateService over db and cfg —
 // wireBrain's own shape (config -> providers -> repos -> RecallService ->
 // service), but refusing with a named error instead of wireBrain's own
@@ -269,7 +290,7 @@ func wireConsolidate(ctx context.Context, db *sqlite.Vault, cfg *config.Config, 
 	index := brain.NewIndex(loaded)
 	recall := brain.NewRecallService(index, lex, units, embed)
 
-	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state, questions, sqlite.NewSignalRepo(db), sqlite.NewTriggerRepo(db)), nil
+	return brain.NewConsolidateService(systemClock{}, cfgRepo, units, rels, uuidGen{}, log, recall, judge, selfModel, state, questions, sqlite.NewSignalRepo(db), sqlite.NewTriggerRepo(db)).WithNaming(resolveNamer(cfg, lookup)), nil
 }
 
 // wireChannel builds the configured channel, or nothing.
