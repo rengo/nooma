@@ -207,6 +207,17 @@ type consolidateRunner struct {
 	// triggers is where pattern_eval arms a goal check-in (doc 02 §7); nil
 	// arms none.
 	triggers ports.TriggerRepo
+	// namer is the capture_processing provider the title phase asks to name a
+	// dated unit (ADR-0065); nil names nothing.
+	namer ports.LLMProvider
+}
+
+// WithNaming gives the service the provider its title phase names units with
+// (ADR-0065): the one bound to capture_processing, since naming a unit is
+// understanding it as capture does. Without it the phase writes nothing.
+func (s *ConsolidateService) WithNaming(llm ports.LLMProvider) *ConsolidateService {
+	s.run.namer = llm
+	return s
 }
 
 // record persists one decision_log row — the one call site every effect a
@@ -1366,7 +1377,7 @@ func (r consolidateRunner) at(ctx context.Context, req ConsolidateRequest, now t
 }
 
 // runPhase dispatches p to its own arm — design §3.3(b)'s switch over
-// consolidation's own Phase constants, the only enumeration of the eight
+// consolidation's own Phase constants, the only enumeration of the nine
 // phases this file contains (m2b §3.2 leg 4's tree scan bans a second
 // one). report accumulates every corrupted id a phase's own read refuses
 // (design §3.3(e)) — the one place a refusal is surfaced, never in
@@ -1463,6 +1474,10 @@ func (r consolidateRunner) runPhase(ctx context.Context, p consolidation.Phase, 
 			if err := r.persistLoadHypothesis(ctx, finding, lastAt, pass.now); err != nil {
 				return err
 			}
+		}
+	case consolidation.PhaseTitle:
+		if err := r.title(ctx, pass.now); err != nil {
+			return err
 		}
 	case consolidation.PhaseLearn:
 		// M5 overturns owner ruling 3 ("no work, ever"): the learn slot

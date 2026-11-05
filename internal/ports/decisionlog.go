@@ -288,8 +288,30 @@ const (
 	ActionCorrectionTitleNamed DecisionAction = "correction.title.named"
 )
 
+// ActionTitleNamed and ActionTitleUnnamed are the night's title phase (ADR-0065):
+// named wrote a title where a dated unit had none (change-shaped context, like the
+// capture and correction rows); unnamed records that the model was asked and the
+// unit stays untitled (unit_id and reason), to be tried again the next night.
+const (
+	ActionTitleNamed   DecisionAction = "consolidate.title.named"
+	ActionTitleUnnamed DecisionAction = "consolidate.title.unnamed"
+)
+
+// ActionCaptureTitleReminderRetexted, ActionCorrectionTitleReminderRetexted and
+// ActionTitleReminderRetexted: Nooma, having just named a unit (the matching
+// ...title.named row), rewrote the text an armed reminder of it says to the new
+// title (fields: action_text only; it never changes when the reminder fires). It is
+// the naming's own row on every path that names, never a correction's
+// reminder.moved: the user corrected nothing. At capture the naming runs before any
+// arming, so that row is the one that practically never appears.
+const (
+	ActionCaptureTitleReminderRetexted    DecisionAction = "capture.title.reminder_retexted"
+	ActionCorrectionTitleReminderRetexted DecisionAction = "correction.title.reminder_retexted"
+	ActionTitleReminderRetexted           DecisionAction = "consolidate.title.reminder_retexted"
+)
+
 // AllDecisionActions returns a fresh slice holding every DecisionAction
-// vocabulary member (eighty-three; repocontract's list holds the count), in
+// vocabulary member (eighty-eight; repocontract's list holds the count), in
 // the order the constants above declare them. ActionCaptureVoiceTranscribed
 // is ADR-0062's, listed after ActionCaptureTimerCancelled. ActionCaptureTaskClosed is ADR-0040's, listed after
 // ActionCaptureCheckInSnoozed, and ActionCaptureEventClosed ADR-0046's, after it. ActionCheckFocusUnavailable is m4c's, listed after
@@ -339,6 +361,8 @@ func AllDecisionActions() []DecisionAction {
 		ActionConfigUpdated, ActionConfigReminderMoved, ActionConfigReminderArmed, ActionConfigReminderCancelled,
 		ActionConfigRemindersFollowed,
 		ActionCaptureTitleNamed, ActionCorrectionTitleNamed,
+		ActionTitleNamed, ActionTitleUnnamed,
+		ActionCaptureTitleReminderRetexted, ActionCorrectionTitleReminderRetexted, ActionTitleReminderRetexted,
 	}
 }
 

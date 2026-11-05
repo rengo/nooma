@@ -54,9 +54,9 @@ Pieces:
   `ReasonBadFormat` as in `assignTitle`).
 - `internal/ports.UnitRepo`: `NameIfUntitled(ctx, id, title string, at time.Time) (bool, error)`,
   an `UPDATE … WHERE id = ? AND title IS NULL`. It never overwrites a title a correction or the
-  user wrote in the meantime; `false` means someone else named it first. `UntitledDated(ctx,
-  limit int) ([]unit.Unit, error)` returns non-archived units with `title IS NULL` and an
-  `event_at` or `due_at`. Both get a `repocontract` case (memrepo and SQLite).
+  user wrote in the meantime; `false` means someone else named it first. `UntitledDated(ctx)
+  ([]unit.Unit, error)` returns live (`pool`) units with `title IS NULL` and an
+  `event_at` or `due_at`, by id; it takes no limit, since `SelectToName` orders and cuts what it reads. Both get a `repocontract` case (memrepo and SQLite).
 - `internal/brain`: `nameUnit(ctx, u, source) (named bool, err error)`: call, decode, write,
   log, then `retextReminders` so an armed trigger's `action_text` stops carrying the content.
   It routes through the provider configured for `capture_processing`.

@@ -49,7 +49,7 @@ func runConsolidate(args []string, out, errOut io.Writer) error {
 
 	// R6.3: the only entry point from untrusted text (a CLI flag) into the
 	// Phase vocabulary is consolidation.ParsePhase — never a second,
-	// CLI-local list of the eight names (I11's own tree scan, m2b spec
+	// CLI-local list of the phase names (I11's own tree scan, m2b spec
 	// R1.2).
 	var req brain.ConsolidateRequest
 	if phaseFlag != "" {

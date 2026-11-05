@@ -62,7 +62,7 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 		// the unit already holds (a retry) reaches here too, which is how a row a
 		// failed step left stale is repaired.
 		if editsWhatTheUnitSays {
-			return r.retextReminders(ctx, target, body, now)
+			return r.retextReminders(ctx, target, body, now, retextAfterCorrection())
 		}
 		return nil
 	}
@@ -85,13 +85,40 @@ func (r correctionRunner) followReminder(ctx context.Context, target unit.Unit, 
 	return w.apply(ctx, target, f, byID, eventAt, body, true, now)
 }
 
+// retextCause is why a reminder's text is rewritten: the action its row carries and
+// the rationale (one %q, the unit's id).
+type retextCause struct {
+	action    ports.DecisionAction
+	rationale string
+}
+
+// retextAfterCorrection is the user's wording or title edit: a moved reminder.
+func retextAfterCorrection() retextCause {
+	return retextCause{ports.ActionCorrectionReminderMoved,
+		"changed what the reminder of unit %q says to the unit's corrected text"}
+}
+
+// retextAfterNaming is Nooma's own: it just gave the unit a title (the row named
+// says on which path), and no correction is behind it, so the row is not a
+// correction's.
+func retextAfterNaming(named ports.DecisionAction) retextCause {
+	action := ports.ActionTitleReminderRetexted
+	switch named {
+	case ports.ActionCaptureTitleNamed:
+		action = ports.ActionCaptureTitleReminderRetexted
+	case ports.ActionCorrectionTitleNamed:
+		action = ports.ActionCorrectionTitleReminderRetexted
+	}
+	return retextCause{action, "changed what the reminder of unit %q says to the title Nooma just gave the unit"}
+}
+
 // retextReminders rewrites the text of the unit's armed reminders to now, what
 // the unit says after the correction, with no change to when they fire. A row is
 // compared with that current text rather than with what the unit said before, so
 // a correction the unit already holds (a retry after a failed step) repairs a row
 // the first attempt left saying the old name. Each rewrite is recorded first, as a
 // moved reminder whose only field is action_text (ADR-0016's order).
-func (r correctionRunner) retextReminders(ctx context.Context, target unit.Unit, now string, at time.Time) error {
+func (r correctionRunner) retextReminders(ctx context.Context, target unit.Unit, now string, at time.Time, cause retextCause) error {
 	armed, err := r.triggers.ArmedForUnit(ctx, target.ID)
 	if err != nil {
 		return fmt.Errorf("correction: read reminders of unit %q: %w", target.ID, err)
@@ -104,8 +131,7 @@ func (r correctionRunner) retextReminders(ctx context.Context, target unit.Unit,
 		was := t.Payload.ActionText
 		payload := t.Payload
 		payload.ActionText = now
-		if err := w.recordReminder(ctx, w.cause.moved,
-			fmt.Sprintf("changed what the reminder of unit %q says to the unit's corrected text", target.ID),
+		if err := w.recordReminder(ctx, cause.action, fmt.Sprintf(cause.rationale, target.ID),
 			reminderChange{UnitID: target.ID, TriggerID: t.ID, Fields: []string{"action_text"},
 				Previous: map[string]any{"action_text": was}, Next: map[string]any{"action_text": now}}, at); err != nil {
 			return err

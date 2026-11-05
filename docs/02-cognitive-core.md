@@ -686,7 +686,7 @@ command, it is answered once.
      it is still `NULL` (`UnitRepo.NameIfUntitled`), so a title a correction or the user wrote
      meanwhile is never overwritten: that title stands, nothing is logged for the lost naming,
      and the capture's reminders are armed saying it. The unit's reminders are otherwise armed
-     saying the title just written. It goes
+     saying the title just written. A unit left untitled is named by the night (§6 item 8). It goes
      through the provider bound to `capture_processing`; it words no reply (I59), it names a
      stored field. A failure of the provider or an unusable answer (read leniently, as a
      capture's classification is: the title is salvaged from a truncated reply) leaves the unit
@@ -1150,7 +1150,12 @@ command, it is answered once.
      `correction.reminder.moved` row whose only field is `action_text`. It never changes when the
      reminder fires, and a row is compared with the unit's text *now*, not with what it said
      before, so a correction the unit already holds repairs a row a failed step left stale. A
-     reminder moved with a date takes the unit's text now by the same rule.
+     reminder moved with a date takes the unit's text now by the same rule. The rewrite that
+     follows Nooma naming a unit is not a correction's: it is a
+     `correction.title.reminder_retexted` row (`capture.title.reminder_retexted` at capture,
+     where naming precedes arming and none exists to rewrite;
+     `consolidate.title.reminder_retexted` at night), with the same single `action_text` field
+     and the same order, so /ui/activity says Nooma named the entry, never "Reminder moved".
      **New text beside a new date is both edits** (I30). When the correction changes what the
      unit says and when it happens at once, and the model — shown the unit — returns text that
      differs from the body, states the new instant (its `YYYY-MM-DD` date and the `HH:MM`
@@ -1550,7 +1555,7 @@ One pass per night at 03:00 local — a constant, not a setting ([ADR-0025](adr/
 phases IN ORDER, each one a pure function over the vault, individually invocable:
 
 ```
-expire_incomplete → archive → strengthen → connect → derive → reweight → pattern_eval → learn
+expire_incomplete → archive → strengthen → connect → derive → reweight → pattern_eval → title → learn
 ```
 
 `config.consolidation_enabled = 0` suppresses the nightly pass **and** [ADR-0009](adr/0009-scheduler-downtime.md)'s
@@ -1672,7 +1677,30 @@ boot catch-up — the two are one body of work behind two triggers.
    earlier in the same pass, would then see the consolidation pass itself as a user
    (`internal/core/consolidation.Reweight`).
 7. **pattern_eval**: runs the pattern watchers (§7): goal stagnation, mental load accumulation.
-8. **learn**: the learning module consumes new signals (§9). ALWAYS last. Through M4 this slot
+8. **title**: names the live units that carry an `event_at` or a `due_at` and still have no
+   title ([ADR-0065](adr/0065-a-dated-unit-is-named.md); capture and correction name the ones
+   they can, §5; this catches the legacy units and whatever the model could not name then).
+   At most `title_backfill_per_pass` (50) a night, chosen by
+   `internal/core/consolidation.SelectToName`: units with a reminder still armed first, the
+   soonest to fire first; then instants ahead, nearest first; then past instants, most recent
+   first; ties by id. Each is named by the capture step (the `unit_title` task through the
+   provider bound to `capture_processing`, `ResolveTitle`, written only where the title is
+   still `NULL`, so a title written meanwhile is never overwritten and a lost race logs
+   nothing) and its armed reminders then say the title, each rewrite recorded first as a
+   `consolidate.title.reminder_retexted` row (field `action_text` only). A title written is a
+   `consolidate.title.named` row with `previous` null and the `next` title; a unit the model
+   was asked about and gave nothing usable for (provider error included) is a
+   `consolidate.title.unnamed` row with its reason, keeps its slot, and is tried again the next
+   night, one call a night that is accepted over an attempt counter. A failure on one unit
+   never ends the pass: a provider error, an unusable answer and a failed title write (a store
+   error in `NameIfUntitled`) are each logged `consolidate.title.unnamed` and the pass
+   continues. A failed read of the candidates or of a unit's reminders, a failed
+   `decision_log` row and a failed rewrite of a reminder's text end it, as in every phase
+   (the title, if already written, stays). With no provider
+   bound the phase writes nothing. Content, instants and status are never touched. It sits
+   before `learn`, which reads what the others wrote; it is a ninth phase beside the eight
+   [ADR-0005](adr/0005-v1-scope.md)'s v1 scope names, a scope statement and not a supersession.
+9. **learn**: the learning module consumes new signals (§9). ALWAYS last. Through M4 this slot
    performed no work. Since M5 it runs the relation rule for every type with typed verdicts
    (§9), writes each change stamped with the pass's own instant, and records it as one
    `consolidate.learn.relation_threshold` row. A night that changes nothing writes nothing.
@@ -2428,7 +2456,7 @@ the learner does not count it.
   - A bar outside [0.20, 0.90], which only a person can have set, is pulled to the nearer bound
     in a single change when the evidence points toward it, and never moved away from the range.
 
-  The nightly `learn` slot (§6 item 8) runs the rule for every type with typed verdicts, from
+  The nightly `learn` slot (§6 item 9) runs the rule for every type with typed verdicts, from
   `SignalRepo.RelationVerdicts` and the type's `relation_thresholds` row. A change is written
   stamped `adjusted_at` with the pass's own instant, so the next night counts only what came
   after, and a row the user pinned (`origin = 'user'`) is refused by the store itself as well.
@@ -2623,6 +2651,7 @@ module; those that say *user-overridable* are the user's own preferences, stored
 | `strengthen_gain` (`internal/core/consolidation.StrengthenGain`) | 0.10 — chosen, not derived; checked for compatibility (not entailment) against `goal_stagnation_days`'s default below |
 | `connect_source_limit` (`internal/core/consolidation.ConnectSourceLimit`) | 20 — chosen; governs two phases as of `m2c` — `connect`'s own candidate search (item 4 above) and, separately, `derive`'s own fresh source selection (item 5 above, design §7.3: `derive` re-runs the identical selection over its own read rather than reusing `connect`'s, so `--phase=derive` alone behaves the same as slot 5 of a whole pass) |
 | `connect_candidate_k` (`internal/core/consolidation.ConnectCandidateK`) | 5 — chosen; a separate knob from `dedup_candidate_k` below despite the identical default, per the same reasoning as `urgency_lead_days` above: one bounds capture's per-message judge calls, this one bounds connect's per-night budget |
+| `title_backfill_per_pass` (`internal/core/consolidation.TitleBackfillPerPass`) | 50 — chosen: how many dated units with no title one night's `title` phase names at most (§6 item 8, ADR-0065), so the night's provider cost is bounded. A vault with hundreds of legacy units drains over a few nights, the units about to ring first; fifty is at most half of `connect`'s own per-night judge budget (`connect_source_limit * connect_candidate_k`) |
 | `hysteresis_margin` (focus, relative; `internal/core/focus.DefaultHysteresisMargin` + `ResolveMargin`) | 0.05 |
 | `revive_gain` (`internal/core/weight.ReviveGain`) | 0.35 |
 | `weight_ceiling` (`internal/core/weight.WeightCeiling`) | 2.0 |

@@ -182,7 +182,9 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 
 	// A title the correction cleared left a dated unit with no name, and a reply
 	// would then say its content beside its day (ADR-0065 point 1): name it
-	// against its new body. A failed naming leaves it cleared, as before.
+	// against its new body. A provider failure, an unusable answer or a failed title
+	// write leaves it cleared, as before; a failed log row or reminder rewrite after
+	// the title is written returns an error and the title stays.
 	if after := edited(*target, plan); clearsTheTitle(plan) && dated(after) {
 		if _, err := r.nameUnit(ctx, after, ports.ActionCorrectionTitleNamed, now); err != nil {
 			return nil, err

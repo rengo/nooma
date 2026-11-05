@@ -246,6 +246,21 @@ func (r *Units) NameIfUntitled(_ context.Context, id, title string, at time.Time
 	return true, nil
 }
 
+// UntitledDated implements ports.UnitRepo.
+func (r *Units) UntitledDated(_ context.Context) ([]unit.Unit, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var out []unit.Unit
+	for _, u := range r.units {
+		if u.Status.IsLive() && u.Title == "" && (u.EventAt != nil || u.DueAt != nil) {
+			out = append(out, deepCopy(u))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 // SetStatus implements ports.UnitRepo.
 func (r *Units) SetStatus(_ context.Context, id string, from, to unit.Status, at time.Time) error {
 	r.mu.Lock()

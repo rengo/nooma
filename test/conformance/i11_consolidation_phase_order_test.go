@@ -16,14 +16,14 @@ import (
 )
 
 // phasesInOrderPreamble marks doc 02 §6's preamble sentence; the arrow
-// line naming the eight phases follows inside the next fenced code block
+// line naming the nine phases follows inside the next fenced code block
 // (docs/02-cognitive-core.md:657-661 at the time this test was written).
 const phasesInOrderPreamble = "phases IN ORDER"
 
 // TestI11_PhaseOrderMatchesDoc02ArrowLine proves I11's third leg (design.md
 // §3.2): consolidation.Order()'s names, joined by " → ", must equal doc
 // 02 §6's own arrow line — parsed off disk at test time, not restated as a
-// second copy of the eight names inside this file. This is the first
+// second copy of the nine names inside this file. This is the first
 // application of the migration-text-parsing trick (i13_learning_signal_test.go,
 // migrationSQLText) to doc 02 prose rather than to SQL DDL.
 //
@@ -90,7 +90,7 @@ func TestI11_PhaseOrderMatchesDoc02ArrowLine(t *testing.T) {
 // TestI11_NoCallerOutsideConsolidationListsThePhaseNames proves I11's
 // fourth leg (design.md §3.2): a caller may switch over the Phase
 // constants (that is the type, not a list), but no non-test .go file
-// outside internal/core/consolidation may keep its own copy of the eight
+// outside internal/core/consolidation may keep its own copy of the nine
 // phase-name string literals — a future runner or CLI help renderer must
 // build its names from Order() + String(), never restate them.
 func TestI11_NoCallerOutsideConsolidationListsThePhaseNames(t *testing.T) {
@@ -173,7 +173,7 @@ func TestI11_NoCallerOutsideConsolidationListsThePhaseNames(t *testing.T) {
 			}
 			sort.Strings(names)
 			t.Errorf(
-				"%s contains %d of the eight phase-name string literals %v — a caller must switch over the Phase constants, not keep its own list (R1.2)",
+				"%s contains %d of the nine phase-name string literals %v — a caller must switch over the Phase constants, not keep its own list (R1.2)",
 				path, len(names), names,
 			)
 		}

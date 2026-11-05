@@ -153,8 +153,8 @@ did and why.
    boot catch-up runs the missed pass once ([ADR-0009](adr/0009-scheduler-downtime.md)). The
    scheduler lives inside `nooma serve`. You can also run `nooma consolidate`, optionally with
    `--phase=<name>`, by hand.
-2. **Runs eight phases, always in this order:** `expire_incomplete`, `archive`, `strengthen`,
-   `connect`, `derive`, `reweight`, `pattern_eval`, `learn`
+2. **Runs nine phases, always in this order:** `expire_incomplete`, `archive`, `strengthen`,
+   `connect`, `derive`, `reweight`, `pattern_eval`, `title`, `learn`
    ([doc 02 §6](02-cognitive-core.md#6-nightly-consolidation-sleep)).
 3. **Archives what went cold.** Weight decays with time and is restored by use
    ([doc 02 §2](02-cognitive-core.md#2-weight-decay-temperature-lazy-write-model)). A unit whose
@@ -414,6 +414,7 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | Capture, classification, hybrid recall, correction; HTTP API and `nooma capture`; provider wizard and `doctor` quality gate | Shipped in M1 | [05 §M1](05-build-plan.md#m1--capture-and-recall), doc 02 §5 |
 | Weight, decay, the two focuses (as pure functions) | Shipped in M2 | doc 02 §2, §3 |
 | Nightly consolidation at 03:00, boot catch-up, `nooma consolidate`, `decision_log` | Shipped in M2; `learn` runs since M5 | [05 §M2](05-build-plan.md#m2--sleep-and-weight), doc 02 §6, §11 |
+| A dated unit with no title is named by the model at capture, at correction and in a nightly `title` phase, and said as a plain sentence until then, never by its content | Shipped in `untitled-units` | doc 02 §5, §6 item 8, [ADR-0065](adr/0065-a-dated-unit-is-named.md) |
 | `/start` greets in the sender's Telegram language, Spanish as the fallback, and an unknown `/command` says so, both without the model | Shipped | doc 02 §5 |
 | Telegram channel, triggers, push, morning digest, check-ins, ephemeral timers | Shipped in M3 | [05 §M3](05-build-plan.md#m3--the-mouth-telegram--prospection), doc 02 §7, §8 |
 | Uncertain relation asked in the digest and answered in chat | Shipped in `m3e` | doc 02 §4; ADR-0027 |

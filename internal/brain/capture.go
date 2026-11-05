@@ -595,7 +595,9 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 
 	// A dated unit that came back with no usable title is named once, before
 	// anything is armed, so its reminder says the title from the start
-	// (ADR-0065 point 1). A failure leaves it untitled and the capture whole.
+	// (ADR-0065 point 1). A provider failure, an unusable answer or a failed title
+	// write leaves it untitled and the capture whole; a failed log row or reminder
+	// rewrite after the title is written returns an error and the title stays.
 	if u.Title == "" && dated(u) {
 		title, err := r.correction.nameUnit(ctx, u, ports.ActionCaptureTitleNamed, now)
 		if err != nil {

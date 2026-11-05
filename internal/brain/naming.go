@@ -34,30 +34,38 @@ func dated(u unit.Unit) bool { return u.EventAt != nil || u.DueAt != nil }
 // follows the new title. No reply waits for this call (ADR-0064 point 1): it runs
 // where the gap appears, at capture and at correction.
 func (r correctionRunner) nameUnit(ctx context.Context, u unit.Unit, action ports.DecisionAction, now time.Time) (string, error) {
+	title, _, err := r.attemptName(ctx, u, action, now)
+	return title, err
+}
+
+// attemptName is nameUnit that also says why no title came of it: why is "" when a
+// title stands (written by this call or by a rival) and otherwise the reason the
+// unit stays untitled, which the night's phase logs.
+func (r correctionRunner) attemptName(ctx context.Context, u unit.Unit, action ports.DecisionAction, now time.Time) (title, why string, err error) {
 	if r.llm == nil {
-		return "", nil
+		return "", "no provider is bound to name units", nil
 	}
 	resp, err := r.llm.Complete(ctx, ports.LLMRequest{Prompt: classify.BuildTitlePrompt(u), Task: taskUnitTitle, JSONOnly: true})
 	if err != nil {
 		slog.Warn("a unit could not be named, so it stays untitled", "unit", u.ID, "error", err)
-		return "", nil
+		return "", "the provider failed", nil
 	}
-	title, _ := classify.DecodeTitle([]byte(resp.Text))
-	if title == nil {
-		return "", nil
+	decoded, _ := classify.DecodeTitle([]byte(resp.Text))
+	if decoded == nil {
+		return "", "the answer was not a usable title", nil
 	}
-	named, err := r.units.NameIfUntitled(ctx, u.ID, *title, now)
+	named, err := r.units.NameIfUntitled(ctx, u.ID, *decoded, now)
 	if err != nil {
 		slog.Warn("a unit's title could not be written, so it stays untitled", "unit", u.ID, "error", err)
-		return "", nil
+		return "", "the title could not be written", nil
 	}
 	if !named {
 		// Someone titled it meanwhile; theirs stands, and is what a reminder armed
 		// next should say. A failed read leaves the caller with the content.
 		if cur, err := r.units.ByID(ctx, u.ID); err == nil {
-			return cur.Title, nil
+			return cur.Title, "", nil
 		}
-		return "", nil
+		return "", "", nil
 	}
 	// The title is written before its decision_log row, not after: NameIfUntitled
 	// is what says whether this call won, and a lost race must log nothing, so the
@@ -70,19 +78,21 @@ func (r correctionRunner) nameUnit(ctx context.Context, u unit.Unit, action port
 		Fields   []string       `json:"fields"`
 		Previous map[string]any `json:"previous"`
 		Next     map[string]any `json:"next"`
-	}{UnitID: u.ID, Fields: []string{"title"}, Previous: map[string]any{"title": nil}, Next: map[string]any{"title": *title}})
+	}{UnitID: u.ID, Fields: []string{"title"}, Previous: map[string]any{"title": nil}, Next: map[string]any{"title": *decoded}})
 	if err != nil {
-		return "", fmt.Errorf("naming: encode %s context: %w", action, err)
+		return "", "", fmt.Errorf("naming: encode %s context: %w", action, err)
 	}
 	if err := r.log.Record(ctx, ports.Decision{ID: r.ids.New(), Action: action,
-		Rationale: fmt.Sprintf("gave the dated unit %q, which had no title, the title %q", u.ID, *title),
+		Rationale: fmt.Sprintf("gave the dated unit %q, which had no title, the title %q", u.ID, *decoded),
 		Context:   contextJSON, OccurredAt: now}); err != nil {
-		return "", fmt.Errorf("naming: record %s for unit %q: %w", action, u.ID, err)
+		return "", "", fmt.Errorf("naming: record %s for unit %q: %w", action, u.ID, err)
 	}
-	if err := r.retextReminders(ctx, u, *title, now); err != nil {
-		return "", err
+	if r.triggers != nil {
+		if err := r.retextReminders(ctx, u, *decoded, now, retextAfterNaming(action)); err != nil {
+			return "", "", err
+		}
 	}
-	return *title, nil
+	return *decoded, "", nil
 }
 
 // clearsTheTitle is whether plan empties the title of a unit.

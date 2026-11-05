@@ -38,7 +38,8 @@ var tasksM1Consumes = []string{"capture_processing", "relation_evaluation", "cha
 
 // tasksConsolidateConsumes are the three tasks one consolidation pass
 // needs bound — design §7.2 (m2c-consolidation-runtime). capture_processing
-// is deliberately absent: no consolidation phase classifies. Every member
+// is deliberately absent: no consolidation phase classifies, and the title phase
+// that names units with it (ADR-0065) is optional (resolveNamer). Every member
 // is one of config.DocumentedTaskNames — belief_derivation was already
 // documented before this change, so no config-vocabulary edit was needed
 // for it. This PR adds no dedicated membership test the way
