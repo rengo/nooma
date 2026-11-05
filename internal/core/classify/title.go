@@ -1,8 +1,10 @@
 package classify
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -39,4 +41,21 @@ func ResolveTitle(raw string) *string {
 		}
 	}
 	return &title
+}
+
+// DecodeTitle reads the answer to the naming prompt (ADR-0065): the title
+// ResolveTitle keeps, or nil with the reason none was kept. A missing or null
+// title is ReasonAbsent, a non-string one ReasonWrongType, and one ResolveTitle
+// drops ReasonBadFormat, as assignTitle reports it at capture.
+func DecodeTitle(raw []byte) (*string, Reason) {
+	fields, _ := Salvage(raw)
+	value, ok := fields["title"]
+	if !ok || string(bytes.TrimSpace(value)) == "null" {
+		return nil, ReasonAbsent
+	}
+	var c Classification
+	if r := assignTitle(value, &c, time.Time{}); r != "" {
+		return nil, r
+	}
+	return c.Title, ""
 }

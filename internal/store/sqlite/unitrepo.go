@@ -279,6 +279,27 @@ func (r *UnitRepo) UpdateTitle(ctx context.Context, id, title string, at time.Ti
 	return requireRowAffected(res, ports.ErrUnitNotFound)
 }
 
+// NameIfUntitled implements ports.UnitRepo. The guard is in the statement, so a
+// title written between a caller's read and this write is never overwritten.
+func (r *UnitRepo) NameIfUntitled(ctx context.Context, id, title string, at time.Time) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE units SET title = ?, updated_at = ? WHERE id = ? AND title IS NULL`,
+		title, formatUnitTime(at), id,
+	)
+	if err != nil {
+		return false, fmt.Errorf("name unit %q: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		return true, nil
+	}
+	var exists int
+	err = r.db.QueryRowContext(ctx, `SELECT 1 FROM units WHERE id = ?`, id).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ports.ErrUnitNotFound
+	}
+	return false, err
+}
+
 // SetStatus implements ports.UnitRepo. from is an optimistic-concurrency
 // precondition, not a validation — unit.ValidateTransition already decided
 // legality (design D5).

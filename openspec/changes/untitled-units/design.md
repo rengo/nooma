@@ -43,7 +43,9 @@ it answers `{"title": "..."}` under the **same rule text** the capture prompt us
 (extracted from `BuildPrompt` into one function both prompts call, so the rule cannot drift).
 The answer goes through `classify.ResolveTitle`, unchanged. This is the model naming the unit, as
 at capture, not wording a reply: ADR-0064 point 1 is not touched (a title is a stored field the
-reply later reads; no reply waits for this call).
+reply later reads; no reply waits for this call). `classify.DecodeTitle` reads the answer
+with the lenient `Salvage`, as the capture decode does, so a truncated or fenced reply still
+yields its `title` field before `ResolveTitle` judges it.
 
 Pieces:
 

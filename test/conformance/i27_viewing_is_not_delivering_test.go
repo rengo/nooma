@@ -154,6 +154,11 @@ func (g *i27Units) UpdateDueAt(context.Context, string, time.Time, time.Time) er
 	i27Fail(g.t, "UnitRepo", "UpdateDueAt")
 	return nil
 }
+func (g *i27Units) NameIfUntitled(context.Context, string, string, time.Time) (bool, error) {
+	i27Fail(g.t, "UnitRepo", "NameIfUntitled")
+	return false, nil
+}
+
 func (g *i27Units) UpdateTitle(context.Context, string, string, time.Time) error {
 	i27Fail(g.t, "UnitRepo", "UpdateTitle")
 	return nil

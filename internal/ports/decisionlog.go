@@ -279,8 +279,17 @@ const (
 // transcript (ADR-0062); its context names the outcome and the unit.
 const ActionCaptureVoiceTranscribed DecisionAction = "capture.voice.transcribed"
 
+// ActionCaptureTitleNamed and ActionCorrectionTitleNamed: Nooma wrote the title
+// of a dated unit that had none, at capture and at correction (ADR-0065). Their
+// context is change-shaped (unit_id, fields, previous null, next), so
+// /ui/activity renders it with no template of its own.
+const (
+	ActionCaptureTitleNamed    DecisionAction = "capture.title.named"
+	ActionCorrectionTitleNamed DecisionAction = "correction.title.named"
+)
+
 // AllDecisionActions returns a fresh slice holding every DecisionAction
-// vocabulary member (eighty-one; repocontract's list holds the count), in
+// vocabulary member (eighty-three; repocontract's list holds the count), in
 // the order the constants above declare them. ActionCaptureVoiceTranscribed
 // is ADR-0062's, listed after ActionCaptureTimerCancelled. ActionCaptureTaskClosed is ADR-0040's, listed after
 // ActionCaptureCheckInSnoozed, and ActionCaptureEventClosed ADR-0046's, after it. ActionCheckFocusUnavailable is m4c's, listed after
@@ -329,6 +338,7 @@ func AllDecisionActions() []DecisionAction {
 		ActionBeliefEdited, ActionBeliefRetired,
 		ActionConfigUpdated, ActionConfigReminderMoved, ActionConfigReminderArmed, ActionConfigReminderCancelled,
 		ActionConfigRemindersFollowed,
+		ActionCaptureTitleNamed, ActionCorrectionTitleNamed,
 	}
 }
 

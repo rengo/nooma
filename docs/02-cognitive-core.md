@@ -678,6 +678,25 @@ command, it is answered once.
      carries an `event_at` or a `due_at`, said as something noted at that instant (§5 step 2, ADR-0065).
      Relative words ("mañana", "jueves", "3pm") are a known limit: catching them takes a word
      list, which core does not hold, so a prompt rule and the doctor measure cover them.
+   - **A dated unit with no usable title is named** (ADR-0065). A capture with its own
+     `event_at` or `due_at` that came back with no title (or one dropped above) asks the model
+     once more, before anything is armed, with the `unit_title` task: the unit's content and
+     language, under the same rule text as `title` (`classify.TitleRule`), answered as
+     `{"title": ...}` and checked by `ResolveTitle` as ever. The title is written only where
+     it is still `NULL` (`UnitRepo.NameIfUntitled`), so a title a correction or the user wrote
+     meanwhile is never overwritten: that title stands, nothing is logged for the lost naming,
+     and the capture's reminders are armed saying it. The unit's reminders are otherwise armed
+     saying the title just written. It goes
+     through the provider bound to `capture_processing`; it words no reply (I59), it names a
+     stored field. A failure of the provider or an unusable answer (read leniently, as a
+     capture's classification is: the title is salvaged from a truncated reply) leaves the unit
+     untitled and the capture whole, and so does a failed title write (a store error in
+     `NameIfUntitled`); an undated unit is not named here. The one failure that
+     does not leave it whole: the title is written before its row, since only the write says
+     whether this call won, so if the `decision_log` row (or the later rewrite of the
+     reminder text, on either path; it is a no-op at capture) then fails, the title stays
+     written and the error is returned to the caller rather than hidden.
+     Each write is a `capture.title.named` row with `previous` null and the `next` title.
    - Injected context: active self-beliefs, local date with its weekday, local time and UTC
      offset, a calendar of the next `calendar_days` days starting today (to resolve "tomorrow",
      "on Friday"), the spans of this week and next, Monday to Sunday, computed from the clock
@@ -1115,9 +1134,12 @@ command, it is answered once.
      `fields` with `previous` and `next` like any other). A valid title the model answered for
      the unit it was shown, when it differs from the unit's, is written. **Otherwise a plan that
      really changes the unit (a moved date, or a rewritten body) clears the title** (`next` is
-     `null`): it names a day or a body that is gone, and the unit is then said by what it has: as
-     something noted at its new date while it carries a date of its own (ADR-0065 point 5), by
-     its content only when it carries none. That covers a date-only edit with no fresh title, and the
+     `null`): it names a day or a body that is gone. A unit that is still dated is then named
+     afresh against its new body, as at capture (ADR-0065): a `correction.title.named` row
+     (`previous` null, `next` the title), the same write that never overwrites, and the text of
+     its armed reminders follows it; if that fails the title stays cleared and the unit is said by
+     what it has: as something noted at its new date while it carries a date of its own (ADR-0065
+     point 5), by its content only when it carries none. That covers a date-only edit with no fresh title, and the
      chat path, where the referent is found after the model answered: a title it wrote names the
      utterance and is never taken. A title equal to the unit's, a unit with none, and a
      correction that changes nothing (a date the unit already holds) write and clear nothing.

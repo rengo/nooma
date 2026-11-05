@@ -94,6 +94,8 @@ var activityTitles = map[ports.DecisionAction]string{
 	ports.ActionConfigReminderArmed:             "Reminder set by new preferences",
 	ports.ActionConfigReminderCancelled:         "Reminder cancelled by new preferences",
 	ports.ActionConfigRemindersFollowed:         "Reminders now follow your preferences",
+	ports.ActionCaptureTitleNamed:               "Entry titled",
+	ports.ActionCorrectionTitleNamed:            "Entry titled after a correction",
 }
 
 // activityTitle is a row's headline. A vault can hold actions the vocabulary

@@ -209,12 +209,7 @@ func buildPrompt(text string, target *unit.Unit, beliefs []Belief, now time.Time
 	b.WriteString("                       event_at is when a thing happens in the world; due_at is\n")
 	b.WriteString("                       when something is owed. A timer has no world event, so its\n")
 	b.WriteString("                       instant belongs in due_at and never in event_at\n")
-	b.WriteString("  title                a short name for what to remember, in the message's own\n")
-	b.WriteString("                       language, at most " + strconv.Itoa(MaxTitleRunes) + " characters, **with no date, no\n")
-	b.WriteString("                       day and no time in it**: not \"2026-10-14\", not \"22:30\", not\n")
-	b.WriteString("                       \"mañana\", \"jueves\" or \"3pm\". \"Reunión con Juan\", never\n")
-	b.WriteString("                       \"Reunión con Juan mañana a las 22:30\". Give one for anything\n")
-	b.WriteString("                       that has a date or that the user asks to be reminded of\n")
+	b.WriteString("  title                " + TitleRule() + "\n")
 	b.WriteString("  interrupt_level      0-1, how urgently this should interrupt the user " +
 		"versus wait for a digest\n")
 	b.WriteString("  recurrence_rule      one of: " + joinVocabulary(AllRecurrenceRules()) +
@@ -690,3 +685,37 @@ const (
 	candidatesHeading = "Reminders that may be stopped"
 	checkinHeading    = "Check-in answers"
 )
+
+// titleIndent is the column a title rule's continuation lines start at, the
+// one the optional-field list of BuildPrompt aligns its descriptions to.
+const titleIndent = "                       "
+
+// TitleRule is the rule a title is written under: the description the capture
+// prompt gives its title field, and the one the naming prompt gives the title it
+// asks for alone (ADR-0065). One text, so the two cannot drift; ResolveTitle is
+// what enforces it on the answer.
+func TitleRule() string {
+	return "a short name for what to remember, in the message's own\n" +
+		titleIndent + "language, at most " + strconv.Itoa(MaxTitleRunes) + " characters, **with no date, no\n" +
+		titleIndent + "day and no time in it**: not \"2026-10-14\", not \"22:30\", not\n" +
+		titleIndent + "\"mañana\", \"jueves\" or \"3pm\". \"Reunión con Juan\", never\n" +
+		titleIndent + "\"Reunión con Juan mañana a las 22:30\". Give one for anything\n" +
+		titleIndent + "that has a date or that the user asks to be reminded of"
+}
+
+// BuildTitlePrompt renders the prompt that asks the model to name one unit
+// (ADR-0065): its content and language, the same rule text the capture prompt
+// carries for title, and the one-field answer. It is pure.
+func BuildTitlePrompt(u unit.Unit) string {
+	language := "the language of the text"
+	if u.Language != "" {
+		language = u.Language
+	}
+	var b strings.Builder
+	b.WriteString("You name a note the user already saved. Answer with JSON only, no prose.\n\n")
+	b.WriteString("Text (quoted): " + strconv.Quote(u.Content) + "\n")
+	b.WriteString("Language: " + language + "\n\n")
+	b.WriteString("Answer {\"title\": \"...\"}, or {\"title\": null} if the text names nothing to remember.\n")
+	b.WriteString("title: " + TitleRule() + "\n")
+	return b.String()
+}

@@ -36,6 +36,13 @@ type Fake struct {
 
 	seenPrompts []string
 
+	// unitTitle is what the naming task answers (ADR-0065): outside the script,
+	// so a test written before the task existed is not a failure of it. A model
+	// that names nothing is what those tests always had.
+	unitTitle        string
+	unitTitleErr     error
+	unitTitlePrompts []string
+
 	embedModel string
 	embedErr   error
 	embedCalls int
@@ -63,6 +70,16 @@ func New(t TestingT, dir string, ids ...string) *Fake {
 // Complete implements ports.LLMProvider.
 func (f *Fake) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMResponse, error) {
 	f.t.Helper()
+	if req.Task == "unit_title" {
+		f.unitTitlePrompts = append(f.unitTitlePrompts, req.Prompt)
+		if f.unitTitleErr != nil {
+			return ports.LLMResponse{}, f.unitTitleErr
+		}
+		if f.unitTitle == "" {
+			return ports.LLMResponse{Text: `{"title":null}`}, nil
+		}
+		return ports.LLMResponse{Text: f.unitTitle}, nil
+	}
 	f.seenPrompts = append(f.seenPrompts, req.Prompt)
 
 	if f.idx >= len(f.script) {
@@ -94,4 +111,15 @@ func (f *Fake) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMRespo
 // what was actually sent.
 func (f *Fake) SeenPrompts() []string {
 	return append([]string(nil), f.seenPrompts...)
+}
+
+// UnitTitleAnswers sets what the unit_title task answers from now on: a reply
+// text, or an error. The default is a title of null.
+func (f *Fake) UnitTitleAnswers(text string, err error) {
+	f.unitTitle, f.unitTitleErr = text, err
+}
+
+// UnitTitlePrompts returns every prompt the unit_title task received, in order.
+func (f *Fake) UnitTitlePrompts() []string {
+	return append([]string(nil), f.unitTitlePrompts...)
 }
