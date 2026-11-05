@@ -227,7 +227,7 @@ func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
 // TestRenderReply_ADatedTaskNamesItsDayAndTheDigest: a task arms no reminder,
 // so the reply names its due day, and its hour when it has one, and says that
 // morning's digest will mention it (doc 02 §7); a stored unit with no such
-// day stays "Noted.".
+// day stays "Listo, anotado.".
 func TestRenderReply_ADatedTaskNamesItsDayAndTheDigest(t *testing.T) {
 	zone := time.FixedZone("UTC-3", -3*60*60)
 	due := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
@@ -334,5 +334,28 @@ func TestRenderReply_ATimerNamesTheMomentItRings(t *testing.T) {
 		At: time.Date(2026, 10, 26, 10, 8, 0, 0, art)})
 	if got != "Listo, te aviso a las 10:28." {
 		t.Errorf("timer reply = %q, want %q", got, "Listo, te aviso a las 10:28.")
+	}
+}
+
+// TestRenderReply_AnUnarmedEventAtMidnightIsADayAlone: an event read as a bare
+// date and given no reminder is named by its day, never as "a las 0:00"
+// (ADR-0047); one with a time of day keeps its clock.
+func TestRenderReply_AnUnarmedEventAtMidnightIsADayAlone(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	told := time.Date(2026, 10, 15, 9, 0, 0, 0, zone)
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
+	timed := time.Date(2026, 10, 20, 0, 30, 0, 0, zone)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"a day alone", day, "Listo, anotado para el martes 20 de octubre."},
+		{"a time of day", timed, "Listo, anotado para el martes 20 de octubre a las 0:30."},
+	} {
+		got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, NotArmedFor: &tc.at, At: told})
+		if got != tc.want {
+			t.Errorf("%s: reply %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }

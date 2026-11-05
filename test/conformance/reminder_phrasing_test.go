@@ -242,12 +242,14 @@ func listsOf(c llm.Case) []llm.Entry {
 	return entries
 }
 
-// TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites: production
-// writes a candidate's date through internal/core/phrase (Time for an instant,
-// Date for a whole day) and the list through classify.RenderReminderList. The
-// set is recorded against exactly those bytes, so a different rendering later
-// would be a different prompt, and this fails first. The set's lists are in
-// Spanish, the fallback of a user who has written in it.
+// TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites: production no
+// longer writes a date through phrase.Time or phrase.Date (chat replies use
+// Dated). The recorded set still carries exactly those bytes (Time for an
+// instant, Date for a whole day) and the list classify.RenderReminderList
+// writes, so this pins the recordings to the renderers that produced them: a
+// different rendering later would not match what was recorded, and this
+// fails first. The set's lists are in Spanish, the fallback of a user who has
+// written in it.
 func TestReminderPhrasingSetListsAreWhatThePhraseRendererWrites(t *testing.T) {
 	cases, err := llm.ReminderCases()
 	if err != nil {

@@ -190,6 +190,66 @@ func TestI59_RecallCallsNoWordingTask(t *testing.T) {
 	}
 }
 
+// TestI59_CaptureAndCorrectionCallNoWordingTask (spec R1): a capture and a
+// correction over a real vault call the provider for the classification only.
+// The reply is built by code, so the guard fails the test on any other task,
+// and both classifications were answered (neither is a degraded capture).
+func TestI59_CaptureAndCorrectionCallNoWordingTask(t *testing.T) {
+	for _, tc := range []struct {
+		name, text, reading string
+		outcome             brain.CaptureOutcome
+		want                string
+	}{
+		{"capture", "Anotá que la clave del wifi es 1234",
+			`{"type":"knowledge","normalized_content":"La clave del wifi es 1234.","weight":0.4,"decay_rate":0.1,"language":"es"}`,
+			brain.OutcomeStored, "Listo, anotado."},
+		{"correction", "el turno con el oculista es a las 12:00",
+			`{"type":"correction","normalized_content":"Turno con el oculista el 2026-11-05 a las 12:00.","event_at":"2026-11-05T12:00:00-03:00","weight":0.6,"decay_rate":0.05,"language":"es"}`,
+			brain.OutcomeCorrected, "Listo, lo pasé para mañana a las 12:00."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			units, embeddings, lexical := memrepo.NewUnits(), memrepo.NewEmbeddings(), memrepo.NewLexical()
+			embed := fakeprovider.NewEmbeddingFake(embedFakeModel)
+			told := *i59At(11, 1, 9, 0)
+			content := "Turno con el oculista el 2026-11-05 a las 11:00."
+			if err := units.Create(ctx, unit.Unit{ID: "oculist", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "telegram",
+				Title: "Turno con el oculista", Content: content, EventAt: i59At(11, 5, 11, 0),
+				CreatedAt: told, UpdatedAt: told, LastTouchedAt: told}); err != nil {
+				t.Fatal(err)
+			}
+			v, err := embed.Embed(ctx, ports.EmbedRequest{Text: content})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := embeddings.Put(ctx, ports.Embedding{UnitID: "oculist", Model: embedFakeModel, Vector: v.Vector, At: told}); err != nil {
+				t.Fatal(err)
+			}
+			lexical.SeedLexical(t, "oculist", content)
+			idx, err := embeddings.LoadIndex(ctx, embedFakeModel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			guard := &i59Guard{t: t, reading: tc.reading}
+			svc := brain.NewCaptureService(fixedClock{now: i59Now}, &counterIDs{}, units, embeddings, lexical, memrepo.NewRelations(),
+				memrepo.NewDecisionLog(), guard, guard, guard, embed, brain.NewIndex(idx),
+				memrepo.NewSignals(), memrepo.NewTriggers(), memrepo.NewTimers(), 0.5, nil)
+
+			res, err := svc.Capture(ctx, brain.CaptureInput{Text: tc.text, Channel: "telegram"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Outcome != tc.outcome || !guard.answered("capture_processing") {
+				t.Fatalf("outcome %q (want %q), classification answered %v: the reply must come from a classification the model answered",
+					res.Outcome, tc.outcome, guard.answered("capture_processing"))
+			}
+			if got := channels.RenderReply(res); got != tc.want {
+				t.Errorf("reply\n%q\nwant\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
 // i59Sent is a channel that keeps what it was asked to send.
 type i59Sent struct{ texts []string }
 
