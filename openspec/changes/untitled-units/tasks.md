@@ -27,7 +27,8 @@ Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are
 - [ ] 1.2 RED L1 exact text of every unnamed frame in ES and EN (push, recall one ahead, recall
       one past, list line), today / tomorrow / due / past, the late note.
 - [ ] 1.3 RED L2 I59 extension: an untitled dated unit's push, recall and digest line contain
-      neither its content nor an ISO date.
+      neither its content nor an ISO date; a title-less recurring reminder with an `event_at` is
+      said "something noted" (spec R1), one with neither instant keeps its words.
 - [ ] 1.4 GREEN `Set` fields and `ItemOf`; the four callers (`pushItem`, `recallItem`,
       `dueLines`, Today). Completeness test covers the new fields.
 - [ ] 1.5 Doc 02 §5 recall, §8 push, digest and Today: the unnamed frames, and the fallback half of
@@ -54,5 +55,8 @@ Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are
       `TestOrder_HasExactlyEightPhasesAscendingWithLearnLast` (renamed for nine; still asserts
       `learn` is the last index), the `phase.go` proof comment and the I11 conformance's arrow-line
       parse; the `title` phase; `consolidate.title.*` actions.
-- [ ] 3.5 Doc 02 §6 (pipeline line, phase item, I11 row "9") and §13 (`title_backfill_per_pass` =
-      50), doc 03 `units.title`, doc 06 §4 I11 ("9") and I60, doc 07. Mutation: reverse the order.
+- [ ] 3.5 Doc 02 §6 (pipeline line, phase item) and §13 (`title_backfill_per_pass` = 50), doc 03
+      `units.title`, doc 06 §4 I11 ("9"; doc 02 has no I11 row) and I60, doc 07 (status row and
+      `docs/07-functional.md:156-157`, "eight phases" to nine), the `phase.go:8` type comment, and
+      a line that ADR-0065 adds a ninth phase to ADR-0005's eight (no supersession). Mutation:
+      reverse the order.

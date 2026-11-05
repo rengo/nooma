@@ -29,7 +29,9 @@ correction.
 ## What changes
 
 1. Replies (push, recall, digest, Today) never say the content of a dated untitled unit, so a date
-   is said once. Ships first.
+   is said once. It does not ship alone: v0.7.0 is tagged only after slices 1-3 have
+   all merged (PM decision 2026-11-05), because slice 1 alone leaves most reminders saying
+   "something noted" until the night names them.
 2. A capture that came back without a usable title, and a correction that cleared one, name a
    still-dated unit with one extra model call; a failure leaves it as it was.
 3. A nightly phase names up to 50 dated untitled units per pass, pending reminders first, then

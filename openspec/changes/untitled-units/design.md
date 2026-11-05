@@ -86,10 +86,14 @@ keeps the content (an undated unit states no instant, so nothing repeats).
 
 "Dated" is a property of the unit, not of the reply: `dated` is true only when the unit itself
 carries an `event_at` or a `due_at` (the case where its normalized content embeds a date). The
-`when` a reply computes is not enough: a recurring reminder such as "Tomar las pastillas" with no
-title and no `event_at` is pushed with a day the pass computes, but its words are all it has, so
-it keeps them ("Acordate: tomar las pastillas, hoy."). Callers pass
-`u.EventAt != nil || u.DueAt != nil`.
+`when` a reply computes is not enough. Callers pass `u.EventAt != nil || u.DueAt != nil`.
+
+The common case is therefore dated: a recurring reminder normally carries an `event_at`, its first
+occurrence and the anchor of its rule (doc 02 §545-548, §1895). A title-less "Tomar las pastillas"
+with an `event_at` is said "Acordate: tenés algo anotado hoy a las 21:00." until slice 3's night
+(or slice 2's retry) names it; this is the main case the fallback serves. The rare legacy shape,
+a recurring reminder with neither `event_at` nor `due_at`, is pushed with a day the pass computes
+but its words are all it has, so it keeps them ("Acordate: tomar las pastillas, hoy.").
 
 An unnamed item is said with these frames (new `Set` fields, pinned by the completeness test and
 by exact texts in I59):
@@ -141,7 +145,7 @@ a correction's title edit uses, so `/ui/activity` shows it and the user can corr
 |---|---|---|
 | `consolidate.title.named` | the night named a unit | `unit_id`, `previous: null`, `next` |
 | `consolidate.title.unnamed` | the night asked and got nothing usable, or the provider failed | `unit_id`, `reason` |
-| `capture.title.named` / `correction.title.named` | capture or correction named a unit | `unit_id`, `source` (`capture`/`correction`), `previous: null`, `next` |
+| `capture.title.named` / `correction.title.named` | capture or correction named a unit | `unit_id`, `previous: null`, `next` |
 
 A `false` from `NameIfUntitled` writes nothing and logs nothing. Nothing is deleted: the column
 goes from NULL to a value; content, instants and triggers' instants are untouched. The four join
@@ -165,9 +169,14 @@ and stays as it is; doc 03's column comment is updated).
 - Doc 02 §5 corrections ("the title follows the body"): a cleared title on a dated unit is
   named afresh.
 - Doc 02 §5 recall, §8 push, the digest and Today paragraphs: the unnamed frames.
-- Doc 02 §6: the pipeline line and the phase item for `title` (before `learn`), its I11 row
-  ("The 9 consolidation phases"); §13: `title_backfill_per_pass`. Doc 06 I11: "9".
-- Doc 03 `units.title` comment; doc 06 §4: I60; doc 07 status row.
+- Doc 02 §6: the pipeline line and the phase item for `title` (before `learn`); §13:
+  `title_backfill_per_pass`. Doc 06 §4: the I11 row ("The 9 consolidation phases") and I60 (doc 02
+  has no I11 row).
+- Doc 03 `units.title` comment; doc 07: the status row and the "Runs eight phases" item
+  (`docs/07-functional.md:156-157`), now nine; the type comment at
+  `internal/core/consolidation/phase.go:8` ("eight nightly phases").
+- ADR-0065 adds a ninth phase to the eight ADR-0005's v1 scope names. That is a scope statement,
+  not a decision: ADR-0005 is not superseded, and slice 3's docs say so in one line.
 
 ## 4. Test plan (no network, no real LLM)
 
@@ -192,8 +201,11 @@ turn a named test red.
 | 2 | `feat/untitled-naming` | D1 + D4 for capture and correction, doc 02 §5 retry and clearing | ~300 / ~250 | 1 |
 | 3 | `feat/untitled-night` | D3 + its D4 rows, repo `UntitledDated`, `PhaseTitle` and the 9-phase proof, §6/§13, doc 03, I60 night cases | ~260 / ~220 | 2 |
 
-Slice 1 alone fixes the reported symptom on main and on the production vault (the replies stop
-repeating dates) at the cost of vaguer items; slices 2-3 then make the vague text rare.
+**Release gate.** Slices merge to main in order, but v0.7.0 is tagged only after slices 1-3 have all
+merged (PM decision 2026-11-05). Slice 1 alone stops the replies repeating dates, but at a cost
+larger than vaguer items: a recurring reminder normally carries an `event_at` (D2), so its push
+reads "tenés algo anotado hoy" until slice 3's night names it. No release tag between slice 1 and
+slice 3.
 
 ## 6. Rulings (client, 2026-11-05)
 
