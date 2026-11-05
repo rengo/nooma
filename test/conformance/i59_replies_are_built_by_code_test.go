@@ -768,6 +768,24 @@ func TestI59_UntitledDatedUnitIsNeverSaidByItsContent(t *testing.T) {
 		}
 	})
 
+	t.Run("push, late", func(t *testing.T) {
+		now := time.Date(2026, 11, 4, 22, 0, 0, 0, i59Zone)
+		event := time.Date(2026, 11, 4, 22, 30, 0, 0, i59Zone)
+		for _, tc := range []struct{ lang, content, want string }{
+			{"es", contentES, "Acordate: tenés algo anotado hoy a las 22:30. Perdón, te llega más tarde de lo previsto."},
+			{"en", contentEN, "Don't forget: you have something noted today at 22:30. Sorry, this is later than intended."},
+		} {
+			u, tr := i59Reminder("u1", "", tc.lang, event, nil, nil, 120)
+			u.Content = tc.content
+			fire := now.Add(-20 * time.Minute)
+			tr.FireAt = &fire
+			sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+			if len(sent) != 1 || sent[0] != tc.want {
+				t.Errorf("late push (%s) sent %q, want exactly %q", tc.lang, sent, tc.want)
+			}
+		}
+	})
+
 	t.Run("digest", func(t *testing.T) {
 		for _, tc := range []struct{ lang, content, want string }{
 			{"es", "renovar el pasaporte el 2026-11-03", "Buen día. Tenés una cosa:\n• Algo anotado, era para ayer"},
@@ -840,8 +858,8 @@ func TestI59_UntitledDatedUnitIsNotSaidByItsContentInTheDigestAndToday(t *testin
 			v := newI59DigestVault(t, tc.lang)
 			v.recurringOf("birthday", "", tc.content)
 			today := v.today()
-			if len(today.Digest.Items) != 1 || !strings.HasSuffix(tc.wantLine, today.Digest.Items[0].Text) {
-				t.Errorf("Today's digest preview = %+v, want one item that %q ends with", today.Digest.Items, tc.wantLine)
+			if len(today.Digest.Items) != 1 || today.Digest.Items[0].Text != strings.TrimPrefix(tc.wantLine, "• ") {
+				t.Errorf("Today's digest preview = %+v, want one item, %q", today.Digest.Items, strings.TrimPrefix(tc.wantLine, "• "))
 			}
 		})
 	}
@@ -881,11 +899,27 @@ func (v *i59DigestVault) today() brain.Today {
 	return out
 }
 
+// TestI59_TitledUnitWithNoComputedInstantKeepsItsTitle: the fallback by a
+// unit's own date is for a unit with no title. A titled recurring reminder
+// whose push cannot compute its instant (no anchor, no lead) is said by its
+// title alone, not dated by the unit's event_at (ADR-0065 point 1).
+func TestI59_TitledUnitWithNoComputedInstantKeepsItsTitle(t *testing.T) {
+	yearly := prospection.RuleYearly
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)
+	u, tr := i59Reminder("u1", "Cumpleaños de Ana", "es", time.Date(2026, 10, 29, 0, 0, 0, 0, i59Zone), &yearly, nil, 0)
+	fire := now.Add(-time.Minute)
+	tr.FireAt = &fire
+	sent := i59Pass(t, now, []unit.Unit{u}, []ports.Trigger{tr}, nil)
+	if want := "Acordate: cumpleaños de Ana."; len(sent) != 1 || sent[0] != want {
+		t.Errorf("push sent %q, want exactly %q", sent, want)
+	}
+}
+
 // TestI59_UntitledRecurringUnitWithAnEventIsSaidAsSomethingNoted: the common
 // shape of a recurring reminder with no title is born with an event_at (its
 // anchor), so it is dated by its own instant: it is pushed as something noted
-// today, with none of its words. Until the title is named at capture (slice 3
-// of ADR-0065), that is what it says.
+// today, with none of its words. Until the title is named (at capture, link 2
+// of ADR-0065, or by the nightly job, link 3), that is what it says.
 func TestI59_UntitledRecurringUnitWithAnEventIsSaidAsSomethingNoted(t *testing.T) {
 	yearly := prospection.RuleYearly
 	now := time.Date(2026, 10, 29, 9, 0, 0, 0, i59Zone)

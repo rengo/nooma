@@ -41,6 +41,7 @@ func TestUnnamed(t *testing.T) {
 	today := &Moment{At: at(11, 4, 22, 30)}
 	thursday := &Moment{At: at(11, 26, 8, 30)}
 	yesterday := &Moment{At: at(11, 3, 9, 0)}
+	tomorrow := &Moment{At: at(11, 5, 0, 0), DayOnly: true}
 	dueTomorrow := &Moment{At: at(11, 5, 0, 0), DayOnly: true, Due: true}
 	night := at(11, 4, 22, 0)
 	item := func(m *Moment) Item { return Item{Unnamed: true, When: m} }
@@ -53,6 +54,9 @@ func TestUnnamed(t *testing.T) {
 		{"push, today",
 			es.Push(item(today), night), en.Push(item(today), night),
 			"Acordate: tenés algo anotado hoy a las 22:30.", "Don't forget: you have something noted today at 22:30."},
+		{"push, tomorrow",
+			es.Push(item(tomorrow), night), en.Push(item(tomorrow), night),
+			"Acordate: tenés algo anotado mañana.", "Don't forget: you have something noted tomorrow."},
 		{"push, due tomorrow",
 			es.Push(item(dueTomorrow), night), en.Push(item(dueTomorrow), night),
 			"Acordate: tenés algo anotado para mañana.", "Don't forget: you have something noted due tomorrow."},

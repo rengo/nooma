@@ -1115,8 +1115,9 @@ command, it is answered once.
      `fields` with `previous` and `next` like any other). A valid title the model answered for
      the unit it was shown, when it differs from the unit's, is written. **Otherwise a plan that
      really changes the unit (a moved date, or a rewritten body) clears the title** (`next` is
-     `null`): it names a day or a body that is gone, and the unit then reads its content, which
-     already follows the new date. That covers a date-only edit with no fresh title, and the
+     `null`): it names a day or a body that is gone, and the unit is then said by what it has: as
+     something noted at its new date while it carries a date of its own (ADR-0065 point 5), by
+     its content only when it carries none. That covers a date-only edit with no fresh title, and the
      chat path, where the referent is found after the model answered: a title it wrote names the
      utterance and is never taken. A title equal to the unit's, a unit with none, and a
      correction that changes nothing (a date the unit already holds) write and clear nothing.
