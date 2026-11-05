@@ -178,3 +178,31 @@ func TestFake_UnderRunFailsAtCleanup(t *testing.T) {
 		t.Fatalf("scripting more calls than the pipeline made did not fail at cleanup: errorMsgs=%v", spy.errorMsgs)
 	}
 }
+
+// TestFake_UnitTitleIsAnsweredOutsideTheScript: the naming task (ADR-0065) is
+// answered by the model that names nothing unless a test sets what it says. It
+// consumes no scripted case, is not a prompt SeenPrompts holds, and is counted
+// apart, so a test that scripts the capture path stays exact.
+func TestFake_UnitTitleIsAnsweredOutsideTheScript(t *testing.T) {
+	dir := t.TempDir()
+	writeCase(t, dir, goldenset.LLMExample{ID: "only", Provider: "p", Model: "m", Task: "classify", Message: "m", Response: "scripted"})
+	f := fakeprovider.New(t, dir, "only")
+
+	got, err := f.Complete(context.Background(), ports.LLMRequest{Prompt: "name it", Task: "unit_title"})
+	if err != nil || got.Text != `{"title":null}` {
+		t.Fatalf("default unit_title answer = %+v, %v; want a title of null", got, err)
+	}
+	f.UnitTitleAnswers(`{"title":"Cena con Ana"}`, nil)
+	if got, err := f.Complete(context.Background(), ports.LLMRequest{Prompt: "name it too", Task: "unit_title"}); err != nil || got.Text != `{"title":"Cena con Ana"}` {
+		t.Fatalf("set unit_title answer = %+v, %v", got, err)
+	}
+	if got, err := f.Complete(context.Background(), ports.LLMRequest{Prompt: "classify", Task: "capture_processing"}); err != nil || got.Text != "scripted" {
+		t.Fatalf("the scripted case was not replayed after unit_title calls: %+v, %v", got, err)
+	}
+	if prompts := f.UnitTitlePrompts(); len(prompts) != 2 || prompts[0] != "name it" {
+		t.Errorf("UnitTitlePrompts() = %v, want both naming prompts in order", prompts)
+	}
+	if seen := f.SeenPrompts(); len(seen) != 1 || seen[0] != "classify" {
+		t.Errorf("SeenPrompts() = %v, want only the scripted call's prompt", seen)
+	}
+}

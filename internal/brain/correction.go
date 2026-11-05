@@ -37,6 +37,9 @@ type correctionRunner struct {
 	triggers ports.TriggerRepo
 	// config holds the reminder preferences the followed set is armed at.
 	config ports.ConfigRepo
+	// llm is the capture_processing provider, which names a dated unit whose
+	// correction cleared its title (ADR-0065); nil names nothing.
+	llm ports.LLMProvider
 }
 
 // referentSource records how applyWithPreImage's caller resolved target's
@@ -175,6 +178,15 @@ func (r correctionRunner) at(ctx context.Context, in CaptureInput, c classify.Cl
 	}
 	if err := r.applyWithPreImage(ctx, *target, plan, ref, c.InterruptLevel, now); err != nil {
 		return nil, err
+	}
+
+	// A title the correction cleared left a dated unit with no name, and a reply
+	// would then say its content beside its day (ADR-0065 point 1): name it
+	// against its new body. A failed naming leaves it cleared, as before.
+	if after := edited(*target, plan); clearsTheTitle(plan) && dated(after) {
+		if _, err := r.nameUnit(ctx, after, ports.ActionCorrectionTitleNamed, now); err != nil {
+			return nil, err
+		}
 	}
 
 	out := &Correction{UnitID: target.ID}

@@ -95,7 +95,7 @@ func NewCaptureService(clock ports.Clock, ids ports.IDGen, units ports.UnitRepo,
 			questions:        questions,
 			correction: correctionRunner{
 				units: units, log: log, signals: signals, ids: ids, recall: sharedRecall,
-				triggers: triggers,
+				triggers: triggers, llm: llm,
 			},
 		},
 	}
@@ -591,6 +591,19 @@ func (r captureRunner) at(ctx context.Context, in CaptureInput, now time.Time) (
 	candidates := make([]string, len(candidateUnits))
 	for i, cu := range candidateUnits {
 		candidates[i] = cu.ID
+	}
+
+	// A dated unit that came back with no usable title is named once, before
+	// anything is armed, so its reminder says the title from the start
+	// (ADR-0065 point 1). A failure leaves it untitled and the capture whole.
+	if u.Title == "" && dated(u) {
+		title, err := r.correction.nameUnit(ctx, u, ports.ActionCaptureTitleNamed, now)
+		if err != nil {
+			return CaptureResult{}, err
+		}
+		if title != "" {
+			c.Title = &title
+		}
 	}
 
 	// Arming happens AFTER the memory is whole — persisted, embedded and

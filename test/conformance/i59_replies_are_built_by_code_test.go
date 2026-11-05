@@ -114,6 +114,10 @@ func (g *i59Guard) Complete(_ context.Context, req ports.LLMRequest) (ports.LLMR
 		return ports.LLMResponse{Text: g.reading}, nil
 	case "relation_evaluation":
 		return ports.LLMResponse{Text: `{"verdict":"unrelated","confidence":0}`}, nil
+	case "unit_title":
+		// Naming a unit writes a stored field a reply later reads; it words no
+		// reply (ADR-0065). This guard's model names nothing.
+		return ports.LLMResponse{Text: `{"title":null}`}, nil
 	}
 	g.t.Errorf("provider called for task %q: no model words a reply (I59)", req.Task)
 	return ports.LLMResponse{}, nil
