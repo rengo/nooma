@@ -3,7 +3,7 @@
 - **Status**: Proposed (the client ruled on 2026-10-30 that voice ships before v1.0)
 - **Date**: 2026-10-30
 - **Supersedes**: —
-- **Superseded by**: —
+- **Superseded by**: [ADR-0066](0066-a-chat-voice-note-is-not-echoed.md) (point 4 only)
 - **Enables**: v1 (voice notes over Telegram, moved forward from after v1)
 
 ## Context
