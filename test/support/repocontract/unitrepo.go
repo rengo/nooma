@@ -1385,6 +1385,38 @@ func RunTitle(t *testing.T, newRepo func(t *testing.T) ports.UnitRepo) {
 			t.Fatalf("UpdateTitle on a missing id: %v, want ErrUnitNotFound", err)
 		}
 	})
+	t.Run("NameIfUntitled writes a title only where it is still NULL", func(t *testing.T) {
+		repo := newRepo(t)
+		bare := fixtureUnit("bare", unit.StatusPool)
+		named := fixtureUnit("named", unit.StatusPool)
+		named.Title = "Reunión del jueves"
+		for _, u := range []unit.Unit{bare, named} {
+			if err := repo.Create(ctx, u); err != nil {
+				t.Fatal(err)
+			}
+		}
+		at := bare.UpdatedAt.Add(time.Hour)
+
+		won, err := repo.NameIfUntitled(ctx, "bare", "Reunión con Juan", at)
+		want := bare
+		want.Title, want.UpdatedAt = "Reunión con Juan", at
+		if got, gerr := repo.ByID(ctx, "bare"); err != nil || !won || gerr != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("NameIfUntitled on a NULL title = %v, %v; unit %+v, %v; want true and only Title and UpdatedAt changed: %+v", won, err, got, gerr, want)
+		}
+
+		// A second naming loses: the first title stays.
+		won, err = repo.NameIfUntitled(ctx, "bare", "Otro nombre", at.Add(time.Hour))
+		if got, gerr := repo.ByID(ctx, "bare"); err != nil || won || gerr != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("NameIfUntitled on a titled unit = %v, %v; unit %+v, %v; want false and the unit untouched: %+v", won, err, got, gerr, want)
+		}
+		won, err = repo.NameIfUntitled(ctx, "named", "Otro nombre", at)
+		if got, gerr := repo.ByID(ctx, "named"); err != nil || won || gerr != nil || got.Title != "Reunión del jueves" || !got.UpdatedAt.Equal(named.UpdatedAt) {
+			t.Fatalf("NameIfUntitled over a title = %v, %v; unit %+v, %v; want false and the title kept", won, err, got, gerr)
+		}
+		if _, err := repo.NameIfUntitled(ctx, "does-not-exist", "x", at); !errors.Is(err, ports.ErrUnitNotFound) {
+			t.Fatalf("NameIfUntitled on a missing id: %v, want ErrUnitNotFound", err)
+		}
+	})
 	repo := newRepo(t)
 	for id, title := range map[string]string{"titled": "Reunión con Juan", "untitled": ""} {
 		u := fixtureUnit(id, unit.StatusPool)

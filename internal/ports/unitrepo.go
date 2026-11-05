@@ -100,6 +100,15 @@ type UnitRepo interface {
 	// methods, only a correction's applyWithPreImage calls it (ADR-0016).
 	UpdateTitle(ctx context.Context, id, title string, at time.Time) error
 
+	// NameIfUntitled gives id the title when it has none yet, and UpdatedAt as
+	// at, leaving every other column unchanged (ADR-0065). It reports whether it
+	// wrote: false means the unit already held a title, which a correction or the
+	// user wrote meanwhile and which is never overwritten. It returns
+	// ErrUnitNotFound if no unit with id exists. Unlike UpdateTitle it is the
+	// naming step's write, not a correction's, so it is not part of ADR-0016's
+	// pre-image rule.
+	NameIfUntitled(ctx context.Context, id, title string, at time.Time) (bool, error)
+
 	// UpdateReminderLeads rewrites id's ReminderLeads to minutes and UpdatedAt
 	// to at, leaving every other column unchanged (I40). It returns
 	// ErrUnitNotFound if no unit with id exists. Like the other Update*

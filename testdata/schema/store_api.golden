@@ -94,6 +94,7 @@ internal/store/sqlite: func (*UnitRepo) LiveFocusCandidates(ctx context.Context,
 internal/store/sqlite: func (*UnitRepo) LiveFocusCandidatesByType(ctx context.Context, types []unit.Type) ([]focus.Candidate, error)
 internal/store/sqlite: func (*UnitRepo) LiveInWindow(ctx context.Context, w recall.Window, limit int) ([]unit.Unit, error)
 internal/store/sqlite: func (*UnitRepo) LiveTasksDue(ctx context.Context, from, to time.Time) ([]unit.Unit, error)
+internal/store/sqlite: func (*UnitRepo) NameIfUntitled(ctx context.Context, id, title string, at time.Time) (bool, error)
 internal/store/sqlite: func (*UnitRepo) RecentLanguages(ctx context.Context, limit int) ([]string, error)
 internal/store/sqlite: func (*UnitRepo) SetRemindMe(ctx context.Context, id string, at time.Time) error
 internal/store/sqlite: func (*UnitRepo) SetStatus(ctx context.Context, id string, from, to unit.Status, at time.Time) error
