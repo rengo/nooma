@@ -33,9 +33,10 @@ func TestRenderReply_NamesTheAppointmentNotTheNudge(t *testing.T) {
 		Armed: &brain.Armed{
 			What: prospection.ArmTrigger, FireAt: capture, About: appointment, Immediate: true,
 		},
+		At: capture,
 	})
 
-	if !strings.Contains(got, "Fri 28 Aug, 09:00") {
+	if !strings.Contains(got, "the day after tomorrow at 9:00") {
 		t.Errorf("reply %q does not name the appointment — a reader cannot tell a correct "+
 			"reading from a misparse", got)
 	}
@@ -99,17 +100,17 @@ func TestRenderReply_ARingOnTheCaptureDayIsToday(t *testing.T) {
 	day := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
 	captured := time.Date(2026, 10, 19, 8, 0, 0, 0, zone)
 	armed := brain.Armed{What: prospection.ArmTrigger, FireAt: time.Date(2026, 10, 19, 9, 0, 0, 0, zone), About: day, DayOnly: true}
-	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); !strings.Contains(got, "I will remind you today at 09:00.") {
-		t.Errorf("date-only reply %q does not name today at 09:00", got)
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); !strings.Contains(got, "I'll remind you today at 9:00.") {
+		t.Errorf("date-only reply %q does not name today at 9:00", got)
 	}
 	// An unasked date-only event (a local midnight, ADR-0029) names its date
 	// alone, not "00:00".
 	armed.DayOnly = false
-	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); got != "Noted for Tue 20 Oct. I will remind you today at 09:00." {
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, At: captured}); got != "Got it, noted for tomorrow. I'll remind you today at 9:00." {
 		t.Errorf("unasked date-only reply = %q", got)
 	}
 	timed := brain.Armed{What: prospection.ArmTrigger, FireAt: time.Date(2026, 10, 19, 19, 0, 0, 0, zone), About: time.Date(2026, 10, 20, 1, 30, 0, 0, zone)}
-	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &timed, At: captured}); !strings.Contains(got, "I will remind you today at 19:00.") {
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &timed, At: captured}); !strings.Contains(got, "I'll remind you today at 19:00.") {
 		t.Errorf("timed reply %q does not name today at 19:00", got)
 	}
 }
@@ -118,10 +119,10 @@ func TestRenderReply_ARingOnTheCaptureDayIsToday(t *testing.T) {
 func TestRenderReply_AnUnchangedCorrectionSaysNothingChanged(t *testing.T) {
 	changed := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u"}})
 	same := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Correction: &brain.Correction{UnitID: "u", Unchanged: true}})
-	if changed != "Corrected." {
-		t.Errorf("changed = %q, want %q", changed, "Corrected.")
+	if changed != "Done, I fixed it." {
+		t.Errorf("changed = %q, want %q", changed, "Done, I fixed it.")
 	}
-	if same == changed || !strings.Contains(same, "Nothing") {
+	if same == changed || !strings.Contains(same, "changed nothing") {
 		t.Errorf("unchanged = %q, want a reply saying nothing changed", same)
 	}
 }
@@ -137,19 +138,20 @@ func TestRenderReply_AMovedCorrectionNamesWhereTo(t *testing.T) {
 	zone := time.FixedZone("UTC-3", -3*60*60)
 	at := time.Date(2026, 10, 20, 11, 0, 0, 0, zone)
 	day := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
+	told := time.Date(2026, 10, 15, 10, 0, 0, 0, zone)
 	for _, tc := range []struct {
 		name string
 		lang classify.Language
 		corr brain.Correction
 		want string
 	}{
-		{"time, Spanish", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt, correction.FieldContent}, MovedTo: &at}, "Movido al mar 20 oct, 11:00."},
-		{"time, English", classify.LanguageEN, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldDueAt}, MovedTo: &at}, "Moved to Tue 20 Oct, 11:00."},
-		{"a day alone", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt}, MovedTo: &day, MovedToDayOnly: true}, "Movido al mar 20 oct."},
-		{"wording only", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldContent, correction.FieldTitle}}, "Corregido."},
+		{"time, Spanish", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt, correction.FieldContent}, MovedTo: &at}, "Listo, lo pasé para el martes 20 de octubre a las 11:00."},
+		{"time, English", classify.LanguageEN, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldDueAt}, MovedTo: &at}, "Done, I moved it to Tuesday 20 October at 11:00."},
+		{"a day alone", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldEventAt}, MovedTo: &day, MovedToDayOnly: true}, "Listo, lo pasé para el martes 20 de octubre."},
+		{"wording only", classify.LanguageES, brain.Correction{UnitID: "u", Fields: []correction.Field{correction.FieldContent, correction.FieldTitle}}, "Listo, lo corregí."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: tc.lang, Correction: &tc.corr})
+			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: tc.lang, At: told, Correction: &tc.corr})
 			if got != tc.want {
 				t.Errorf("reply = %q, want %q", got, tc.want)
 			}
@@ -166,6 +168,7 @@ func TestRenderReply_ALeadsCorrectionNamesTheReminders(t *testing.T) {
 	zone := time.FixedZone("UTC-3", -3*60*60)
 	at := time.Date(2026, 10, 20, 11, 0, 0, 0, zone)
 	leads := []correction.Field{correction.FieldReminderLeads}
+	told := time.Date(2026, 10, 15, 10, 0, 0, 0, zone)
 	for _, tc := range []struct {
 		name string
 		corr brain.Correction
@@ -173,11 +176,11 @@ func TestRenderReply_ALeadsCorrectionNamesTheReminders(t *testing.T) {
 	}{
 		{"one hour before", brain.Correction{UnitID: "u", Fields: leads, About: at, Reminders: []time.Time{at.Add(-time.Hour)}}, "Te aviso 1 hora antes."},
 		{"moved and one hour before", brain.Correction{UnitID: "u", Fields: append([]correction.Field{correction.FieldEventAt}, leads...),
-			MovedTo: &at, About: at, Reminders: []time.Time{at.Add(-time.Hour)}}, "Movido al mar 20 oct, 11:00. Te aviso 1 hora antes."},
+			MovedTo: &at, About: at, Reminders: []time.Time{at.Add(-time.Hour)}}, "Listo, lo pasé para el martes 20 de octubre a las 11:00. Te aviso 1 hora antes."},
 		{"none left", brain.Correction{UnitID: "u", Fields: leads, About: at}, "Ya no queda ningún aviso antes de esa hora."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: classify.LanguageES, Correction: &tc.corr})
+			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeCorrected, Language: classify.LanguageES, At: told, Correction: &tc.corr})
 			if got != tc.want {
 				t.Errorf("reply = %q, want %q", got, tc.want)
 			}
@@ -204,13 +207,13 @@ func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
 		want  string
 	}{
 		{"one hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dentist.Add(-time.Hour), About: dentist, OwnLeads: []int{60}},
-			"Anotado para el mié 21 oct, 10:00. Te aviso 1 hora antes."},
+			"Listo, anotado para mañana a las 10:00. Te aviso 1 hora antes."},
 		{"the day before, already behind, rings on the day", brain.Armed{What: prospection.ArmTrigger,
 			FireAt: time.Date(2026, 10, 21, 9, 0, 0, 0, zone), About: dentist, OwnLeads: []int{1440}},
-			"Anotado para el mié 21 oct, 10:00. Te aviso ese día a las 09:00."},
+			"Listo, anotado para mañana a las 10:00. Te aviso ese día a las 9:00."},
 		{"the day before and half an hour before", brain.Armed{What: prospection.ArmTrigger, FireAt: dinner.Add(-24 * time.Hour), About: dinner,
 			Later: []time.Time{dinner.Add(-30 * time.Minute)}, OwnLeads: []int{1440, 30}},
-			"Anotado para el jue 22 oct, 21:00. Te aviso el día anterior y 30 minutos antes."},
+			"Listo, anotado para pasado mañana a las 21:00. Te aviso el día anterior y 30 minutos antes."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Language: classify.LanguageES, Armed: &tc.armed, At: told})
@@ -226,22 +229,24 @@ func TestRenderReply_ACaptureNamesTheLeadsItWasGiven(t *testing.T) {
 // morning's digest will mention it (doc 02 §7); a stored unit with no such
 // day stays "Noted.".
 func TestRenderReply_ADatedTaskNamesItsDayAndTheDigest(t *testing.T) {
-	due := time.Date(2026, 10, 20, 0, 0, 0, 0, time.FixedZone("UTC-3", -3*60*60))
-	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &due})
-	if want := "Anotado para el mar 20 oct. Te lo recuerdo en el resumen de esa mañana."; got != want {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	due := time.Date(2026, 10, 20, 0, 0, 0, 0, zone)
+	told := time.Date(2026, 10, 15, 9, 0, 0, 0, zone)
+	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &due, At: told})
+	if want := "Listo, anotado para el martes 20 de octubre. Te lo recuerdo en el resumen de esa mañana."; got != want {
 		t.Errorf("Spanish reply %q, want %q", got, want)
 	}
-	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageEN, DueInDigest: &due})
-	if want := "Noted for Tue 20 Oct. I will mention it in that morning's digest."; got != want {
+	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageEN, DueInDigest: &due, At: told})
+	if want := "Got it, noted for Tuesday 20 October. I'll mention it in that morning's digest."; got != want {
 		t.Errorf("English reply %q, want %q", got, want)
 	}
 	at := time.Date(2026, 10, 20, 10, 0, 0, 0, due.Location())
-	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &at, DueInDigestTimed: true})
-	if want := "Anotado para el mar 20 oct, 10:00. Te lo recuerdo en el resumen de esa mañana."; got != want {
+	got = RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES, DueInDigest: &at, DueInDigestTimed: true, At: told})
+	if want := "Listo, anotado para el martes 20 de octubre a las 10:00. Te lo recuerdo en el resumen de esa mañana."; got != want {
 		t.Errorf("a timed task answered %q, want %q", got, want)
 	}
-	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES}); got != "Anotado." {
-		t.Errorf("an undated stored unit answered %q, want \"Anotado.\"", got)
+	if got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeStored, Language: classify.LanguageES}); got != "Listo, anotado." {
+		t.Errorf("an undated stored unit answered %q, want \"Listo, anotado.\"", got)
 	}
 }
 
@@ -327,7 +332,7 @@ func TestRenderReply_ATimerNamesTheMomentItRings(t *testing.T) {
 	armed.About = armed.FireAt
 	got := RenderReply(brain.CaptureResult{Outcome: brain.OutcomeArmed, Armed: &armed, Language: classify.LanguageES,
 		At: time.Date(2026, 10, 26, 10, 8, 0, 0, art)})
-	if got != "Te aviso a las 10:28." {
-		t.Errorf("timer reply = %q, want %q", got, "Te aviso a las 10:28.")
+	if got != "Listo, te aviso a las 10:28." {
+		t.Errorf("timer reply = %q, want %q", got, "Listo, te aviso a las 10:28.")
 	}
 }

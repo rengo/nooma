@@ -43,13 +43,13 @@ func TestI26_ACaptureIsAnsweredInTheMessagesLanguage(t *testing.T) {
 			name:      "a spanish message is answered in spanish",
 			llmCase:   "classify-spanish-task",
 			wantLang:  classify.LanguageES,
-			wantReply: "Anotado.",
+			wantReply: "Listo, anotado.",
 		},
 		{
 			name:      "a classification naming no language falls back, it does not fall silent",
 			llmCase:   "classify-pick-up-dry-cleaning",
 			wantLang:  classify.Fallback(),
-			wantReply: "Noted.",
+			wantReply: "Got it, noted.",
 		},
 	}
 

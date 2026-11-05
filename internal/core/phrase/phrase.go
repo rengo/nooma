@@ -82,10 +82,9 @@ type Set struct {
 	RefusalPast    string
 	RefusalTooLate string
 
-	// TimerToday and TimerOn fill RemindYou with the one instant a timer
-	// rings at, which for a timer is also what it is about: TimerToday its
-	// hour, on the day it was set; TimerOn its day, then its hour.
-	TimerToday, TimerOn string
+	// TimerSet answers a timer: one %s, when it rings, which for a timer is also
+	// what it is about (its hour alone on the day it was set, else its day and hour).
+	TimerSet string
 	// The answers to a chat's list or cancel of the live timers (ADR-0051).
 	// TimersMany takes the count of every live timer, TimersMore the count
 	// past the listed ones, and TimerCancelled the cancelled timer's line.
@@ -101,11 +100,11 @@ type Set struct {
 	VoiceHeard, VoiceUnheard, VoiceOff, VoiceTooLong string
 	// EveryDay, EveryWeek, EveryMonth and EveryYear say when a recurring
 	// reminder rings, every time it does (ADR-0031 point 7), rather than its
-	// next occurrence alone. EveryDay takes the time; EveryWeek the weekday's
-	// name and the time; EveryMonth the day of the month and the time;
-	// EveryYear the day, the month's name and the time.
+	// next occurrence alone. EveryDay takes the clock (Clock); EveryWeek the
+	// weekday's name and the clock; EveryMonth the day of the month and the
+	// clock; EveryYear the day, the month's name and the clock.
 	EveryDay, EveryWeek, EveryMonth, EveryYear string
-	// NotedFor takes two %s: what the nudge is ABOUT, then when the nudge
+	// NotedFor takes two %s: what the nudge is ABOUT (Dated), then when the nudge
 	// arrives. Never the firing instant as the first — that answers a
 	// question nobody asked (doc 02 §5 step 5).
 	NotedFor string
@@ -164,8 +163,8 @@ type Set struct {
 
 	// The lead-time phrases NotedFor's second %s is filled with. LeadDays
 	// and LeadMinutes take one %d; LeadMinute is a lead of one minute.
-	// LeadThatDayAt takes one %s, the hour a day alone is reminded at.
-	// LeadTodayAt takes one %s, the hour of a ring on the day the user told
+	// LeadThatDayAt takes one %s, the clock a day alone is reminded at.
+	// LeadTodayAt takes one %s, the clock of a ring on the day the user told
 	// Nooma about an event on a later day (ADR-0037).
 	LeadImmediate string
 	LeadMinute    string
@@ -236,27 +235,26 @@ type Set struct {
 // answering in the fallback — which is the property ADR-0022 asks for.
 var sets = map[classify.Language]Set{
 	classify.LanguageEN: {
-		Noted:        "Noted.",
-		Corrected:    "Corrected.",
-		Unchanged:    "Nothing changed: it already says that.",
-		Moved:        "Moved to %s.",
+		Noted:        "Got it, noted.",
+		Corrected:    "Done, I fixed it.",
+		Unchanged:    "It already said that, so I changed nothing.",
+		Moved:        "Done, I moved it to %s.",
 		OutOfScope:   "That is not something I can do.",
 		NoAnswer:     "I could not answer that just now.",
 		AskWhichOne:  "I need one more thing before I can change that — which one did you mean?",
 		NothingFound: "I don't have anything noted about that.",
 
-		RemindYou:      "I will remind you %s.",
+		RemindYou:      "I'll remind you %s.",
 		NoReminderLeft: "No reminder is left before it.",
 		LeadsNotSet:    "I did not change the reminders: I can only remind you before something with a day and a time, up to %d days before.",
 
 		NotScheduled:   "I did not set that: %s",
-		NotedNotSet:    "Noted, but I did not set a reminder: %s.",
+		NotedNotSet:    "I noted it, but I didn't set a reminder: %s.",
 		RefusalNoDate:  "no time was given, and guessing one is worse than not setting a reminder at all",
-		RefusalPast:    "the time given has already passed",
+		RefusalPast:    "that time has already passed",
 		RefusalTooLate: "too little time is left before it",
 
-		TimerToday: "at %s",
-		TimerOn:    "on %s at %s",
+		TimerSet: "Sure, I'll remind you %s.",
 
 		TimersNone:     "No timers are set.",
 		TimersOne:      "There is 1 timer set:",
@@ -272,14 +270,14 @@ var sets = map[classify.Language]Set{
 		VoiceUnheard:   "I could not make out the audio; could you type it?",
 		VoiceOff:       "I cannot listen to voice notes here; could you type it?",
 		VoiceTooLong:   "That voice note is too long for me (up to %d minutes); could you type it or send a shorter one?",
-		EveryDay:       "I will remind you every day at %s.",
-		EveryWeek:      "I will remind you every %s at %s.",
-		EveryMonth:     "I will remind you on day %s of every month at %s.",
-		EveryYear:      "I will remind you every year on %s %s at %s.",
-		NotedFor:       "Noted for %s. I will remind you %s.",
+		EveryDay:       "Sure, I'll remind you every day %s.",
+		EveryWeek:      "Sure, I'll remind you every %s %s.",
+		EveryMonth:     "Sure, I'll remind you on day %s of every month %s.",
+		EveryYear:      "Sure, I'll remind you every year on %s %s %s.",
+		NotedFor:       "Got it, noted for %s. I'll remind you %s.",
 
-		NotedForDigest: "Noted for %s. I will mention it in that morning's digest.",
-		NotedOn:        "Noted for %s.",
+		NotedForDigest: "Got it, noted for %s. I'll mention it in that morning's digest.",
+		NotedOn:        "Got it, noted for %s.",
 		Closed:         "Done, I closed \"%s\".",
 		NothingClosed:  "I found nothing open to close.",
 
@@ -309,8 +307,8 @@ var sets = map[classify.Language]Set{
 		LeadHours:     "a few hours before",
 		LeadDayBefore: "the day before",
 		LeadDays:      "%d days before",
-		LeadThatDayAt: "that day at %s",
-		LeadTodayAt:   "today at %s",
+		LeadThatDayAt: "that day %s",
+		LeadTodayAt:   "today %s",
 		And:           "and",
 
 		LeadHour:       "1 hour before",
@@ -342,10 +340,10 @@ var sets = map[classify.Language]Set{
 	// the place to guess at one: a person who wants voseo is asking for a
 	// preference, which is the self-model's job and not the classifier's.
 	classify.LanguageES: {
-		Noted:        "Anotado.",
-		Corrected:    "Corregido.",
-		Unchanged:    "No cambió nada: ya dice eso.",
-		Moved:        "Movido al %s.",
+		Noted:        "Listo, anotado.",
+		Corrected:    "Listo, lo corregí.",
+		Unchanged:    "Ya decía eso, así que no cambié nada.",
+		Moved:        "Listo, lo pasé para %s.",
 		OutOfScope:   "Eso no es algo que pueda hacer.",
 		NoAnswer:     "No pude responder eso en este momento.",
 		AskWhichOne:  "Necesito una cosa más antes de cambiarlo: ¿a cuál te referías?",
@@ -356,13 +354,12 @@ var sets = map[classify.Language]Set{
 		LeadsNotSet:    "No cambié los avisos: solo puedo avisarte antes de algo con día y hora, hasta %d días antes.",
 
 		NotScheduled:   "No lo programé: %s",
-		NotedNotSet:    "Anotado, pero no puse aviso: %s.",
+		NotedNotSet:    "Lo anoté, pero no te puse aviso: %s.",
 		RefusalNoDate:  "no se indicó ninguna hora, y adivinarla es peor que no poner el recordatorio",
-		RefusalPast:    "la hora indicada ya pasó",
+		RefusalPast:    "esa hora ya pasó",
 		RefusalTooLate: "queda muy poco tiempo para esa hora",
 
-		TimerToday: "a las %s",
-		TimerOn:    "el %s a las %s",
+		TimerSet: "Listo, te aviso %s.",
 
 		TimersNone:     "No hay temporizadores puestos.",
 		TimersOne:      "Hay 1 temporizador puesto:",
@@ -378,14 +375,14 @@ var sets = map[classify.Language]Set{
 		VoiceUnheard:   "No pude entender el audio; ¿me lo escribís?",
 		VoiceOff:       "Acá no puedo escuchar audios; ¿me lo escribís?",
 		VoiceTooLong:   "Ese audio es muy largo para mí (hasta %d minutos); ¿me lo escribís o mandás uno más corto?",
-		EveryDay:       "Te aviso todos los días a las %s.",
-		EveryWeek:      "Te aviso todos los %s a las %s.",
-		EveryMonth:     "Te aviso el día %s de cada mes a las %s.",
-		EveryYear:      "Te aviso todos los años el %s de %s a las %s.",
-		NotedFor:       "Anotado para el %s. Te aviso %s.",
+		EveryDay:       "Listo, te aviso todos los días %s.",
+		EveryWeek:      "Listo, te aviso todos los %s %s.",
+		EveryMonth:     "Listo, te aviso el día %s de cada mes %s.",
+		EveryYear:      "Listo, te aviso todos los años el %s de %s %s.",
+		NotedFor:       "Listo, anotado para %s. Te aviso %s.",
 
-		NotedForDigest: "Anotado para el %s. Te lo recuerdo en el resumen de esa mañana.",
-		NotedOn:        "Anotado para el %s.",
+		NotedForDigest: "Listo, anotado para %s. Te lo recuerdo en el resumen de esa mañana.",
+		NotedOn:        "Listo, anotado para %s.",
 		Closed:         "Listo, saqué «%s».",
 		NothingClosed:  "No encontré nada pendiente para cerrar.",
 
@@ -415,8 +412,8 @@ var sets = map[classify.Language]Set{
 		LeadHours:     "unas horas antes",
 		LeadDayBefore: "el día anterior",
 		LeadDays:      "%d días antes",
-		LeadThatDayAt: "ese día a las %s",
-		LeadTodayAt:   "hoy a las %s",
+		LeadThatDayAt: "ese día %s",
+		LeadTodayAt:   "hoy %s",
 		And:           "y",
 
 		LeadHour:       "1 hora antes",
@@ -460,7 +457,9 @@ func For(l classify.Language) Set {
 	return sets[classify.Fallback()]
 }
 
-// Time renders an instant the way a person reading l reads one.
+// Time renders an instant the way a person reading l reads one. Chat replies
+// no longer use it (Dated does); the recorded fixtures of testdata/llm/reminders
+// carry its bytes, and test/conformance/reminder_phrasing_test.go pins them.
 //
 // The instant's own zone, never the process's: the classification carried
 // the user's offset in, and re-rendering it in the server's zone would
@@ -472,19 +471,20 @@ func (s Set) Time(t time.Time) string {
 // TimerAt says when a timer set at now rings: its hour alone on the day it
 // was set, else its day and hour, the day read in fire's own zone.
 func (s Set) TimerAt(fire, now time.Time) string {
-	clock := fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute())
-	if sameDay(fire, now) {
-		return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerToday, clock))
+	now = now.In(fire.Location())
+	when := s.Clock(fire)
+	if !sameDay(fire, now) {
+		when = s.When(Moment{At: fire}, now)
 	}
-	return fmt.Sprintf(s.RemindYou, fmt.Sprintf(s.TimerOn, s.Date(fire), clock))
+	return fmt.Sprintf(s.TimerSet, when)
 }
 
 // TimerLine names a live timer in a chat's list (ADR-0051): when it rings,
 // by its hour alone on now's day as TimerAt says it, then what it says.
 func (s Set) TimerLine(fire, now time.Time, text *string) string {
-	when := fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute())
+	when := s.Hour(fire)
 	if !sameDay(fire, now) {
-		when = s.Time(fire)
+		when = s.Date(fire) + ", " + when
 	}
 	if text == nil || *text == "" {
 		return when
@@ -507,7 +507,7 @@ func sameDay(fire, now time.Time) bool {
 
 // ThatDayAt names the hour on its own day a day alone is reminded at.
 func (s Set) ThatDayAt(fire time.Time) string {
-	return fmt.Sprintf(s.LeadThatDayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
+	return fmt.Sprintf(s.LeadThatDayAt, s.Clock(fire))
 }
 
 // Every says when a recurring reminder of rule and anchor rings, every time:
@@ -515,7 +515,7 @@ func (s Set) ThatDayAt(fire time.Time) string {
 // month are the anchor's, so a day-31 monthly reminder says 31 in November
 // too; an anchor with no weekday reads it from the occurrence.
 func (s Set) Every(rule prospection.Rule, anchor prospection.Anchor, at time.Time) string {
-	clock := fmt.Sprintf("%02d:%02d", at.Hour(), at.Minute())
+	clock := s.Clock(at)
 	switch rule {
 	case prospection.RuleDaily:
 		return fmt.Sprintf(s.EveryDay, clock)
@@ -649,7 +649,7 @@ func (s Set) exactLead(about, fire time.Time) string {
 // NamedLeads is ExactLeads for the rings of an event whose message named its
 // leads, in minutes (I44, ADR-0045): a ring that serves none of them, the one
 // kept on the event's own day when every named lead is behind (ADR-0039), is
-// said as when it rings ("ese día a las 09:00"), never as a lead nobody named.
+// said as when it rings ("ese día a las 9:00"), never as a lead nobody named.
 func (s Set) NamedLeads(about time.Time, named []int, fires ...time.Time) string {
 	var said []string
 	for _, fire := range fires {
@@ -706,7 +706,7 @@ func (s Set) onToldDay(told, about, fire time.Time) bool {
 
 // TodayAt names the hour of a ring today.
 func (s Set) TodayAt(fire time.Time) string {
-	return fmt.Sprintf(s.LeadTodayAt, fmt.Sprintf("%02d:%02d", fire.Hour(), fire.Minute()))
+	return fmt.Sprintf(s.LeadTodayAt, s.Clock(fire))
 }
 
 // join says each lead once, in order, the last two joined in the language.

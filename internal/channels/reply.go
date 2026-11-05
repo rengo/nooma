@@ -48,19 +48,13 @@ func RenderReply(result brain.CaptureResult) string {
 		// A dated task arms nothing: the digest of its day names it (doc 02 §7),
 		// and the reply names its hour too when it was told one.
 		if due := result.DueInDigest; due != nil {
-			if result.DueInDigestTimed {
-				return fmt.Sprintf(say.NotedForDigest, say.Time(*due))
-			}
-			return fmt.Sprintf(say.NotedForDigest, say.Date(*due))
+			return fmt.Sprintf(say.NotedForDigest, say.Dated(phrase.Moment{At: *due, DayOnly: !result.DueInDigestTimed}, result.At))
 		}
 		// An event that got no reminder, its leads behind when told or only
 		// night left before it, names what was read and promises no ring
 		// (ADR-0047). A day alone is named by its date, not "00:00".
 		if at := result.NotArmedFor; at != nil {
-			if atMidnight(*at) {
-				return fmt.Sprintf(say.NotedOn, say.Date(*at))
-			}
-			return fmt.Sprintf(say.NotedOn, say.Time(*at))
+			return fmt.Sprintf(say.NotedOn, say.Dated(phrase.Moment{At: *at, DayOnly: atMidnight(*at)}, result.At))
 		}
 		return say.Noted
 
@@ -82,10 +76,8 @@ func RenderReply(result brain.CaptureResult) string {
 			// When it rings every time, not its next ring alone (ADR-0031 point 7).
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
-			if dayOnly(result.Armed) {
-				return fmt.Sprintf(say.NotedFor, say.Date(result.Armed.About), askedLeads(say, result))
-			}
-			return fmt.Sprintf(say.NotedFor, say.Time(result.Armed.About), askedLeads(say, result))
+			about := phrase.Moment{At: result.Armed.About, DayOnly: dayOnly(result.Armed)}
+			return fmt.Sprintf(say.NotedFor, say.Dated(about, result.At), askedLeads(say, result))
 		}
 
 	case brain.OutcomeArmRefused:
@@ -144,11 +136,9 @@ func RenderReply(result brain.CaptureResult) string {
 		// to tell what Nooma understood, and once claimed a change of reminders
 		// that never happened. Wording alone keeps the short confirmation.
 		var said []string
-		switch {
-		case c.MovedTo != nil && c.MovedToDayOnly:
-			said = append(said, fmt.Sprintf(say.Moved, say.Date(*c.MovedTo)))
-		case c.MovedTo != nil:
-			said = append(said, fmt.Sprintf(say.Moved, say.Time(*c.MovedTo)))
+		if c.MovedTo != nil {
+			moved := phrase.Moment{At: *c.MovedTo, DayOnly: c.MovedToDayOnly}
+			said = append(said, fmt.Sprintf(say.Moved, say.Dated(moved, result.At)))
 		}
 		switch {
 		case !slices.Contains(c.Fields, correction.FieldReminderLeads):

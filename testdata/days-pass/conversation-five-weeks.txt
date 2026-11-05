@@ -4,25 +4,25 @@
 # "listo" is read by a hand-written reading, not a recording
 # "ya lo hice" is read by a hand-written reading, not a recording
 Fri 2026-10-16 10:42 ← recordame comprar café mañana a las 10
-Fri 2026-10-16 10:42 → Anotado para el sáb 17 oct, 10:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:42 → Listo, anotado para mañana a las 10:00. Te aviso 15 minutos antes.
 Fri 2026-10-16 10:43 ← recordame pagar el gas el jueves
-Fri 2026-10-16 10:43 → Anotado para el jue 22 oct. Te aviso ese día a las 09:00.
+Fri 2026-10-16 10:43 → Listo, anotado para el jueves 22 de octubre. Te aviso ese día a las 9:00.
 Fri 2026-10-16 10:44 ← recordame el dentista el viernes a las 10
-Fri 2026-10-16 10:44 → Anotado para el vie 23 oct, 10:00. Te aviso el día anterior, unas horas antes y 15 minutos antes.
+Fri 2026-10-16 10:44 → Listo, anotado para el viernes 23 de octubre a las 10:00. Te aviso el día anterior, unas horas antes y 15 minutos antes.
 Fri 2026-10-16 10:45 ← recordame tomar las pastillas todos los días a las 9pm
-Fri 2026-10-16 10:45 → Te aviso todos los días a las 21:00.
+Fri 2026-10-16 10:45 → Listo, te aviso todos los días a las 21:00.
 Fri 2026-10-16 10:46 ← haceme acordar de llamar al médico mañana a las 9
-Fri 2026-10-16 10:46 → Anotado para el sáb 17 oct, 09:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:46 → Listo, anotado para mañana a las 9:00. Te aviso 15 minutos antes.
 Fri 2026-10-16 10:47 ← poneme un recordatorio para sacar la basura a las 9pm
-Fri 2026-10-16 10:47 → Anotado para el vie 16 oct, 21:00. Te aviso 15 minutos antes.
+Fri 2026-10-16 10:47 → Listo, anotado para hoy a las 21:00. Te aviso 15 minutos antes.
 Fri 2026-10-16 10:48 ← acordate de avisarme que vence el seguro el viernes
-Fri 2026-10-16 10:48 → Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00.
+Fri 2026-10-16 10:48 → Listo, anotado para el viernes 23 de octubre. Te aviso el día anterior y ese día a las 9:00.
 Fri 2026-10-16 10:49 ← recordame la reunión con Juan mañana a las 22:30
-Fri 2026-10-16 10:49 → Anotado para el sáb 17 oct, 22:30. Te aviso unas horas antes y 15 minutos antes.
+Fri 2026-10-16 10:49 → Listo, anotado para mañana a las 22:30. Te aviso unas horas antes y 15 minutos antes.
 Fri 2026-10-16 10:50 ← Ana me dijo 'avisame cuando llegues'
-Fri 2026-10-16 10:50 → Anotado.
+Fri 2026-10-16 10:50 → Listo, anotado.
 Fri 2026-10-16 17:30 ← Remind me to call Ana at 5pm
-Fri 2026-10-16 17:30 → Noted, but I did not set a reminder: the time given has already passed.
+Fri 2026-10-16 17:30 → I noted it, but I didn't set a reminder: that time has already passed.
 Fri 2026-10-16 20:45 → Acordate: sacar la basura, hoy a las 21:00.
 Fri 2026-10-16 21:00 → Acordate: tomar las pastillas, hoy.
 Sat 2026-10-17 08:45 → Acordate: llamar al médico, hoy a las 9:00.

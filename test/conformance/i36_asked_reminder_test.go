@@ -149,7 +149,7 @@ func TestI36_TheObservedCoffeeRequestRingsOnce(t *testing.T) {
 		!p.Asked || !p.NightExempt || p.DayOnly {
 		t.Fatalf("trigger = %+v, want 09:45 about 10:00 with lead 15, asked and night-exempt", trg)
 	}
-	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct, 10:00. Te aviso 15 minutos antes."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para mañana a las 10:00. Te aviso 15 minutos antes."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 
@@ -205,7 +205,7 @@ func TestI36_ARequestComesFromTheField(t *testing.T) {
 	if v.triggers.Count() != 0 || v.unit(t, result.UnitID).RemindMe {
 		t.Fatalf("armed %d triggers for a message that did not ask, unit %+v", v.triggers.Count(), v.unit(t, result.UnitID))
 	}
-	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct, 10:00. Te lo recuerdo en el resumen de esa mañana."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para mañana a las 10:00. Te lo recuerdo en el resumen de esa mañana."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -219,8 +219,8 @@ func TestI36_ADayAloneRemindsThatDayAtTheDateOnlyHour(t *testing.T) {
 		fire time.Time
 		want string
 	}{
-		"default": {nil, i36At(17, 9, 0), "Anotado para el sáb 17 oct. Te aviso ese día a las 09:00."},
-		"08:30":   {ptr("08:30"), i36At(17, 8, 30), "Anotado para el sáb 17 oct. Te aviso ese día a las 08:30."},
+		"default": {nil, i36At(17, 9, 0), "Listo, anotado para mañana. Te aviso ese día a las 9:00."},
+		"08:30":   {ptr("08:30"), i36At(17, 8, 30), "Listo, anotado para mañana. Te aviso ese día a las 8:30."},
 	} {
 		t.Run(name, func(t *testing.T) {
 			v := newI36Vault()
@@ -263,7 +263,7 @@ func TestI36_AnAskedDayEventNamesEveryRing(t *testing.T) {
 	v := newI36Vault()
 	result := v.capture(t, i36Now, i36Recordings(t), "classify-request-acordate-de-avisarme",
 		"acordate de avisarme que vence el seguro el viernes")
-	if got, want := channels.RenderReply(result), "Anotado para el vie 23 oct. Te aviso el día anterior y ese día a las 09:00."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para el viernes 23 de octubre. Te aviso el día anterior y ese día a las 9:00."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -277,7 +277,7 @@ func TestI36_TodayAfterTheDateOnlyHourRingsAtOnce(t *testing.T) {
 	if trg := v.only(t); !trg.FireAt.Equal(i36Now) {
 		t.Errorf("trigger = %+v, want it at once", trg)
 	}
-	if got, want := channels.RenderReply(result), "Anotado para el vie 16 oct. Te aviso ahora mismo."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para hoy. Te aviso ahora mismo."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -286,7 +286,7 @@ func TestI36_TodayAfterTheDateOnlyHourRingsAtOnce(t *testing.T) {
 func TestI36_TheReplyIsInTheMessagesLanguage(t *testing.T) {
 	v := newI36Vault()
 	result := v.say(t, i36Now, i36Reading("task", "2026-10-17T10:00:00-03:00", true, "en"))
-	if got, want := channels.RenderReply(result), "Noted for Sat 17 Oct, 10:00. I will remind you 15 minutes before."; got != want {
+	if got, want := channels.RenderReply(result), "Got it, noted for tomorrow at 10:00. I'll remind you 15 minutes before."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -303,7 +303,7 @@ func TestI36_TheLeadIsTheUsersPreference(t *testing.T) {
 	if trg := v.only(t); !trg.FireAt.Equal(i36At(17, 9, 30)) || trg.Payload.LeadMinutes != 30 {
 		t.Errorf("trigger = %+v, want 09:30 with lead 30", trg)
 	}
-	if got, want := channels.RenderReply(result), "Anotado para el sáb 17 oct, 10:00. Te aviso 30 minutos antes."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, anotado para mañana a las 10:00. Te aviso 30 minutos antes."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -322,7 +322,7 @@ func TestI36_AnAskedRepetitionKeepsRecurring(t *testing.T) {
 	if trg.RecurrenceRule == nil || *trg.RecurrenceRule != prospection.RuleDaily || !trg.FireAt.Equal(i36At(16, 21, 0)) {
 		t.Errorf("trigger = %+v, want the daily recurring row at 21:00 today", trg)
 	}
-	if got, want := channels.RenderReply(result), "Te aviso todos los días a las 21:00."; got != want {
+	if got, want := channels.RenderReply(result), "Listo, te aviso todos los días a las 21:00."; got != want {
 		t.Errorf("reply = %q, want %q", got, want)
 	}
 }
@@ -334,13 +334,13 @@ func TestI36_AnAskedRepetitionKeepsRecurring(t *testing.T) {
 // anchor's time, 09:00 for a bare date.
 func TestI36_ARecurringReplySaysHowOften(t *testing.T) {
 	for _, tc := range []struct{ rule, eventAt, language, want string }{
-		{"weekly", "2026-10-19T08:30:00-03:00", "es", "Te aviso todos los lunes a las 08:30."},
-		{"monthly", "2026-10-31T18:00:00-03:00", "es", "Te aviso el día 31 de cada mes a las 18:00."},
-		{"yearly", "1990-10-23", "es", "Te aviso todos los años el 23 de octubre a las 09:00."},
-		{"daily", "2026-10-16T21:00:00-03:00", "en", "I will remind you every day at 21:00."},
-		{"weekly", "2026-10-19T08:30:00-03:00", "en", "I will remind you every Monday at 08:30."},
-		{"monthly", "2026-10-31T18:00:00-03:00", "en", "I will remind you on day 31 of every month at 18:00."},
-		{"yearly", "1990-10-23", "en", "I will remind you every year on 23 October at 09:00."},
+		{"weekly", "2026-10-19T08:30:00-03:00", "es", "Listo, te aviso todos los lunes a las 8:30."},
+		{"monthly", "2026-10-31T18:00:00-03:00", "es", "Listo, te aviso el día 31 de cada mes a las 18:00."},
+		{"yearly", "1990-10-23", "es", "Listo, te aviso todos los años el 23 de octubre a las 9:00."},
+		{"daily", "2026-10-16T21:00:00-03:00", "en", "Sure, I'll remind you every day at 21:00."},
+		{"weekly", "2026-10-19T08:30:00-03:00", "en", "Sure, I'll remind you every Monday at 8:30."},
+		{"monthly", "2026-10-31T18:00:00-03:00", "en", "Sure, I'll remind you on day 31 of every month at 18:00."},
+		{"yearly", "1990-10-23", "en", "Sure, I'll remind you every year on 23 October at 9:00."},
 	} {
 		t.Run(tc.rule+" "+tc.language, func(t *testing.T) {
 			v := newI36Vault()
@@ -364,11 +364,11 @@ func TestI36_AskedButNotArmedSaysWhy(t *testing.T) {
 		why, want     string
 	}{
 		{"the time has passed", i36Reading("task", "2026-10-16T09:00:00-03:00", true, "es"), i36Now, "already_past",
-			"Anotado, pero no puse aviso: la hora indicada ya pasó."},
+			"Lo anoté, pero no te puse aviso: esa hora ya pasó."},
 		{"too little of the day is left", i36Reading("task", "2026-10-16", true, "es"), i36At(16, 23, 54), "too_late",
-			"Anotado, pero no puse aviso: queda muy poco tiempo para esa hora."},
+			"Lo anoté, pero no te puse aviso: queda muy poco tiempo para esa hora."},
 		{"no time was given", `{"type":"task","normalized_content":"Comprar café","weight":0.7,"decay_rate":0.03,"language":"en","remind_request":true}`,
-			i36Now, "no_date", "Noted, but I did not set a reminder: no time was given, and guessing one is worse than not setting a reminder at all."},
+			i36Now, "no_date", "I noted it, but I didn't set a reminder: no time was given, and guessing one is worse than not setting a reminder at all."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -63,13 +63,27 @@ func (s Set) Day(m Moment, now time.Time) string {
 	return day
 }
 
+// Dated is m as a noun phrase with its time, for a sentence that names what a
+// thing is for or moved to: "mañana a las 11:00", "Thursday 12 November at
+// 10:00". A day alone has no time.
+func (s Set) Dated(m Moment, now time.Time) string {
+	day := s.Day(m, now)
+	if m.DayOnly {
+		return day
+	}
+	return day + " " + s.Clock(m.At.In(now.Location()))
+}
+
+// Hour writes an hour as the replies do, 24-hour with no leading zero.
+func (s Set) Hour(t time.Time) string { return fmt.Sprintf("%d:%02d", t.Hour(), t.Minute()) }
+
 // Clock says an hour: "a las 8:30", "a la 1:00".
 func (s Set) Clock(t time.Time) string {
 	frame := s.At
 	if t.Hour() == 1 {
 		frame = s.AtOne
 	}
-	return fmt.Sprintf(frame, fmt.Sprintf("%d:%02d", t.Hour(), t.Minute()))
+	return fmt.Sprintf(frame, s.Hour(t))
 }
 
 // past says whether m is behind now: a timed instant before it, a day alone

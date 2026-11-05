@@ -3,8 +3,8 @@
 # "mañana renuevo el pasaporte" is read by a hand-written reading, not a recording
 # "mañana tengo dentista a las 10" is read by a hand-written reading, not a recording
 Mon 2026-10-19 08:00 ← mañana renuevo el pasaporte
-Mon 2026-10-19 08:00 → Anotado para el mar 20 oct. Te aviso hoy a las 09:00.
+Mon 2026-10-19 08:00 → Listo, anotado para mañana. Te aviso hoy a las 9:00.
 Mon 2026-10-19 08:44 ← mañana tengo dentista a las 10
-Mon 2026-10-19 08:44 → Anotado para el mar 20 oct, 10:00. Te aviso unas horas antes.
+Mon 2026-10-19 08:44 → Listo, anotado para mañana a las 10:00. Te aviso unas horas antes.
 Mon 2026-10-19 09:00 → Acordate: renovar el pasaporte, mañana.
 Tue 2026-10-20 08:00 → Acordate: dentista, hoy a las 10:00.
