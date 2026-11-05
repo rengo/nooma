@@ -48,9 +48,11 @@ import (
 // accepted smell m1b D7 named for the same reversal criterion.
 //
 // target is the unit being corrected, and zone the user's frame. A date
-// equal to target's own value is an echo (I30): the correction prompt
-// shows the model the unit's current instants, so a text-only correction
-// can come back with them repeated. An echo yields to content that is a
+// equal to target's own value is an echo (I30), and so is a bare date (the
+// DayOnly flags) on the local day of target's instant, compared in the frame
+// the date is written in, not the store's UTC. The correction prompt shows
+// the model the unit's current instants, so a text-only correction can come
+// back with them repeated. An echo yields to content that is a
 // real change and still states the instant the unit keeps (KeepsInstant):
 // letting it win would discard the text the correction spoke about and
 // record a change that never happened. Otherwise the echo stands — a
