@@ -44,6 +44,22 @@ func TestSelectToName_TiesBreakByIDAndTheInstantNowIsAhead(t *testing.T) {
 	}
 }
 
+// TestSelectToName_AnInstantEqualToNowSortsBeforeALaterOne: ahead includes now
+// itself. Were it counted past, it would sort after a unit an hour away, which the
+// tie-break case above cannot tell (every candidate there is at or before now).
+func TestSelectToName_AnInstantEqualToNowSortsBeforeALaterOne(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	cands := []Untitled{
+		{ID: "past", EventAt: tp(now.Add(-time.Minute))},
+		{ID: "later", EventAt: tp(now.Add(time.Hour))},
+		{ID: "now", EventAt: tp(now)},
+	}
+	want := []string{"now", "later", "past"}
+	if got := SelectToName(cands, now, 50); !reflect.DeepEqual(got, want) {
+		t.Fatalf("SelectToName = %v, want %v", got, want)
+	}
+}
+
 func TestSelectToName_EmptyAndNonPositiveLimitSelectNothing(t *testing.T) {
 	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 	if got := SelectToName(nil, now, 50); len(got) != 0 {

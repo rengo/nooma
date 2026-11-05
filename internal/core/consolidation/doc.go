@@ -1,9 +1,9 @@
-// Package consolidation holds the decision logic of the eight nightly
+// Package consolidation holds the decision logic of the nine nightly
 // phases (docs/02-cognitive-core.md §6), in the order Phase's own
 // numbering fixes (I11):
 //
 //	expire_incomplete -> archive -> strengthen -> connect -> derive ->
-//	reweight -> pattern_eval -> learn
+//	reweight -> pattern_eval -> title -> learn
 //
 // Each phase is a pure function over data the caller already holds, plus
 // the pass's single `now` where an instant matters — never a repository,
