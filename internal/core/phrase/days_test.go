@@ -192,3 +192,17 @@ func TestRecall(t *testing.T) {
 		}
 	}
 }
+
+// TestDated_ReadsTheInstantInNowsZone: an instant stored in UTC is said in the
+// user's zone, the clock and the day both. 2026-11-05 01:30 UTC is Wednesday
+// 22:30 at -03:00, which is today, not tomorrow.
+func TestDated_ReadsTheInstantInNowsZone(t *testing.T) {
+	utc := time.Date(2026, 11, 5, 1, 30, 0, 0, time.UTC)
+	m := Moment{At: utc}
+	if got, want := es.Dated(m, now), "hoy a las 22:30"; got != want {
+		t.Errorf("ES Dated = %q, want %q", got, want)
+	}
+	if got, want := en.Dated(m, now), "today at 22:30"; got != want {
+		t.Errorf("EN Dated = %q, want %q", got, want)
+	}
+}
