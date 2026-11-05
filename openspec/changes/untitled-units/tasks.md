@@ -23,7 +23,7 @@ Chained PRs: yes (3 links + plan). Decision needed before apply: none; Q1-Q2 are
 ## Link 1 — `feat/untitled-fallback` (D2)
 
 - [ ] 1.1 RED L1 `phrase.ItemOf`: titled as today; no title + instant is `Unnamed`; no title and
-      no instant keeps the content; `Names` built by it (replaces `NamesOf`, `pastFirstWord`).
+      no instant of its own keeps the content (also when the reply computes a day for it); `Names` built by it (replaces `NamesOf`, `pastFirstWord`).
 - [ ] 1.2 RED L1 exact text of every unnamed frame in ES and EN (push, recall one ahead, recall
       one past, list line), today / tomorrow / due / past, the late note.
 - [ ] 1.3 RED L2 I59 extension: an untitled dated unit's push, recall and digest line contain

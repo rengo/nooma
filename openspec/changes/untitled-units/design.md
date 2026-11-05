@@ -77,10 +77,17 @@ only the provider-failure residue, which D2 covers.
 ### D2 — The fallback names no words and no date twice
 
 When an item has an instant and no title, the reply does not use the content. `phrase` gets one
-constructor, `ItemOf(title, content string, when *Moment) Item`, used by every caller in §1 (it
+constructor, `ItemOf(title, content string, when *Moment, dated bool) Item`, used by every caller in §1 (it
 also builds `Names`, replacing `NamesOf` and `pastFirstWord`). With a title it is as today; with
 no title and an instant it returns an item marked `Unnamed`; with no title and no instant it
 keeps the content (an undated unit states no instant, so nothing repeats).
+
+"Dated" is a property of the unit, not of the reply: `dated` is true only when the unit itself
+carries an `event_at` or a `due_at` (the case where its normalized content embeds a date). The
+`when` a reply computes is not enough: a recurring reminder such as "Tomar las pastillas" with no
+title and no `event_at` is pushed with a day the pass computes, but its words are all it has, so
+it keeps them ("Acordate: tomar las pastillas, hoy."). Callers pass
+`u.EventAt != nil || u.DueAt != nil`.
 
 An unnamed item is said with these frames (new `Set` fields, pinned by the completeness test and
 by exact texts in I59):

@@ -23,6 +23,10 @@ reminder push, the recall answer (one and many), the digest and Today.
 - **Given** such a unit among many, **when** listed in a recall, the digest or Today, **then**
   its line is "• Algo anotado, hoy a las 22:30" (EN "• Something noted, today at 22:30").
 - **Given** an undated unit with no title, **then** it is said by its content as before.
+- **Given** a recurring unit with content "tomar las pastillas", no title and neither `event_at`
+  nor `due_at`, **when** its push is built for today, **then** it is exactly "Acordate: tomar las
+  pastillas, hoy." (EN "Don't forget: take the pills, today."): the day is the reply's, not the
+  unit's, so the unit is not dated.
 - **Given** a unit with a title, **then** nothing changes.
 
 ## R2 — A dated unit is named
