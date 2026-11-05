@@ -31,7 +31,7 @@ reminder push, the recall answer (one and many), the digest and Today.
 
 ## R2 — A dated unit is named
 
-- **Given** a capture of a dated unit, or one asked to be reminded, whose model answer had no
+- **Given** a capture of a unit with its own `event_at` or `due_at` whose model answer had no
   usable title, **when** it is stored, **then** the model is asked once for the title before the
   reminder is armed, the reminder's text is that title, and a provider failure still captures the
   unit with no title.

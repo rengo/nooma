@@ -9,7 +9,7 @@
 
 A warm reply says an item's words and then the day the code renders (ADR-0064). The words are
 `shownText(u)`: the title, else the content. The content carries the resolved instant as
-`YYYY-MM-DD` / `HH:MM` (the capture prompt asks for that form, `prompt.go:126`, so
+`YYYY-MM-DD` / `HH:MM` (the capture prompt asks for that form, `internal/core/classify/prompt.go:131-134`, so
 `correction.FollowDate` can move it), and an older unit may still carry a relative word
 ("mañana"). So a title-less dated unit says its date twice, once in ISO form, and can say a day
 that is no longer true (ADR-0032):
@@ -61,14 +61,16 @@ Pieces:
 
 It runs at three points:
 
-1. **Capture, on the degraded path only**: a dated unit, or one asked to be reminded, that came
+1. **Capture, on the degraded path only**: a unit with its own `event_at` or `due_at` (ADR-0065
+   point 1; an undated reminder is not named here) that came
    back with no usable title is named once, after the unit is written and **before** its
    triggers are armed, so `action_text` is the title from the start. One extra call, only when
    the title is missing; on any failure the capture proceeds untouched (the night retries).
 2. **Correction, where it clears the title**: right after a plan that clears the title of a unit
    that is still dated, the same step names it against the new body. The clearing rule in doc 02
    stays (a title that names a gone day must go); a fresh name replaces the gap.
-3. **The night**: a new consolidation phase, `title`, appended after `learn` (D3).
+3. **The night**: a new consolidation phase, `title`, placed between `pattern_eval` and `learn`
+   (D3); `learn` stays last (doc 02 §6, I11).
 
 Not "on first need" at push time: ADR-0064 point 1 says no reply waits for a provider call, and
 the push runs on the check tick. Naming where the gap appears (1, 2) plus the night (3) leaves
@@ -78,7 +80,7 @@ only the provider-failure residue, which D2 covers.
 
 When an item has an instant and no title, the reply does not use the content. `phrase` gets one
 constructor, `ItemOf(title, content string, when *Moment, dated bool) Item`, used by every caller in §1 (it
-also builds `Names`, replacing `NamesOf` and `pastFirstWord`). With a title it is as today; with
+also builds `Names`, replacing `NamesOf`). With a title it is as today; with
 no title and an instant it returns an item marked `Unnamed`; with no title and no instant it
 keeps the content (an undated unit states no instant, so nothing repeats).
 
@@ -122,6 +124,10 @@ content's stale relative word. They are not touched by slice 1.
   ring first named first. A unit the model cannot name is retried each night and keeps its slot;
   that costs one call per such unit per night, accepted over storing an attempt counter (a new
   column, a migration) for a case not yet seen.
+- Slot: the phase list becomes `expire_incomplete → archive → strengthen → connect → derive →
+  reweight → pattern_eval → title → learn`. `learn` stays last: it reads what the others wrote,
+  and I11 (doc 02 §6) with its compile-time proof in `internal/core/consolidation/phase.go` hold.
+  `PhaseTitle` is declared before `PhaseLearn`; the count goes from 8 to 9.
 - Brain: reads `UntitledDated`, runs the selection, `nameUnit` each, persists through the
   phase's `record`. With no provider configured the phase writes nothing (as `connect` does).
   A provider error on one unit is logged and the pass moves on; it does not abort the night.
@@ -135,11 +141,11 @@ a correction's title edit uses, so `/ui/activity` shows it and the user can corr
 |---|---|---|
 | `consolidate.title.named` | the night named a unit | `unit_id`, `previous: null`, `next` |
 | `consolidate.title.unnamed` | the night asked and got nothing usable, or the provider failed | `unit_id`, `reason` |
-| `unit.title.named` | capture or correction named a unit | `unit_id`, `source` (`capture`/`correction`), `previous: null`, `next` |
+| `capture.title.named` / `correction.title.named` | capture or correction named a unit | `unit_id`, `source` (`capture`/`correction`), `previous: null`, `next` |
 
 A `false` from `NameIfUntitled` writes nothing and logs nothing. Nothing is deleted: the column
-goes from NULL to a value; content, instants and triggers' instants are untouched. All three join
-`AllDecisionActions`.
+goes from NULL to a value; content, instants and triggers' instants are untouched. The four join
+`AllDecisionActions`; `source` is implied by the prefix.
 
 ### D5 — ADR
 
@@ -152,12 +158,15 @@ and stays as it is; doc 03's column comment is updated).
 
 ## 3. Doc changes
 
-- Doc 02 §5 step 1 (`title` paragraph): a dropped title is retried once for a dated unit; "the
-  unit is then read by its content" becomes "a dated unit is then said as something noted".
+- Doc 02 "read by its content" lines (§5 step 1 at `:677`, the recall answer at `:855`, the
+  reminder at `:1989`, the digest at `:2085`): **slice 1 (#446)** changes their fallback half,
+  "a dated unit with no title is said as something noted, an undated one by its content". Slice 1's
+  PR is amended for it. Slice 2 adds only the retry (a dropped title on a dated unit is named once).
 - Doc 02 §5 corrections ("the title follows the body"): a cleared title on a dated unit is
   named afresh.
 - Doc 02 §5 recall, §8 push, the digest and Today paragraphs: the unnamed frames.
-- Doc 02 §9: the `title` phase and its order. §13: `title_backfill_per_pass`.
+- Doc 02 §6: the pipeline line and the phase item for `title` (before `learn`), its I11 row
+  ("The 9 consolidation phases"); §13: `title_backfill_per_pass`. Doc 06 I11: "9".
 - Doc 03 `units.title` comment; doc 06 §4: I60; doc 07 status row.
 
 ## 4. Test plan (no network, no real LLM)
@@ -180,8 +189,8 @@ turn a named test red.
 | # | Branch | Content | Est. impl+doc / tests | Depends on |
 |---|---|---|---|---|
 | 1 | `feat/untitled-fallback` | D2: `ItemOf`, unnamed frames, the four callers, I59 extension, doc 02 frame lines | ~170 / ~180 | main |
-| 2 | `feat/untitled-naming` | D1 + D4 for capture and correction, ADR-0065, doc 02 §5 | ~300 / ~250 | 1 |
-| 3 | `feat/untitled-night` | D3 + its D4 rows, repo `UntitledDated`, §9/§13, doc 03, I60 night cases | ~260 / ~220 | 2 |
+| 2 | `feat/untitled-naming` | D1 + D4 for capture and correction, doc 02 §5 retry and clearing | ~300 / ~250 | 1 |
+| 3 | `feat/untitled-night` | D3 + its D4 rows, repo `UntitledDated`, `PhaseTitle` and the 9-phase proof, §6/§13, doc 03, I60 night cases | ~260 / ~220 | 2 |
 
 Slice 1 alone fixes the reported symptom on main and on the production vault (the replies stop
 repeating dates) at the cost of vaguer items; slices 2-3 then make the vague text rare.
