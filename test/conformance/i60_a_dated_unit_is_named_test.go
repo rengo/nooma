@@ -91,6 +91,28 @@ func (l failingNamingLog) Record(ctx context.Context, d ports.Decision) error {
 // when wrap is set; the vault still reads the underlying log back.
 func newI60Logged(t *testing.T, llm *i60LLM, wrap func(*memrepo.DecisionLog) ports.DecisionLog) i60Vault {
 	t.Helper()
+	return newI60With(t, llm, wrap, nil)
+}
+
+// retextFailingTriggers refuses a reschedule that writes the unit's new title
+// into a reminder, so the move a correction makes lands and only the naming
+// step's rewrite fails.
+type retextFailingTriggers struct {
+	*memrepo.Triggers
+	title string
+}
+
+func (r retextFailingTriggers) Reschedule(ctx context.Context, id string, m ports.TriggerMove) error {
+	if m.Payload.ActionText == r.title {
+		return errors.New("triggers down")
+	}
+	return r.Triggers.Reschedule(ctx, id, m)
+}
+
+// newI60With is newI60Logged that can also put the brain behind a wrapped
+// trigger store.
+func newI60With(t *testing.T, llm *i60LLM, wrap func(*memrepo.DecisionLog) ports.DecisionLog, wrapTriggers func(*memrepo.Triggers) ports.TriggerRepo) i60Vault {
+	t.Helper()
 	llm.t = t
 	v := i60Vault{units: memrepo.NewUnits(), triggers: memrepo.NewTriggers(), decisions: memrepo.NewDecisionLog(), llm: llm}
 	embeddings := memrepo.NewEmbeddings()
@@ -102,9 +124,13 @@ func newI60Logged(t *testing.T, llm *i60LLM, wrap func(*memrepo.DecisionLog) por
 	if wrap != nil {
 		log = wrap(v.decisions)
 	}
+	var triggers ports.TriggerRepo = v.triggers
+	if wrapTriggers != nil {
+		triggers = wrapTriggers(v.triggers)
+	}
 	v.svc = brain.NewCaptureService(fixedClock{now: i60Now}, &counterIDs{}, v.units, embeddings, memrepo.NewLexical(),
 		memrepo.NewRelations(), log, llm, llm, llm, fakeprovider.NewEmbeddingFake(embedFakeModel),
-		brain.NewIndex(idx), memrepo.NewSignals(), v.triggers, memrepo.NewTimers(), 0.5, nil)
+		brain.NewIndex(idx), memrepo.NewSignals(), triggers, memrepo.NewTimers(), 0.5, nil)
 	return v
 }
 
@@ -436,6 +462,34 @@ func TestI60_AFailedTitleRowAtCorrectionIsReportedAndTheTitleStays(t *testing.T)
 	_, err := v.svc.Capture(context.Background(), brain.CaptureInput{Text: "no, es el viernes", Channel: "ui", ReferentID: "meeting"})
 	if err == nil {
 		t.Fatal("Capture error = nil, want the failed title row returned")
+	}
+	got, gerr := v.units.ByID(context.Background(), "meeting")
+	if gerr != nil || got.Title != "Reunión con Juan" {
+		t.Errorf("unit title = %q, %v; want the written title to stay", got.Title, gerr)
+	}
+}
+
+// TestI60_AFailedReminderRewriteAfterNamingIsReportedAndTheTitleStays: the title
+// and its row are written before the reminders follow the new name, so a rewrite
+// that fails leaves the title written and the error reaches the caller.
+func TestI60_AFailedReminderRewriteAfterNamingIsReportedAndTheTitleStays(t *testing.T) {
+	llm := &i60LLM{classify: i60DateOnlyCorrection, title: `{"title":"Reunión con Juan"}`}
+	v := newI60With(t, llm, nil, func(tr *memrepo.Triggers) ports.TriggerRepo {
+		return retextFailingTriggers{Triggers: tr, title: "Reunión con Juan"}
+	})
+	u, original := i60Meeting()
+	if err := v.units.Create(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	unitID := u.ID
+	if err := v.triggers.Create(context.Background(), ports.Trigger{ID: "t1", UnitID: &unitID, Kind: ports.TriggerKindTimeBased,
+		Payload: ports.TriggerPayload{ActionText: "Reunión del jueves", About: original}, FireAt: &original}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := v.svc.Capture(context.Background(), brain.CaptureInput{Text: "no, es el viernes", Channel: "ui", ReferentID: "meeting"})
+	if err == nil {
+		t.Fatal("Capture error = nil, want the failed reminder rewrite returned")
 	}
 	got, gerr := v.units.ByID(context.Background(), "meeting")
 	if gerr != nil || got.Title != "Reunión con Juan" {
