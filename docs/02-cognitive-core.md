@@ -530,8 +530,10 @@ stranger's audio is never fetched. The channel downloads the note into memory, t
 `audio_transcription` task transcribes it, and the audio is dropped: it is never written to the
 vault or to disk. The trimmed transcript enters this pipeline as the message's text, on the same
 path, as the same conversation turn, with the same reply. The reply leads with what was heard
-("Entendí: «…»") only when the reading did nothing the user can see acted on: a `conversed` or
-`out_of_scope` outcome, an `asked` one, or a which-timer question. That choice is made over the
+("Entendí: «…»") only when the reading did nothing the user can see acted on and the transcript explains an odd
+answer: an `out_of_scope` outcome, an `asked` one, or a which-timer question
+([ADR-0066](adr/0066-a-chat-voice-note-is-not-echoed.md); a `conversed` outcome is answered
+with no echo). That choice is made over the
 typed outcome, never the reply's words. A voice capture writes one `capture.voice.transcribed`
 row naming its outcome and unit, because `conversation_turns` has no column for where a turn
 came from. The channel answers a note itself, in the sender's language, and captures nothing,
