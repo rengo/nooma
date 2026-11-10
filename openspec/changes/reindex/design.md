@@ -21,8 +21,9 @@ of those, the single-writer rule (doc 03) or a precedent in the binary.
   (I21), storing it under its own would never close the gap and re-pay on every run.
 - **D3. Resumable from the data alone.** One provider call and one `Put` per unit, at the
   instant read once from the clock. The work list is the query itself, so an interrupted run
-  (Ctrl-C/SIGTERM through `signal.NotifyContext`, a kill, a crash) keeps every row written and
-  the next run lists only what is left. A complete vault lists nothing and calls no provider.
+  (Ctrl-C/SIGTERM through `signal.NotifyContext`, bound after the question so Ctrl-C there
+  still ends the command; a kill; a crash) keeps every row written and the next run lists only
+  what is left; it says "interrupted", not "context canceled". A complete vault lists nothing and calls no provider.
 - **D4. Provider failures.** A refused unit is counted and passed; the run goes on. Three
   refusals in a row (`reindexFailureStreak`) stop the run as "the provider looks unavailable",
   so a provider that is down is not called once per unit of a large vault. An operational bound,
@@ -34,7 +35,7 @@ of those, the single-writer rule (doc 03) or a precedent in the binary.
   reads its index once at start (ADR-0012), so a reindex beside a running serve could not
   reach recall before a restart anyway. Doctor's FAILs say the same three steps.
 - **D6. Confirmation (ADR-0003).** When there is something to embed, reindex first states it
-  ("N live units lack a M vector; embedding them calls provider P once each") and asks
+  ("N live units lack a M vector; each is one call to provider P") and asks
   `Continue? [y/N]` on stdin. Anything but `y`/`yes` (EOF included, as in a container without
   `-i`) changes nothing and says how to proceed. `--yes` answers for an unattended run. A
   complete vault, or a vault with no embedding model, asks nothing.
@@ -46,7 +47,7 @@ of those, the single-writer rule (doc 03) or a precedent in the binary.
   M`). Summary: embedded, skipped (live units already holding the vector, read before the run
   through `sqlite.EmbeddingRepo.LiveModels`), failed, left; the last failure's reason.
 - **D9. Doctor and usage.** Both FAILs drop "(not in this version yet)" and say "stop nooma
-  serve, run `nooma reindex`, and start it again". Serve's boot warning keeps pointing at
+  serve, run `nooma reindex`, and start it again", and say one unit in the singular. Serve's boot warning keeps pointing at
   doctor (ADR-0059 point 7). `reindex` leaves `TestUnimplementedCommandsDoNotExist` and joins
   the sandbox test's vaultless commands: with no vault it stops at resolution (PR #430).
 

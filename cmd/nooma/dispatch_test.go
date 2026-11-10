@@ -47,6 +47,8 @@ func TestUsageNamesOnlyCommandsThatWork(t *testing.T) {
 // "export" and "import" left it in M6 (ADR-0057): they exist, and only
 // passed here because both refuse a missing argument before resolving a vault.
 //
+// "reindex" left it in M6 slice D2 (cmd/nooma/reindex.go).
+//
 // "consolidate" left this list in m2c-consolidation-runtime PR 12
 // (cmd/nooma/consolidate.go): it is dispatchable now, so it belongs in
 // TestUsageNamesOnlyCommandsThatWork's own coverage above instead —
@@ -54,7 +56,7 @@ func TestUsageNamesOnlyCommandsThatWork(t *testing.T) {
 func TestUnimplementedCommandsDoNotExist(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"reindex", "nonsense"} {
+	for _, name := range []string{"nonsense"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

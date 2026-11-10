@@ -121,6 +121,19 @@ serve from opening the vault. If it happened, give them back before starting Noo
 sudo chown 65532:65532 /srv/nooma/data/vault/nooma.db-wal /srv/nooma/data/vault/nooma.db-shm
 ```
 
+### After changing the embedding model: reindex
+
+`nooma reindex` writes the vault, so serve must be stopped while it runs:
+
+```sh
+docker compose -f deploy/docker/compose.yml stop nooma
+docker compose -f deploy/docker/compose.yml run --rm nooma reindex --yes /data/vault
+docker compose -f deploy/docker/compose.yml start nooma
+```
+
+Without `-it`, the container cannot answer its question, so `--yes` answers it. Each unit it
+embeds is one call to the embedding provider. Stopped part-way, run it again: it continues.
+
 ### Building from source
 
 `compose.build.yml` builds the working tree with `deploy/docker/Dockerfile` instead of pulling,

@@ -368,7 +368,8 @@ END;
   one vector per model**: the key is `(unit_id, model)` (migration 0016,
   [ADR-0058](adr/0058-a-unit-holds-one-vector-per-model.md)). A write replaces the unit's vector
   under its own model and keeps its vectors under any other. If the user changes model, the
-  vault must be re-embedded (`nooma reindex`, an explicit command with progress); the new
+  vault must be re-embedded (`nooma reindex`, an explicit command with progress and a
+  confirmation, which takes the vault lock and so runs with `serve` stopped); the new
   model's vectors are added beside the old ones, so a reindex is resumable from the data alone,
   never takes away the index the running model reads, and a return to the old model costs
   nothing. Nothing is deleted.
@@ -395,7 +396,8 @@ late, and far from the cause. This belongs in an L3 integration test, not a code
 ## Operational properties of the vault
 
 - **Single writer**: the binary takes a lockfile in the vault on startup (`nooma.lock` with
-  PID). A second `nooma serve` over the same vault fails clearly, it does not corrupt.
+  PID). A second `nooma serve` over the same vault fails clearly, it does not corrupt; so do
+  `nooma consolidate` and `nooma reindex`, the other commands that write it.
 - **Hot backup**: `nooma backup` uses `VACUUM INTO` — never copy `nooma.db` while the process
   is writing with WAL open. It reads through a read-only connection, so it never migrates or
   writes the vault and runs beside `nooma serve` without the lock; it verifies the copy with
