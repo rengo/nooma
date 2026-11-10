@@ -20,9 +20,14 @@ unit back and planned its anchor as a one-shot instant:
 
 - **D1. The live recurring trigger is the source of truth.** `remindRecurring` runs before the
   one-shot path: a unit with an armed trigger carrying a rule and an anchor is marked asked and
-  answered from that row; nothing is armed, refused or logged. The next occurrence is the row's
-  `fire_at` while ahead, else `prospection.NextOccurrence` from now (a row already due goes out
-  now). A recurring unit with no live recurring trigger keeps today's path: its rule is gone.
+  answered from that row; nothing is armed, refused or logged. A recurring unit with no live
+  recurring trigger keeps today's path: its rule is gone.
+- **D1b. The answer names when the row actually rings** (PM ruling on review of #450).
+  `prospection.QuietHours.NextRing` runs the due scan's own `ReminderVerdict` on the row in the
+  user's night: pending rings at its instant, or quiet end when the night holds it (unless
+  `night_exempt`); deferred rings at quiet end; deliverable goes out at the next pass, named as
+  now; stale is replaced by `Rearmed`, as the scan arms the successor, and judged again. The
+  rule is said at the occurrence's clock (`Armed.About`), the ring is `Armed.FireAt`.
 - **D2. `FollowAsked` keeps a live recurrence** through the same helper `FollowSent` uses
   (`followRecurring`), so both re-anchor by `recurringTrigger`, the function capture arms with.
 - **D3. Code-built answer.** `Armed.Already` marks the result; `phrase.Set.AlreadyEvery` says

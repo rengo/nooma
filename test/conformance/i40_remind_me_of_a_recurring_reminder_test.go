@@ -30,11 +30,19 @@ func i40Daily(hour, minute int) time.Time {
 // so the next message follows it as A.
 func seedPills(t *testing.T, f i40Fixture, hour, minute int) (unit.Unit, ports.Trigger) {
 	t.Helper()
+	return seedPillsAs(t, f, hour, minute, true, nil)
+}
+
+// seedPillsAs is seedPills with the unit asked or not, and its row armed at
+// fire instead of its next occurrence when fire is set: a row already due
+// that no pass has sent yet.
+func seedPillsAs(t *testing.T, f i40Fixture, hour, minute int, asked bool, fire *time.Time) (unit.Unit, ports.Trigger) {
+	t.Helper()
 	ctx := context.Background()
 	anchorAt := i40Daily(hour, minute)
 	u := unit.Unit{ID: "pills", Type: unit.TypeEvent, Status: unit.StatusPool, Source: "telegram",
 		Content: "Recordarme tomar las pastillas todos los días a partir del 2026-10-01.", Title: "Tomar las pastillas",
-		EventAt: &anchorAt, RemindMe: true, CreatedAt: anchorAt.Add(-time.Hour), UpdatedAt: anchorAt.Add(-time.Hour)}
+		EventAt: &anchorAt, RemindMe: asked, CreatedAt: anchorAt.Add(-time.Hour), UpdatedAt: anchorAt.Add(-time.Hour)}
 	if err := f.units.Create(ctx, u); err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +50,9 @@ func seedPills(t *testing.T, f i40Fixture, hour, minute int) (unit.Unit, ports.T
 	clock := prospection.TimeOfDay{Hour: hour, Minute: minute}
 	anchor := prospection.Anchor{Month: anchorAt.Month(), Day: anchorAt.Day(), Weekday: &weekday, At: &clock}
 	next := prospection.NextOccurrence(rule, anchor, i40Now)
+	if fire != nil {
+		next = *fire
+	}
 	id := u.ID
 	trig := ports.Trigger{ID: "pills-daily", UnitID: &id, Kind: ports.TriggerKindTimeBased,
 		Payload: ports.TriggerPayload{ActionText: "Tomar las pastillas"}, FireAt: &next,
@@ -91,22 +102,36 @@ func (f i40Fixture) keepsItsDailyTrigger(t *testing.T, want ports.Trigger) {
 // hora ya pasó." A recurring reminder already reminds of itself. The answer
 // says so, naming its rule and its next occurrence (today when its hour is
 // still ahead, else tomorrow), and its trigger stays the one it was: nothing
-// armed, nothing refused, no unit stored.
+// armed, nothing refused, no unit stored, no decision_log row. An item not yet
+// asked becomes asked.
+//
+// The next occurrence is when the row will actually ring (the PM's ruling on
+// #450): a row held by the night rings at quiet end, and one already due that
+// no pass has sent yet goes out now; neither is named at a past instant or at
+// one it will not ring at. The rule keeps its own clock.
 func TestI40_ARemindMeOfARecurringReminderSaysItAlreadyDoes(t *testing.T) {
+	due := time.Date(2026, 10, 14, 17, 55, 0, 0, i40Now.Location()) // five minutes before i40Now
 	for _, tc := range []struct {
 		name, lang   string
 		hour, minute int
+		asked        bool
+		fire         *time.Time
 		want         string
 	}{
-		{"es, later today", "es", 21, 30, "Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."},
-		{"es, passed today", "es", 9, 0, "Eso ya te lo recuerdo todos los días a las 9:00; el próximo aviso es mañana a las 9:00."},
-		{"en, later today", "en", 21, 30, "I already remind you of that every day at 21:30; the next one is today at 21:30."},
-		{"en, passed today", "en", 9, 0, "I already remind you of that every day at 9:00; the next one is tomorrow at 9:00."},
+		{"es, later today", "es", 21, 30, true, nil, "Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."},
+		{"es, passed today", "es", 9, 0, true, nil, "Eso ya te lo recuerdo todos los días a las 9:00; el próximo aviso es mañana a las 9:00."},
+		{"en, later today", "en", 21, 30, true, nil, "I already remind you of that every day at 21:30; the next one is today at 21:30."},
+		{"en, passed today", "en", 9, 0, true, nil, "I already remind you of that every day at 9:00; the next one is tomorrow at 9:00."},
+		{"es, not yet asked", "es", 21, 30, false, nil, "Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."},
+		{"es, held by the night", "es", 6, 0, true, nil, "Eso ya te lo recuerdo todos los días a las 6:00; el próximo aviso es mañana a las 7:00."},
+		{"en, held by the night", "en", 6, 0, true, nil, "I already remind you of that every day at 6:00; the next one is tomorrow at 7:00."},
+		{"es, due and not yet sent", "es", 17, 55, true, &due, "Eso ya te lo recuerdo todos los días a las 17:55; el próximo aviso es hoy a las 18:00."},
+		{"en, due and not yet sent", "en", 17, 55, true, &due, "I already remind you of that every day at 17:55; the next one is today at 18:00."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newI40(t, remindThatOf(tc.lang))
-			_, trig := seedPills(t, f, tc.hour, tc.minute)
-			before := f.units.Count()
+			_, trig := seedPillsAs(t, f, tc.hour, tc.minute, tc.asked, tc.fire)
+			before, rows := f.units.Count(), len(i40Actions(t, f.decisions))
 
 			res := f.sayPills(t, "recordame eso por favor")
 
@@ -117,11 +142,14 @@ func TestI40_ARemindMeOfARecurringReminderSaysItAlreadyDoes(t *testing.T) {
 				t.Errorf("result = %+v, want the pills reminder named as armed, nothing refused", res)
 			}
 			f.keepsItsDailyTrigger(t, trig)
-			if n := f.count(t, ports.ActionCaptureArmRefused); n != 0 {
-				t.Errorf("capture.arm.refused rows = %d, want none: nothing was refused", n)
+			if n := len(i40Actions(t, f.decisions)); n != rows {
+				t.Errorf("decision_log rows %d -> %d, want none written: nothing was armed or refused", rows, n)
 			}
 			if n := f.units.Count(); n != before {
 				t.Errorf("units %d -> %d: a reminder of an item stores nothing", before, n)
+			}
+			if u, err := f.units.ByID(context.Background(), "pills"); err != nil || !u.RemindMe {
+				t.Errorf("pills = remind_me %v, %v: want it marked asked", u.RemindMe, err)
 			}
 
 			// Asked again, nothing doubles.

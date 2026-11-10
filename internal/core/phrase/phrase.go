@@ -545,10 +545,11 @@ func (s Set) Every(rule prospection.Rule, anchor prospection.Anchor, at time.Tim
 }
 
 // AlreadyEvery answers a remind-me of a recurring reminder already armed: it
-// already reminds, by its rule, and next is when it rings next, named by its
-// day from now.
-func (s Set) AlreadyEvery(rule prospection.Rule, anchor prospection.Anchor, next, now time.Time) string {
-	return fmt.Sprintf(s.EveryAlready, s.every(rule, anchor, next), s.Dated(Moment{At: next}, now))
+// already reminds, by its rule at occurrence's clock, and ring is when it
+// actually rings next, named by its day from now. The two differ when the night
+// holds the ring, or a due one goes out now.
+func (s Set) AlreadyEvery(rule prospection.Rule, anchor prospection.Anchor, occurrence, ring, now time.Time) string {
+	return fmt.Sprintf(s.EveryAlready, s.every(rule, anchor, occurrence), s.Dated(Moment{At: ring}, now))
 }
 
 // every is the rule of a recurring reminder at at's clock time.

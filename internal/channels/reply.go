@@ -189,7 +189,7 @@ func RenderReply(result brain.CaptureResult) string {
 // rule, and when it rings next.
 func everyAlready(say phrase.Set, result brain.CaptureResult) string {
 	a := result.Armed
-	return say.AlreadyEvery(a.Rule, a.Anchor, a.FireAt, result.At)
+	return say.AlreadyEvery(a.Rule, a.Anchor, a.About, a.FireAt, result.At)
 }
 
 // timersReply answers a chat's list or cancel of the live timers (ADR-0051).

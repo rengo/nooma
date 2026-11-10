@@ -223,8 +223,9 @@ type Armed struct {
 	Rule   prospection.Rule
 	Anchor prospection.Anchor
 	// Already says nothing was armed: a remind-me named a recurring reminder
-	// that already reminds of itself, and ID, Rule, Anchor and FireAt are its
-	// live trigger's.
+	// that already reminds of itself. ID, Rule and Anchor are its live
+	// trigger's, About the occurrence it rings for and FireAt when it actually
+	// rings, which the night or a pass not yet run can move.
 	Already bool
 }
 

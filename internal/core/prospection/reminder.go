@@ -161,3 +161,34 @@ func (r Reminder) about(zone *time.Location) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// NextRing is when an armed recurring reminder r rings next, as the due scan
+// judges it at now in q's night (ReminderVerdict), and the occurrence that ring
+// is about. Never behind now: a row still ahead rings at its instant, or at
+// quiet end when the night holds it (not when NightExempt); one due and
+// deferred by the night rings at quiet end; one due and deliverable goes out
+// at the next pass, named as now; one that lapses is replaced by its next
+// occurrence (Rearmed, as the scan arms it), judged the same way. A row with
+// no rule or anchor rings at its instant, out of the night.
+func (q QuietHours) NextRing(r Reminder, now time.Time) (occurrence, ring time.Time) {
+	if r.Rule == nil || r.Anchor == nil {
+		return r.FireAt, q.DeliverableFrom(r.FireAt)
+	}
+	// A lapsed row's successor is ahead of the row, so two steps reach a row
+	// that rings: a missed day's successor may be today's, itself overdue.
+	for range 3 {
+		switch v, _ := q.ReminderVerdict(r, now); v {
+		case VerdictPending:
+			if r.NightExempt {
+				return r.FireAt, r.FireAt
+			}
+			return r.FireAt, q.DeliverableFrom(r.FireAt.In(now.Location()))
+		case VerdictDefer:
+			return r.FireAt, q.DeliverableFrom(now)
+		case VerdictDeliver:
+			return r.FireAt, now
+		}
+		r.FireAt = Rearmed(*r.Rule, *r.Anchor, r.FireAt, now)
+	}
+	return r.FireAt, q.DeliverableFrom(r.FireAt.In(now.Location()))
+}

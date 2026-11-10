@@ -52,8 +52,8 @@ func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time
 
 // remindRecurring answers a remind-me of u when u has a live recurring
 // trigger: u is marked asked, nothing is armed or refused, and the answer names
-// the trigger's rule and its next occurrence. false when no live trigger of u
-// recurs.
+// the trigger's rule, at its occurrence (About), and when it actually rings
+// next (FireAt, prospection.NextRing). false when no live trigger of u recurs.
 func (r captureRunner) remindRecurring(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, bool, error) {
 	armed, err := r.triggers.ArmedForUnit(ctx, u.ID)
 	if err != nil {
@@ -69,14 +69,12 @@ func (r captureRunner) remindRecurring(ctx context.Context, u unit.Unit, now tim
 		}
 	}
 	t := armed[i]
-	// The row's own instant while it is ahead; one already due goes out now,
-	// so the next is the rule's after now.
-	next := t.FireAt.In(now.Location())
-	if !next.After(now) {
-		next = prospection.NextOccurrence(*t.RecurrenceRule, *t.RecurrenceAnchor, now)
-	}
+	// When the row actually rings, as the due scan will judge it in the user's
+	// night: never a past instant, nor one the night holds it past.
+	night := prospection.QuietHours{End: reminderPrefs(ctx, r.config).QuietEnd}
+	occurrence, ring := night.NextRing(newReminder(t, false), now)
 	return CaptureResult{Outcome: OutcomeArmed, UnitID: u.ID, Armed: &Armed{What: prospection.ArmRecurring, ID: t.ID,
-		FireAt: next, About: next, Rule: *t.RecurrenceRule, Anchor: *t.RecurrenceAnchor, Already: true}}, true, nil
+		FireAt: ring.In(now.Location()), About: occurrence.In(now.Location()), Rule: *t.RecurrenceRule, Anchor: *t.RecurrenceAnchor, Already: true}}, true, nil
 }
 
 // remindReferentOnly is remindReferent with an answer naming the asked

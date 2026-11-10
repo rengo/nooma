@@ -515,8 +515,14 @@ func TestSet_AlreadyEvery(t *testing.T) {
 		{classify.LanguageEN, prospection.RuleWeekly, prospection.Anchor{Weekday: &friday}, tonight, "I already remind you of that every Friday at 21:30; the next one is today at 21:30."},
 		{classify.LanguageEN, prospection.RuleMonthly, prospection.Anchor{Month: time.October, Day: 11}, tomorrow, "I already remind you of that on day 11 of every month at 8:00; the next one is tomorrow at 8:00."},
 	} {
-		if got := For(tc.lang).AlreadyEvery(tc.rule, tc.anchor, tc.next, now); got != tc.want {
+		if got := For(tc.lang).AlreadyEvery(tc.rule, tc.anchor, tc.next, tc.next, now); got != tc.want {
 			t.Errorf("%s AlreadyEvery(%s) = %q, want %q", tc.lang, tc.rule, got, tc.want)
 		}
+	}
+	// Held by the night: the rule keeps its own clock, the ring is quiet end.
+	six, seven := time.Date(2026, 11, 11, 6, 0, 0, 0, zone), time.Date(2026, 11, 11, 7, 0, 0, 0, zone)
+	want := "Eso ya te lo recuerdo todos los días a las 6:00; el próximo aviso es mañana a las 7:00."
+	if got := For(classify.LanguageES).AlreadyEvery(prospection.RuleDaily, prospection.Anchor{}, six, seven, now); got != want {
+		t.Errorf("AlreadyEvery held by the night = %q, want %q", got, want)
 	}
 }

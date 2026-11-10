@@ -997,8 +997,12 @@ command, it is answered once.
        again, since its `event_at` is the anchor it repeats from, not an instant to remind before
        (read as one, the live "recordame eso" after the nightly pills push of 2026-11-10 was refused
        as past). It is marked asked, its trigger is left as it is, no row is written, and the
-       answer names its rule and its next occurrence, the trigger's own instant ("Eso ya te lo
-       recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."). A one-off item
+       answer names its rule, at its occurrence's clock, and when it actually rings next
+       (`prospection.NextRing`, by the due scan's own verdict in the user's night): the
+       trigger's instant while it is ahead; quiet end when the night holds it; now when it is
+       due and no pass has sent it yet; its next occurrence when it will lapse. Never a past
+       instant ("Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las
+       21:30."; at 6:00, "… el próximo aviso es mañana a las 7:00."). A one-off item
        whose instant has passed is still refused as above. A remind-me
        whose reading names a new instant for the item ("es a las 11, recordámelo";
        `correction.MovesDate`: an echoed instant is none, and so is a bare date on the item's own
