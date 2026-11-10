@@ -4,6 +4,7 @@ package conformance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -202,5 +203,30 @@ func TestI21_AReindexNeverStoresAnotherModelsVector(t *testing.T) {
 	}
 	if got := v.indexed(t, "model-other"); len(got) != 0 {
 		t.Errorf("model-other index = %v, want nothing stored under it either", got)
+	}
+}
+
+// TestI21_AReindexReachesEveryPageOfTheWorkList: the work list is read a page
+// at a time (100 ids). With 250 live units lacking the model and a refusal on
+// the last id of the first page, one run asks for every unit once, the cursor
+// moves past the refused one, and only it is left.
+func TestI21_AReindexReachesEveryPageOfTheWorkList(t *testing.T) {
+	ctx := context.Background()
+	v := reindexVault{units: memrepo.NewUnits(), embeds: memrepo.NewEmbeddings()}
+	for i := range 250 {
+		id := fmt.Sprintf("p-%03d", i)
+		if err := v.units.Create(ctx, unit.Unit{ID: id, Type: unit.TypeKnowledge, Content: "text of " + id, Status: unit.StatusPool,
+			CreatedAt: reindexAt, UpdatedAt: reindexAt, LastTouchedAt: reindexAt}); err != nil {
+			t.Fatal(err)
+		}
+		v.embeds.EnsureUnit(t, id)
+	}
+	embed := &reindexEmbedder{model: "model-new", failOn: map[string]bool{"text of p-099": true}}
+	res, err := v.run(ctx, embed, nil)
+	if err != nil || res.Missing != 250 || res.Embedded != 249 || res.Failed != 1 || len(embed.asked) != 250 {
+		t.Fatalf("result = %+v, %v after %d calls; want 249 embedded and 1 refused in one run of 250 calls", res, err, len(embed.asked))
+	}
+	if left, err := v.embeds.LiveWithoutEmbedding(ctx, "model-new", "", 10); err != nil || !slices.Equal(left, []string{"p-099"}) {
+		t.Errorf("left after the run = %v, %v; want only the refused p-099", left, err)
 	}
 }
