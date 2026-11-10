@@ -167,28 +167,40 @@ func (r Reminder) about(zone *time.Location) (time.Time, bool) {
 // is about. Never behind now: a row still ahead rings at its instant, or at
 // quiet end when the night holds it (not when NightExempt); one due and
 // deferred by the night rings at quiet end; one due and deliverable goes out
-// at the next pass, named as now; one that lapses is replaced by its next
-// occurrence (Rearmed, as the scan arms it), judged the same way. A row with
-// no rule or anchor rings at its instant, out of the night.
+// at the next pass, named as now. One that lapses is replaced by its successor,
+// as the scan arms it (Rearmed): after a missed day that is today's occurrence,
+// judged the same way; when it lapses too, the first occurrence after now. A
+// row with no rule or anchor rings at its instant, out of the user's night.
 func (q QuietHours) NextRing(r Reminder, now time.Time) (occurrence, ring time.Time) {
 	if r.Rule == nil || r.Anchor == nil {
-		return r.FireAt, q.DeliverableFrom(r.FireAt)
+		return r.FireAt, q.DeliverableFrom(r.FireAt.In(now.Location()))
 	}
-	// A lapsed row's successor is ahead of the row, so two steps reach a row
-	// that rings: a missed day's successor may be today's, itself overdue.
-	for range 3 {
-		switch v, _ := q.ReminderVerdict(r, now); v {
-		case VerdictPending:
-			if r.NightExempt {
-				return r.FireAt, r.FireAt
-			}
-			return r.FireAt, q.DeliverableFrom(r.FireAt.In(now.Location()))
-		case VerdictDefer:
-			return r.FireAt, q.DeliverableFrom(now)
-		case VerdictDeliver:
-			return r.FireAt, now
+	if ring, ok := q.ringOf(r, now); ok {
+		return r.FireAt, ring
+	}
+	r.FireAt = Rearmed(*r.Rule, *r.Anchor, r.FireAt, now)
+	if ring, ok := q.ringOf(r, now); ok {
+		return r.FireAt, ring
+	}
+	// Ahead of now, so pending: ringOf always rings it.
+	r.FireAt = NextOccurrence(*r.Rule, *r.Anchor, now)
+	ring, _ = q.ringOf(r, now)
+	return r.FireAt, ring
+}
+
+// ringOf is when the armed row r rings as the due scan judges it at now, and
+// false when it lapses instead.
+func (q QuietHours) ringOf(r Reminder, now time.Time) (time.Time, bool) {
+	switch v, _ := q.ReminderVerdict(r, now); v {
+	case VerdictPending:
+		if r.NightExempt {
+			return r.FireAt, true
 		}
-		r.FireAt = Rearmed(*r.Rule, *r.Anchor, r.FireAt, now)
+		return q.DeliverableFrom(r.FireAt.In(now.Location())), true
+	case VerdictDefer:
+		return q.DeliverableFrom(now), true
+	case VerdictDeliver:
+		return now, true
 	}
-	return r.FireAt, q.DeliverableFrom(r.FireAt.In(now.Location()))
+	return time.Time{}, false
 }

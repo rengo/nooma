@@ -998,7 +998,7 @@ command, it is answered once.
        (read as one, the live "recordame eso" after the nightly pills push of 2026-11-10 was refused
        as past). It is marked asked, its trigger is left as it is, no row is written, and the
        answer names its rule, at its occurrence's clock, and when it actually rings next
-       (`prospection.NextRing`, by the due scan's own verdict in the user's night): the
+       (`prospection.QuietHours.NextRing`, by the due scan's own verdict in the user's night): the
        trigger's instant while it is ahead; quiet end when the night holds it; now when it is
        due and no pass has sent it yet; its next occurrence when it will lapse. Never a past
        instant ("Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las

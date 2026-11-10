@@ -31,7 +31,9 @@ func TestNextRing_IsWhenTheDueScanRingsIt(t *testing.T) {
 		{"ahead in the night, exempt", row(at(11, 6, 0), true), at(10, 18, 0), at(11, 6, 0), at(11, 6, 0)},
 		{"due, not yet sent", row(at(10, 9, 0), false), at(10, 9, 5), at(10, 9, 0), at(10, 9, 5)},
 		{"due, deferred by the night", row(at(10, 6, 30), false), at(10, 6, 40), at(10, 6, 30), at(10, 7, 0)},
-		{"no rule: its instant, out of the night", Reminder{FireAt: at(11, 6, 0)}, at(10, 18, 0), at(11, 6, 0), at(11, 7, 0)},
+		{"no rule: its instant, out of the user's night", Reminder{FireAt: at(11, 6, 0).UTC()}, at(10, 18, 0), at(11, 6, 0), at(11, 7, 0)},
+		{"a missed day, today's successor still deliverable", row(at(9, 9, 0), false), at(10, 10, 0), at(10, 9, 0), at(10, 10, 0)},
+		{"a missed day, today's successor lapsed too", row(at(9, 9, 0), false), at(10, 15, 1), at(11, 9, 0), at(11, 9, 0)},
 		{"overdue past the window, lapses to the next", row(at(10, 9, 0), false), at(10, 15, 1), at(11, 9, 0), at(11, 9, 0)},
 	} {
 		occurrence, ring := night.NextRing(tc.r, tc.now)

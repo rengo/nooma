@@ -17,3 +17,5 @@ Rework after review (CHANGES REQUESTED on 3f86dbfa):
       `decision_log` count. L1 `TestNextRing_IsWhenTheDueScanRingsIt`.
 - [x] 7. GREEN: `QuietHours.NextRing`; `remindRecurring` answers with it (D1b); doc 02, doc 07 row.
 - [x] 8. Mutation: each new branch removed turns a test red.
+- [x] 9. Second review: the two-step lapse written without a loop and pinned (missed day, today's
+      successor deliverable / lapsed too); the no-rule row reads the user's night.

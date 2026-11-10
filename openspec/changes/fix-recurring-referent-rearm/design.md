@@ -26,7 +26,9 @@ unit back and planned its anchor as a one-shot instant:
   `prospection.QuietHours.NextRing` runs the due scan's own `ReminderVerdict` on the row in the
   user's night: pending rings at its instant, or quiet end when the night holds it (unless
   `night_exempt`); deferred rings at quiet end; deliverable goes out at the next pass, named as
-  now; stale is replaced by `Rearmed`, as the scan arms the successor, and judged again. The
+  now; stale is replaced by `Rearmed`, as the scan arms the successor, and judged again; a
+  successor that lapses too (a missed day whose today's occurrence is also overdue) gives way to
+  the first occurrence after now, which is ahead. Two explicit steps, no loop bound. The
   rule is said at the occurrence's clock (`Armed.About`), the ring is `Armed.FireAt`.
 - **D2. `FollowAsked` keeps a live recurrence** through the same helper `FollowSent` uses
   (`followRecurring`), so both re-anchor by `recurringTrigger`, the function capture arms with.
