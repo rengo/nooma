@@ -104,6 +104,10 @@ type Set struct {
 	// weekday's name and the clock; EveryMonth the day of the month and the
 	// clock; EveryYear the day, the month's name and the clock.
 	EveryDay, EveryWeek, EveryMonth, EveryYear string
+	// EveryNew answers a recurring reminder just armed, and EveryAlready a
+	// remind-me of one already armed: each takes the rule said above, and
+	// EveryAlready its next occurrence (Dated) too.
+	EveryNew, EveryAlready string
 	// NotedFor takes two %s: what the nudge is ABOUT (Dated), then when the nudge
 	// arrives. Never the firing instant as the first — that answers a
 	// question nobody asked (doc 02 §5 step 5).
@@ -278,10 +282,12 @@ var sets = map[classify.Language]Set{
 		VoiceUnheard:   "I could not make out the audio; could you type it?",
 		VoiceOff:       "I cannot listen to voice notes here; could you type it?",
 		VoiceTooLong:   "That voice note is too long for me (up to %d minutes); could you type it or send a shorter one?",
-		EveryDay:       "Sure, I'll remind you every day %s.",
-		EveryWeek:      "Sure, I'll remind you every %s %s.",
-		EveryMonth:     "Sure, I'll remind you on day %s of every month %s.",
-		EveryYear:      "Sure, I'll remind you every year on %s %s %s.",
+		EveryDay:       "every day %s",
+		EveryWeek:      "every %s %s",
+		EveryMonth:     "on day %s of every month %s",
+		EveryYear:      "every year on %s %s %s",
+		EveryNew:       "Sure, I'll remind you %s.",
+		EveryAlready:   "I already remind you of that %s; the next one is %s.",
 		NotedFor:       "Got it, noted for %s. I'll remind you %s.",
 
 		NotedForDigest: "Got it, noted for %s. I'll mention it in that morning's digest.",
@@ -388,10 +394,12 @@ var sets = map[classify.Language]Set{
 		VoiceUnheard:   "No pude entender el audio; ¿me lo escribís?",
 		VoiceOff:       "Acá no puedo escuchar audios; ¿me lo escribís?",
 		VoiceTooLong:   "Ese audio es muy largo para mí (hasta %d minutos); ¿me lo escribís o mandás uno más corto?",
-		EveryDay:       "Listo, te aviso todos los días %s.",
-		EveryWeek:      "Listo, te aviso todos los %s %s.",
-		EveryMonth:     "Listo, te aviso el día %s de cada mes %s.",
-		EveryYear:      "Listo, te aviso todos los años el %s de %s %s.",
+		EveryDay:       "todos los días %s",
+		EveryWeek:      "todos los %s %s",
+		EveryMonth:     "el día %s de cada mes %s",
+		EveryYear:      "todos los años el %s de %s %s",
+		EveryNew:       "Listo, te aviso %s.",
+		EveryAlready:   "Eso ya te lo recuerdo %s; el próximo aviso es %s.",
 		NotedFor:       "Listo, anotado para %s. Te aviso %s.",
 
 		NotedForDigest: "Listo, anotado para %s. Te lo recuerdo en el resumen de esa mañana.",
@@ -533,6 +541,19 @@ func (s Set) ThatDayAt(fire time.Time) string {
 // month are the anchor's, so a day-31 monthly reminder says 31 in November
 // too; an anchor with no weekday reads it from the occurrence.
 func (s Set) Every(rule prospection.Rule, anchor prospection.Anchor, at time.Time) string {
+	return fmt.Sprintf(s.EveryNew, s.every(rule, anchor, at))
+}
+
+// AlreadyEvery answers a remind-me of a recurring reminder already armed: it
+// already reminds, by its rule at occurrence's clock, and ring is when it
+// actually rings next, named by its day from now. The two differ when the night
+// holds the ring, or a due one goes out now.
+func (s Set) AlreadyEvery(rule prospection.Rule, anchor prospection.Anchor, occurrence, ring, now time.Time) string {
+	return fmt.Sprintf(s.EveryAlready, s.every(rule, anchor, occurrence), s.Dated(Moment{At: ring}, now))
+}
+
+// every is the rule of a recurring reminder at at's clock time.
+func (s Set) every(rule prospection.Rule, anchor prospection.Anchor, at time.Time) string {
 	clock := s.Clock(at)
 	switch rule {
 	case prospection.RuleDaily:

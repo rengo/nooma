@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rengo/nooma/internal/core/classify"
@@ -20,7 +21,15 @@ import (
 // item with no date is still marked asked, and the answer says no reminder
 // was set and why, as an asked capture's does. An armed answer names every
 // ring the item has (ADR-0044), as a capture's names all it armed.
+//
+// A recurring reminder already reminds of itself: its stored event_at is the
+// anchor it repeats from, no one-shot instant, and arming it as one refused it
+// as past (the live report of 2026-11-10). It is answered by its live trigger,
+// which is left as it is.
 func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, error) {
+	if res, ok, err := r.remindRecurring(ctx, u, now); err != nil || ok {
+		return res, err
+	}
 	res, err := r.remindReferentOnly(ctx, u, now)
 	if err != nil || res.Armed == nil {
 		return res, err
@@ -39,6 +48,33 @@ func (r captureRunner) remindReferent(ctx context.Context, u unit.Unit, now time
 		res.Armed.FireAt, res.Armed.Later = fires[0], fires[1:]
 	}
 	return res, nil
+}
+
+// remindRecurring answers a remind-me of u when u has a live recurring
+// trigger: u is marked asked, nothing is armed or refused, and the answer names
+// the trigger's rule, at its occurrence (About), and when it actually rings
+// next (FireAt, prospection.NextRing). false when no live trigger of u recurs.
+func (r captureRunner) remindRecurring(ctx context.Context, u unit.Unit, now time.Time) (CaptureResult, bool, error) {
+	armed, err := r.triggers.ArmedForUnit(ctx, u.ID)
+	if err != nil {
+		return CaptureResult{}, false, fmt.Errorf("capture: read reminders of unit %q: %w", u.ID, err)
+	}
+	i := slices.IndexFunc(armed, func(t ports.DueTrigger) bool { return t.RecurrenceRule != nil && t.RecurrenceAnchor != nil })
+	if i < 0 {
+		return CaptureResult{}, false, nil
+	}
+	if !u.RemindMe {
+		if err := r.units.SetRemindMe(ctx, u.ID, now); err != nil {
+			return CaptureResult{}, false, fmt.Errorf("capture: mark unit %q asked: %w", u.ID, err)
+		}
+	}
+	t := armed[i]
+	// When the row actually rings, as the due scan will judge it in the user's
+	// night: never a past instant, nor one the night holds it past.
+	night := prospection.QuietHours{End: reminderPrefs(ctx, r.config).QuietEnd}
+	occurrence, ring := night.NextRing(newReminder(t, false), now)
+	return CaptureResult{Outcome: OutcomeArmed, UnitID: u.ID, Armed: &Armed{What: prospection.ArmRecurring, ID: t.ID,
+		FireAt: ring.In(now.Location()), About: occurrence.In(now.Location()), Rule: *t.RecurrenceRule, Anchor: *t.RecurrenceAnchor, Already: true}}, true, nil
 }
 
 // remindReferentOnly is remindReferent with an answer naming the asked

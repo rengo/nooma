@@ -54,10 +54,8 @@ func Follow(eventAt time.Time, live []Live, prefs ReminderPrefs, interruptLevel 
 // keeps no unasked lead (ADR-0037). A nil sent with told now is Follow.
 func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, told, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
-	for i, l := range live {
-		if l.Rule != nil {
-			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, prefs, now, interrupt)}, live, []int{i})
-		}
+	if f, ok := followRecurring(eventAt, live, prefs, interrupt, now); ok {
+		return f
 	}
 	plans, arms := eventReminders(eventAt, prefs, told, now, interrupt, sent)
 	// On the told day nothing is pulled to now (ADR-0047), but a live reminder
@@ -78,8 +76,15 @@ func FollowSent(eventAt time.Time, live []Live, sent []Sent, prefs ReminderPrefs
 // re-plan carries an asked reminder instead of expiring it. dayOnly is a day
 // alone. Like a correction it plans no at-once reminder: a re-plan owes that
 // only as CatchUpAsked's catch-up. told is FollowSent's.
+//
+// A unit with a live recurring trigger stays recurring, asked or not, as Arm
+// keeps an asked recurring reminder's row (ADR-0034): its anchor is no
+// one-shot instant to plan leads before.
 func FollowAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, prefs ReminderPrefs, interruptLevel *float64, told, now time.Time) Following {
 	interrupt := ResolveInterrupt(interruptLevel)
+	if f, ok := followRecurring(at, live, prefs, interrupt, now); ok {
+		return f
+	}
 	plans, arms := askedReminders(at, event, dayOnly, prefs, told, now, interrupt, sent)
 	if arms {
 		plans = slices.DeleteFunc(plans, atOnce)
@@ -91,6 +96,18 @@ func FollowAsked(at time.Time, event, dayOnly bool, live []Live, sent []Sent, pr
 		return settle(plans[:1], live, []int{-1})
 	}
 	return carryOnto(plans, live, now)
+}
+
+// followRecurring is what a unit with a live recurring trigger follows to: that
+// trigger, carried and re-anchored at eventAt by its own rule, as a capture
+// arms it (recurringTrigger). false when no live trigger recurs.
+func followRecurring(eventAt time.Time, live []Live, prefs ReminderPrefs, interrupt Interrupt, now time.Time) (Following, bool) {
+	for i, l := range live {
+		if l.Rule != nil {
+			return settle([]Plan{recurringTrigger(eventAt, *l.Rule, prefs, now, interrupt)}, live, []int{i}), true
+		}
+	}
+	return Following{}, false
 }
 
 // CatchUpAsked is CatchUp for an asked unit whose every lead is behind: the
