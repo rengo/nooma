@@ -248,6 +248,23 @@ func TestEmbeddingRepo_CountLiveWithoutEmbeddingExcludesArchived(t *testing.T) {
 	}
 }
 
+// TestEmbeddingRepo_LiveWithoutEmbeddingExcludesArchived: reindex's work list
+// filters on status as the count does, so an archived unit is never embedded.
+func TestEmbeddingRepo_LiveWithoutEmbeddingExcludesArchived(t *testing.T) {
+	v := openTestVault(t)
+	h := embeddingHarness{EmbeddingRepo: NewEmbeddingRepo(v), v: v}
+	ctx := context.Background()
+	h.EnsureUnit(t, "unit-bare")
+	h.EnsureUnit(t, "unit-archived")
+	if _, err := v.db.ExecContext(ctx, `UPDATE units SET status = 'archived' WHERE id = ?`, "unit-archived"); err != nil {
+		t.Fatalf("archiving unit-archived: %v", err)
+	}
+	ids, err := h.LiveWithoutEmbedding(ctx, "model-a", "", 10)
+	if err != nil || len(ids) != 1 || ids[0] != "unit-bare" {
+		t.Errorf("LiveWithoutEmbedding = %v, %v; want [unit-bare] only", ids, err)
+	}
+}
+
 // TestEmbeddingRepo_CountLiveWithoutEmbeddingIsZeroOnAFreshVault is design
 // D18b row 2's own "zero is the healthy answer" case: a freshly migrated
 // vault holds no units at all.

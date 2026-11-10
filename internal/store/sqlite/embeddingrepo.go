@@ -136,6 +136,34 @@ WHERE u.status = 'pool' AND ue.unit_id IS NULL`
 	return count, nil
 }
 
+// LiveWithoutEmbedding implements ports.EmbeddingRepo.
+func (r *EmbeddingRepo) LiveWithoutEmbedding(ctx context.Context, model, after string, limit int) ([]string, error) {
+	const q = `
+SELECT u.id
+FROM units u
+LEFT JOIN unit_embeddings ue ON ue.unit_id = u.id AND ue.model = ?
+WHERE u.status = 'pool' AND ue.unit_id IS NULL AND u.id > ?
+ORDER BY u.id
+LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, q, model, after, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing live units without a %s embedding: %w", model, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning a unit id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listing live units without a %s embedding: %w", model, err)
+	}
+	return ids, nil
+}
+
 // ModelCount is how many live units hold a vector under one model.
 type ModelCount struct {
 	Model string
