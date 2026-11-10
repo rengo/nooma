@@ -34,11 +34,9 @@ func runReindex(args []string, out, errOut io.Writer) error {
 	return reindex(context.Background(), args, os.Stdin, out, errOut)
 }
 
-// reindex embeds the live units lacking the configured embedding model's
-// vector, beside their other models' vectors, and rebuilds the word index. It
-// writes the vault, so it takes the lock as consolidate does and refuses while
-// serve runs. With something to embed it says what and asks first, unless
-// --yes; anything but y or yes changes nothing.
+// reindex embeds the live units lacking the configured model's vector and
+// rebuilds the word index (design.md). It takes the vault lock as consolidate
+// does, and asks before embedding unless --yes.
 func reindex(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("reindex", flag.ContinueOnError)
 	fs.SetOutput(errOut)
@@ -121,8 +119,7 @@ func reindex(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 		return nil
 	}
 
-	// Only now does Ctrl-C or SIGTERM stop the run between units, keeping every
-	// vector stored; at the question it ends the command, which wrote nothing.
+	// Bound after the question: Ctrl-C there ends a command that wrote nothing.
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	svc := brain.NewReindexService(systemClock{}, sqlite.NewUnitRepo(db), embeds, embed)
@@ -140,10 +137,11 @@ func reindex(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 	if err != nil {
 		return err
 	}
+	stillLeft := fmt.Sprintf("%s still %s a %s vector; run nooma reindex again to continue, nothing stored is redone", countNoun(left, "live unit", "live units"), lacks(left), model)
 	if left == 0 {
 		say("done: every live unit has a %s vector", model)
 	} else {
-		say("%s still %s a %s vector; run nooma reindex again to continue, nothing stored is redone", countNoun(left, "live unit", "live units"), lacks(left), model)
+		say("%s", stillLeft)
 	}
 	switch {
 	case errors.Is(runErr, context.Canceled):
@@ -152,6 +150,8 @@ func reindex(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 		return fmt.Errorf("reindex stopped: %w; what was stored is kept, run nooma reindex again to continue", runErr)
 	case res.Failed > 0:
 		return fmt.Errorf("%s could not be embedded; run nooma reindex again to retry", countNoun(res.Failed, "unit", "units"))
+	case left > 0: // never on a correct run; a run that stops short is not silent
+		return errors.New(stillLeft)
 	}
 	return nil
 }

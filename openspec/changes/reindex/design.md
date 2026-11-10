@@ -45,7 +45,9 @@ of those, the single-writer rule (doc 03) or a precedent in the binary.
   says no vectors were computed; with nothing to embed, it still rebuilds it.
 - **D8. Output.** Progress every 25 units and at the end (`reindex: 50 of 120 embedded under
   M`). Summary: embedded, skipped (live units already holding the vector, read before the run
-  through `sqlite.EmbeddingRepo.LiveModels`), failed, left; the last failure's reason.
+  through `sqlite.EmbeddingRepo.LiveModels`), failed, left; the last failure's reason. Units
+  still left after a run with no error or refusal also exit non-zero, so a run that stops short
+  (a paging regression, a writer outside the lock) is never silent.
 - **D9. Doctor and usage.** Both FAILs drop "(not in this version yet)" and say "stop nooma
   serve, run `nooma reindex`, and start it again", and say one unit in the singular. Serve's boot warning keeps pointing at
   doctor (ADR-0059 point 7). `reindex` leaves `TestUnimplementedCommandsDoNotExist` and joins

@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/rengo/nooma/internal/core/unit"
 	"github.com/rengo/nooma/internal/store/sqlite"
 	"github.com/rengo/nooma/internal/store/sqlite/sqlitetest"
 	"github.com/rengo/nooma/internal/store/vaultlock"
@@ -256,4 +259,51 @@ func TestReindex_ARefusedUnitIsReportedAndTheRunFails(t *testing.T) {
 		t.Errorf("reindex with one refusal = %v, want an error naming it and the rerun", err)
 	}
 	wantLines(t, out.String(), "embedded 1, skipped 1 already embedded, failed 1", "last failure: unit u-bare", "1 live unit still lacks")
+}
+
+// TestReindex_SaysItsProgressEvery25Units (ADR-0003: "with progress"): a line
+// at each 25 units and at the end, none between.
+func TestReindex_SaysItsProgressEvery25Units(t *testing.T) {
+	var calls atomic.Int64
+	ids := make([]string, 27)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("u-%02d", i)
+	}
+	vault, _, _ := doctorVault(t, func(db *sqlite.Vault) { seedUnits(t, db, nil, ids...) })
+	writeYML(t, vault, "providers:\n  local:\n    type: ollama\n    model: model-a\n    endpoint: "+fakeOllama(t, &calls, "").URL+"\ntasks:\n  embedding:\n    provider: local\n")
+	var out bytes.Buffer
+	if err := reindex(context.Background(), []string{"--yes", vault}, strings.NewReader(""), &out, io.Discard); err != nil {
+		t.Fatalf("reindex: %v", err)
+	}
+	wantLines(t, out.String(), "reindex: 25 of 27 done under model-a\nreindex: 27 of 27 done under model-a\n")
+}
+
+// TestReindex_UnitsLeftAfterACleanRunAreAnError: a unit that appears behind
+// the run's cursor (written by another connection mid-run) is left; the run
+// had no refusal and no error, and it still exits non-zero, so a run that
+// stops short is never silent.
+func TestReindex_UnitsLeftAfterACleanRunAreAnError(t *testing.T) {
+	vault := reindexVaultAt(t, "")
+	other := openVault(t, vault)
+	var once sync.Once
+	var lateErr error
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() {
+			lateErr = sqlite.NewUnitRepo(other).Create(context.Background(), unit.Unit{ID: "a-late", Type: unit.TypeKnowledge, Content: "late",
+				Status: unit.StatusPool, Weight: 0.5, WeightDecayRate: 0.1, CreatedAt: doctorSeedAt, UpdatedAt: doctorSeedAt, LastTouchedAt: doctorSeedAt})
+		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": "model-a", "embeddings": [][]float32{{1, 1}}})
+	}))
+	t.Cleanup(srv.Close)
+	writeYML(t, vault, "providers:\n  local:\n    type: ollama\n    model: model-a\n    endpoint: "+srv.URL+"\ntasks:\n  embedding:\n    provider: local\n")
+
+	var out bytes.Buffer
+	err := reindex(context.Background(), []string{"--yes", vault}, strings.NewReader(""), &out, io.Discard)
+	if lateErr != nil {
+		t.Fatalf("writing the late unit: %v", lateErr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "1 live unit still lacks a model-a vector") {
+		t.Errorf("reindex leaving a unit = %v, want an error naming what is left", err)
+	}
+	wantLines(t, out.String(), "embedded 2, skipped 1 already embedded, failed 0")
 }
