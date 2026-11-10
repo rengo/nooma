@@ -992,7 +992,14 @@ command, it is answered once.
        las 9:00."; "Te aviso unas horas antes y 15 minutos antes.", ADR-0044); an item with no date, or
        one too close for the asked reminder while an own lead would still fit, is still marked
        asked, and the
-       answer says no reminder was set and why, with a `capture.arm.refused` row. A remind-me
+       answer says no reminder was set and why, with a `capture.arm.refused` row. **A recurring
+       reminder already reminds of itself**: an item with a live recurring trigger is not armed
+       again, since its `event_at` is the anchor it repeats from, not an instant to remind before
+       (read as one, the live "recordame eso" after the nightly pills push of 2026-11-10 was refused
+       as past). It is marked asked, its trigger is left as it is, no row is written, and the
+       answer names its rule and its next occurrence, the trigger's own instant ("Eso ya te lo
+       recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."). A one-off item
+       whose instant has passed is still refused as above. A remind-me
        whose reading names a new instant for the item ("es a las 11, recordámelo";
        `correction.MovesDate`: an echoed instant is none, and so is a bare date on the item's own
        local day, the day the model restates beside "recordámelo", ADR-0044) moves it first, through the correction
@@ -1129,7 +1136,9 @@ command, it is answered once.
      furthest first (`prospection.AddEventLeads`), before the plan is made, and the result is the
      edit above. An asked ring is not one of them: a unit the user asked to be reminded of
      keeps its asked ring, asked and exempt from the night, beside its leads, through every
-     correction that re-plans it (`prospection.FollowAsked`). The model decides add or replace; the code holds no word for either. Absent or
+     correction that re-plans it (`prospection.FollowAsked`). A unit with a live recurring
+     trigger stays recurring, asked or not: that trigger is re-anchored by its rule at the
+     corrected instant, as `Follow` does, never planned as a one-shot's leads. The model decides add or replace; the code holds no word for either. Absent or
      degraded, the leads replace.
      **The title follows the body** (spec R12). Beside the edits above the plan may carry a
      `title` edit (`correction.FieldTitle`, written by `UnitRepo.UpdateTitle`, listed in

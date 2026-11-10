@@ -222,6 +222,10 @@ type Armed struct {
 	// rings every time (ADR-0031 point 7); zero for any other arming.
 	Rule   prospection.Rule
 	Anchor prospection.Anchor
+	// Already says nothing was armed: a remind-me named a recurring reminder
+	// that already reminds of itself, and ID, Rule, Anchor and FireAt are its
+	// live trigger's.
+	Already bool
 }
 
 // ArmRefused is what CaptureResult carries when a capture classified as

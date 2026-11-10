@@ -52,7 +52,7 @@ func TestSetsCoverEveryLanguage(t *testing.T) {
 func TestSets_FormatVerbsMatchTheirArguments(t *testing.T) {
 	// field name -> how many verbs the renderer supplies.
 	want := map[string]int{
-		"PushFrame": 1, "TimerRing": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
+		"PushFrame": 1, "TimerRing": 1, "AtWhen": 2, "NotScheduled": 1, "NotedNotSet": 1, "TimerSet": 1, "TimersMany": 1, "TimersMore": 1, "TimerCancelled": 1, "EveryDay": 1, "EveryWeek": 2, "EveryMonth": 2, "EveryYear": 3, "EveryNew": 1, "EveryAlready": 2, "NotedFor": 2, "NotedForDigest": 1, "NotedOn": 1,
 		"LeadDays": 1, "LeadMinutes": 1, "LeadThatDayAt": 1, "LeadTodayAt": 1, "RecallOne": 2, "RecallOnePast": 2, "RecallOneUndated": 1, "PushUnnamed": 1, "RecallOneUnnamed": 1, "RecallOnePastUnnamed": 1, "LineUnnamed": 1, "RecallMany": 1, "ItemWhen": 2,
 		"OnDate": 3, "YearSuffix": 1, "At": 1, "AtOne": 1, "OnDay": 1, "DueFuture": 1, "DuePast": 1,
 		"Moved": 1, "RemindYou": 1, "LeadHoursExact": 1, "LeadsNotSet": 1, "Closed": 1, "VoiceHeard": 1, "VoiceTooLong": 1,
@@ -492,6 +492,31 @@ func TestGoalSentences(t *testing.T) {
 	} {
 		if got := For(l).Goal("correr una media maratón"); got != want {
 			t.Errorf("%s: Goal = %q, want %q", l, got, want)
+		}
+	}
+}
+
+// TestSet_AlreadyEvery: a remind-me of a recurring reminder says it already
+// reminds, by its rule, and names its next occurrence by its day.
+func TestSet_AlreadyEvery(t *testing.T) {
+	zone := time.FixedZone("UTC-3", -3*60*60)
+	now := time.Date(2026, 11, 10, 9, 51, 0, 0, zone)
+	tonight, tomorrow := time.Date(2026, 11, 10, 21, 30, 0, 0, zone), time.Date(2026, 11, 11, 8, 0, 0, 0, zone)
+	friday := time.Friday
+	for _, tc := range []struct {
+		lang   classify.Language
+		rule   prospection.Rule
+		anchor prospection.Anchor
+		next   time.Time
+		want   string
+	}{
+		{classify.LanguageES, prospection.RuleDaily, prospection.Anchor{}, tonight, "Eso ya te lo recuerdo todos los días a las 21:30; el próximo aviso es hoy a las 21:30."},
+		{classify.LanguageES, prospection.RuleDaily, prospection.Anchor{}, tomorrow, "Eso ya te lo recuerdo todos los días a las 8:00; el próximo aviso es mañana a las 8:00."},
+		{classify.LanguageEN, prospection.RuleWeekly, prospection.Anchor{Weekday: &friday}, tonight, "I already remind you of that every Friday at 21:30; the next one is today at 21:30."},
+		{classify.LanguageEN, prospection.RuleMonthly, prospection.Anchor{Month: time.October, Day: 11}, tomorrow, "I already remind you of that on day 11 of every month at 8:00; the next one is tomorrow at 8:00."},
+	} {
+		if got := For(tc.lang).AlreadyEvery(tc.rule, tc.anchor, tc.next, now); got != tc.want {
+			t.Errorf("%s AlreadyEvery(%s) = %q, want %q", tc.lang, tc.rule, got, tc.want)
 		}
 	}
 }

@@ -74,6 +74,9 @@ func RenderReply(result brain.CaptureResult) string {
 			return say.TimerAt(result.Armed.FireAt, result.At)
 		case prospection.ArmRecurring:
 			// When it rings every time, not its next ring alone (ADR-0031 point 7).
+			if result.Armed.Already {
+				return everyAlready(say, result)
+			}
 			return say.Every(result.Armed.Rule, result.Armed.Anchor, result.Armed.About)
 		default:
 			about := phrase.Moment{At: result.Armed.About, DayOnly: dayOnly(result.Armed)}
@@ -150,6 +153,8 @@ func RenderReply(result brain.CaptureResult) string {
 		// A remind-me that moved its item names the reminder it asked for,
 		// or why none was set (ADR-0043).
 		switch {
+		case result.Armed != nil && result.Armed.Already:
+			said = append(said, everyAlready(say, result))
 		case result.Armed != nil:
 			said = append(said, fmt.Sprintf(say.RemindYou, askedLeads(say, result)))
 		case result.ArmRefused != nil:
@@ -178,6 +183,13 @@ func RenderReply(result brain.CaptureResult) string {
 		return timersReply(say, *result.Timers, result.At)
 	}
 	return ""
+}
+
+// everyAlready answers a remind-me of a recurring reminder already armed: its
+// rule, and when it rings next.
+func everyAlready(say phrase.Set, result brain.CaptureResult) string {
+	a := result.Armed
+	return say.AlreadyEvery(a.Rule, a.Anchor, a.FireAt, result.At)
 }
 
 // timersReply answers a chat's list or cancel of the live timers (ADR-0051).

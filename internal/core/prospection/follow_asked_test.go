@@ -100,3 +100,22 @@ func TestCatchUpAsked_KeepsTheNightRules(t *testing.T) {
 		t.Errorf("catch-up at 04:30 for 06:00 = %+v, %v; want refused for quiet hours", plan, owed)
 	}
 }
+
+// TestFollowAsked_ARecurringReminderStaysRecurring: an asked daily reminder
+// (the unit asked, its one row recurring) moved to 22:00 on the 14th keeps that
+// row recurring, re-anchored by its rule as Follow re-anchors it, its next
+// occurrence today at 22:00. Read as a one-shot, it became a 2-hour lead on the
+// recurring row and a second, asked row.
+func TestFollowAsked_ARecurringReminderStaysRecurring(t *testing.T) {
+	now, moved := followAskedAt(14, 18, 0), followAskedAt(14, 22, 0)
+	daily := RuleDaily
+	live := []Live{{ID: "daily", FireAt: followAskedAt(14, 21, 30), Rule: &daily}}
+	f := FollowAsked(moved, true, false, live, nil, DefaultReminderPrefs(), nil, now, now)
+	if len(f.Plans) != 1 || f.Carry[0] != "daily" || len(f.Expire) != 0 {
+		t.Fatalf("following = %+v, want the daily row carried and nothing else", f)
+	}
+	p := f.Plans[0]
+	if p.What != ArmRecurring || p.Rule != RuleDaily || !p.FireAt.Equal(moved) || p.Anchor.At == nil || *p.Anchor.At != (TimeOfDay{Hour: 22}) {
+		t.Errorf("plan = %+v, want the daily reminder re-anchored at 22:00, next at %v", p, moved)
+	}
+}
