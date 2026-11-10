@@ -56,6 +56,10 @@ func withEmbeddingModel(cfg *config.Config, model string) *config.Config {
 	return &c
 }
 
+// reindexFix is how both FAILs name their fix now that nooma reindex ships
+// (ADR-0059 point 6): the real command, and the serve it cannot run beside.
+const reindexFix = "stop nooma serve, run `nooma reindex`, and start it again"
+
 var doctorSeedAt = time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
 
 // seedUnits creates a live unit per id, embedded under models[id] when set.
@@ -184,7 +188,7 @@ func TestCheckVaultCoverage_CountsUnitsLackingTheConfiguredModel(t *testing.T) {
 	if _, ok := err.(doctorOKDetail); ok {
 		t.Fatalf("checkVaultCoverage reported %q as ok", err)
 	}
-	for _, want := range []string{"2 live units have no model-a vector", "vectors under other models: model-b on 1 live unit", "nooma reindex", "not in this version yet"} {
+	for _, want := range []string{"2 live units have no model-a vector", "vectors under other models: model-b on 1 live unit", reindexFix} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("checkVaultCoverage = %q, want it to say %q", err, want)
 		}
@@ -219,7 +223,7 @@ func TestCheckSearchIndex_OKOnACoherentVault(t *testing.T) {
 	}
 
 	err := searchIndexError(sqlite.SearchIndexGaps{Missing: 2, Orphaned: 1})
-	for _, want := range []string{"2 units are missing from the word index", "1 entry names no unit", "nooma reindex", "not in this version yet"} {
+	for _, want := range []string{"2 units are missing from the word index", "1 entry names no unit", reindexFix} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("searchIndexError = %v, want it to say %q", err, want)
 		}

@@ -68,4 +68,10 @@ type EmbeddingRepo interface {
 	//
 	// Zero is the healthy answer.
 	CountLiveWithoutEmbedding(ctx context.Context, model string) (int, error)
+
+	// LiveWithoutEmbedding lists the ids of the units CountLiveWithoutEmbedding
+	// counts, by id, after the id after ("" for the start), at most limit:
+	// nooma reindex's work list (ADR-0058). A cursor rather than an offset, so
+	// a run that passes a unit the provider refused moves on from it.
+	LiveWithoutEmbedding(ctx context.Context, model, after string, limit int) ([]string, error)
 }

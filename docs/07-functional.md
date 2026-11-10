@@ -33,7 +33,10 @@ whether a newer binary is needed, whether `serve` will upgrade the vault, which 
 how many notes have no vector for the configured embedding model and whether the word index
 matches the notes; `nooma status` reports on a vault without starting it. When notes lack the
 embedding model's vector, `serve` says so in one line at start: they are found by their words
-only until they are re-embedded.
+only until they are re-embedded. After a change of embedding model, stop `serve` and run
+`nooma reindex`: it says how many notes it will embed and asks, embeds each once beside its old
+vector and rebuilds the word index. Run again after an interruption, it carries on where it
+stopped.
 
 ---
 
@@ -444,7 +447,8 @@ As of 2026-10-14. "Shipped" means closed and archived, or recorded as closed in 
 | `nooma doctor` without changing the vault: read-only, schema behind or ahead, the lock holder, coverage per embedding model, the word index checked; a boot warning when vectors are missing | Shipped in M6 (B) | ADR-0059; doc 03 |
 | `nooma export`: the vault into one `.noomabundle` (database, `nooma.yml`, attachments, a manifest of checksums; never `.env`), written beside serve and verified before it is named | Shipped in M6 (C1) | ADR-0057; doc 03 |
 | `nooma import`: a new vault from a `.noomabundle`, never over an existing one, checked again as it unpacks, an older bundle migrated forward, Telegram off in the copy | Shipped in M6 (C2) | ADR-0057; doc 03 |
-| `doctor`'s provider, channel and hardware checks, reindex | Planned: M6 | 05 §M6 |
+| `nooma reindex`: the live units lacking the configured embedding model's vector embedded beside their old ones, resumable, asked first, refused while serve runs; the word index rebuilt | Shipped in M6 (D2) | ADR-0058; doc 02 §5 |
+| `doctor`'s provider, channel and hardware checks | Planned: M6 | 05 §M6 |
 | A Telegram voice note transcribed (`audio_transcription`, an `openai` provider) and read as typed text; the audio never kept; asked for typed when unbound, too long or not heard | Shipped before v1 | doc 02 §5; ADR-0062; [08](08-deploy.md) |
 | Tracking UI, multi-format perception, voice beyond Telegram's notes, multi-tenant mode, extra channels | After v1 | 05 "After v1"; doc 02 §12 |
 

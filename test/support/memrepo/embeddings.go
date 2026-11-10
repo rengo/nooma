@@ -69,6 +69,24 @@ func (r *Embeddings) CountLiveWithoutEmbedding(_ context.Context, model string) 
 	return count, nil
 }
 
+// LiveWithoutEmbedding implements ports.EmbeddingRepo.
+func (r *Embeddings) LiveWithoutEmbedding(_ context.Context, model, after string, limit int) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var ids []string
+	for id := range r.liveUnits {
+		if _, embedded := r.rows[embeddingKey{id, model}]; !embedded && id > after {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	return ids, nil
+}
+
 // Put implements ports.EmbeddingRepo.
 func (r *Embeddings) Put(_ context.Context, e ports.Embedding) error {
 	r.mu.Lock()

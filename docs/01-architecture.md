@@ -170,7 +170,7 @@ no inbound port, no DNS name, no certificate, no public address. A message from 
 and its result is answered back into the conversation; a message from anywhere else becomes nothing,
 with one log line naming the chat id and not its text. `nooma serve` does not start it yet: delivery
 is M3's next phase, and a poller with nothing to deliver is a poller nobody should be running.
-| `nooma reindex [vault]` | Re-embeds the whole vault after an embedding model change |
+| `nooma reindex [--yes] [vault]` | Embeds the live units lacking the configured embedding model's vector, beside their other vectors, and rebuilds the word index; asks first unless `--yes`, refuses while `serve` holds the vault, resumes where it stopped |
 | `nooma export <vault> <file.noomabundle>` | Packages the vault into one verified `.noomabundle`: the database snapshot, `nooma.yml` and attachments, never `.env` (ADR-0057) |
 | `nooma import <file.noomabundle> <vault-dir>` | Makes a new vault from a bundle, never over an existing one; migrates an older bundle forward and turns Telegram off in the copy (ADR-0057) |
 | `nooma version` | Version and build info |

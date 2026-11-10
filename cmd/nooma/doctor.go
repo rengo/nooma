@@ -736,10 +736,9 @@ func checkVaultCoverage(vault string, cfg *config.Config) error {
 	})
 }
 
-// reindexNotYet is how a FAIL names its fix while `nooma reindex` is not in
-// the binary: honestly, so the user is not sent to a command that does not
-// exist.
-const reindexNotYet = "not in this version yet"
+// reindexSteps is how both FAILs name their fix (ADR-0059 point 6): reindex
+// takes the vault lock, so serve has to stop for it.
+const reindexSteps = "stop nooma serve, run `nooma reindex`, and start it again"
 
 // vaultCoverageError is checkVaultCoverage's decision and wording, testable
 // without a vault. It never sees an archived unit: the counts exclude them
@@ -749,7 +748,7 @@ func vaultCoverageError(model string, missing int, models []sqlite.ModelCount) e
 	if missing == 0 {
 		return nil
 	}
-	text := fmt.Sprintf("%d live units have no %s vector; recall finds them only by their words", missing, model)
+	text := fmt.Sprintf("%s no %s vector; recall finds them only by their words", countNoun(missing, "live unit has", "live units have"), model)
 	// A unit holds one vector per model (ADR-0058), so these count every live
 	// unit with a vector under each other model, not only the ones missing.
 	var others []string
@@ -766,7 +765,7 @@ func vaultCoverageError(model string, missing int, models []sqlite.ModelCount) e
 	if len(others) > 0 {
 		text += "; vectors under other models: " + strings.Join(others, ", ")
 	}
-	return fmt.Errorf("%s. `nooma reindex` will re-embed them (%s)", text, reindexNotYet)
+	return fmt.Errorf("%s. To embed them, %s", text, reindexSteps)
 }
 
 // checkSearchIndex is the units<->word-index half of the consistency
@@ -789,7 +788,7 @@ func searchIndexError(g sqlite.SearchIndexGaps) error {
 	}
 	var parts []string
 	if g.Missing > 0 {
-		parts = append(parts, fmt.Sprintf("%d units are missing from the word index, so a word search cannot find them", g.Missing))
+		parts = append(parts, countNoun(g.Missing, "unit is", "units are")+" missing from the word index, so a word search cannot find them")
 	}
 	if g.Orphaned > 0 {
 		noun := "entries name"
@@ -798,7 +797,7 @@ func searchIndexError(g sqlite.SearchIndexGaps) error {
 		}
 		parts = append(parts, fmt.Sprintf("%d %s no unit and can point a search at the wrong one", g.Orphaned, noun))
 	}
-	return fmt.Errorf("%s. `nooma reindex` will rebuild it (%s)", strings.Join(parts, "; "), reindexNotYet)
+	return fmt.Errorf("%s. To rebuild it, %s", strings.Join(parts, "; "), reindexSteps)
 }
 
 // configuredEmbeddingModel is the model the embedding task's provider names,

@@ -41,7 +41,7 @@ func TestSandbox_AVaultlessCommandNeverReachesAHomeVault(t *testing.T) {
 	if _, err := config.ResolveVault(""); err == nil || !strings.Contains(err.Error(), "is not a vault") {
 		t.Errorf("ResolveVault(\"\") = %v, want it to stop at NOOMA_VAULT, which is not a vault", err)
 	}
-	for _, command := range []string{"consolidate", "status", "doctor"} {
+	for _, command := range []string{"consolidate", "status", "doctor", "reindex"} {
 		var out, errOut bytes.Buffer
 		if err := run([]string{command}, &out, &errOut); err == nil || !strings.Contains(err.Error(), "is not a vault") {
 			t.Errorf("nooma %s with no vault = %v, want a refusal before any vault is found", command, err)

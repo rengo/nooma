@@ -951,6 +951,14 @@ command, it is answered once.
        check with the count and the other models present
        ([ADR-0059](adr/0059-doctor-reads-the-vault-and-never-writes-it.md)). Doctor reads the
        vault read-only: it never migrates it or writes its database file (I55).
+     - **`nooma reindex` closes the gap** (ADR-0058 point 4, I21). It embeds each live unit
+       lacking the configured model's vector, once, from its content, and stores it beside the
+       unit's other vectors; it then has nothing left to do. The work list is the data itself, so
+       an interrupted run keeps what it wrote and the next one pays only for the rest. A unit the
+       provider refuses is passed and retried by the next run; three refusals in a row stop the
+       run; an answer under another model is never stored. It writes, so it takes the vault lock
+       and refuses while `serve` runs; it says what it will embed and asks first (ADR-0003), and
+       rebuilds the word index.
 3. **dedup/relation judge** (LLM): against the recall candidates it decides
    `new | duplicate | related` — and if `related`, with what strength/confidence (subject to
    the thresholds in §4).

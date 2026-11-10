@@ -269,6 +269,41 @@ func RunEmbeddingRepo(t *testing.T, newRepo func(t *testing.T) EmbeddingHarness)
 		}
 	})
 
+	// LiveWithoutEmbedding is nooma reindex's work list (ADR-0058): the ids
+	// CountLiveWithoutEmbedding counts, by id, after a cursor, at most limit.
+	t.Run("LiveWithoutEmbedding lists the units lacking the model by id after a cursor", func(t *testing.T) {
+		repo := newRepo(t)
+		ctx := context.Background()
+		for _, id := range []string{"unit-d", "unit-a", "unit-c", "unit-b"} {
+			repo.EnsureUnit(t, id)
+		}
+		if err := repo.Put(ctx, fixtureEmbedding("unit-b", "model-a", []float32{1, 0, 0})); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+		if err := repo.Put(ctx, fixtureEmbedding("unit-c", "model-b", []float32{0, 1, 0})); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+
+		for _, tc := range []struct {
+			after string
+			limit int
+			want  []string
+		}{
+			{"", 10, []string{"unit-a", "unit-c", "unit-d"}},
+			{"", 2, []string{"unit-a", "unit-c"}},
+			{"unit-c", 2, []string{"unit-d"}},
+			{"unit-d", 2, []string{}},
+		} {
+			got, err := repo.LiveWithoutEmbedding(ctx, "model-a", tc.after, tc.limit)
+			if err != nil {
+				t.Fatalf("LiveWithoutEmbedding: %v", err)
+			}
+			if len(got) != len(tc.want) || (len(got) > 0 && !reflect.DeepEqual(got, tc.want)) {
+				t.Errorf("LiveWithoutEmbedding(model-a, after %q, %d) = %v, want %v", tc.after, tc.limit, got, tc.want)
+			}
+		}
+	})
+
 	// Mutating what Put was handed, or what LoadIndex returned, must not
 	// reach into the repository. The precedent is memrepo.Units's own
 	// deep-copying contract; a []float32 shared by reference is the easiest
